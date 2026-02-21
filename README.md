@@ -1,6 +1,10 @@
 # BlackBoard Sync
 
 <p align="center">
+  <img src="static/icons/png/128x128.png" alt="BlackBoard Sync" width="96" />
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/electron-28-47848F?style=flat-square&logo=electron" />
   <img src="https://img.shields.io/badge/typescript-5.3-3178C6?style=flat-square&logo=typescript" />
@@ -27,7 +31,7 @@ App desktop per sincronizzare automaticamente i file dei corsi dalla piattaforma
 ## Screenshot
 
 <p align="center">
-  <i>Login → Sync → Corsi</i>
+  <img src="https://i.imgur.com/lOLPIUi.png" alt="BlackBoard Sync" width="600" />
 </p>
 
 ## Installazione
