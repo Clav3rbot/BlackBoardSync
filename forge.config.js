@@ -1,7 +1,7 @@
 module.exports = {
     packagerConfig: {
         name: 'BlackBoard Sync',
-        icon: './static/icon',
+        icon: './static/icons/win/icon',
     },
     plugins: [
         {
@@ -29,14 +29,14 @@ module.exports = {
             name: '@electron-forge/maker-squirrel',
             config: {
                 name: 'BlackBoardSync',
-                setupIcon: './static/icon.ico',
+                setupIcon: './static/icons/win/icon.ico',
             },
         },
         {
             name: '@electron-forge/maker-dmg',
             config: {
                 name: 'BlackBoard Sync',
-                icon: './static/icon.icns',
+                icon: './static/icons/mac/icon.icns',
                 format: 'ULFO',
             },
         },
