@@ -26,6 +26,21 @@ module.exports = {
     ],
     makers: [
         {
+            name: '@electron-forge/maker-squirrel',
+            config: {
+                name: 'BlackBoardSync',
+                setupIcon: './static/icon.ico',
+            },
+        },
+        {
+            name: '@electron-forge/maker-dmg',
+            config: {
+                name: 'BlackBoard Sync',
+                icon: './static/icon.icns',
+                format: 'ULFO',
+            },
+        },
+        {
             name: '@electron-forge/maker-zip',
             platforms: ['win32', 'darwin', 'linux'],
         },

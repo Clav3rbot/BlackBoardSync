@@ -1,7 +1,7 @@
 # BlackBoard Sync
 
 <p align="center">
-  <img src="https://img.shields.io/badge/platform-Windows-blue?style=flat-square" />
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/electron-28-47848F?style=flat-square&logo=electron" />
   <img src="https://img.shields.io/badge/typescript-5.3-3178C6?style=flat-square&logo=typescript" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" />
@@ -21,7 +21,8 @@ App desktop per sincronizzare automaticamente i file dei corsi dalla piattaforma
 - **Selezione corsi** — scegli quali corsi sincronizzare
 - **Sincronizzazione automatica** — intervallo configurabile (default: 30 minuti)
 - **Riepilogo sync** — modale con dettaglio dei file scaricati per ogni corso
-- **Portabile** — nessuna installazione richiesta, basta estrarre lo zip
+- **Installer nativo** — setup `.exe` per Windows e `.dmg` per macOS
+- **Portabile** — versione `.zip` senza installazione per tutte le piattaforme
 
 ## Screenshot
 
@@ -31,11 +32,24 @@ App desktop per sincronizzare automaticamente i file dei corsi dalla piattaforma
 
 ## Installazione
 
-1. Scarica l'ultima release dalla pagina [Releases](../../releases)
-2. Estrai lo zip in una cartella qualsiasi
-3. Avvia `BlackBoard Sync.exe`
+Scarica l'ultima release dalla pagina [Releases](../../releases).
+
+| Piattaforma | Installer (setup) | Portable (no install) |
+|-------------|--------------------|-----------------------|
+| **Windows** | `BlackBoardSync-x.x.x Setup.exe` | `BlackBoard Sync-win32-x64-x.x.x.zip` |
+| **macOS** | `BlackBoard Sync-x.x.x.dmg` | `BlackBoard Sync-darwin-x64-x.x.x.zip` |
+
+### Windows
+
+- **Installer:** esegui il `.exe` e segui il wizard — l'app viene installata e aggiunta al menu Start
+- **Portable:** estrai lo `.zip` in una cartella qualsiasi e avvia `BlackBoard Sync.exe`
 
 > **Nota:** Windows potrebbe mostrare un avviso SmartScreen al primo avvio. Clicca su "Ulteriori informazioni" → "Esegui comunque".
+
+### macOS
+
+- **Installer:** apri il `.dmg` e trascina l'app nella cartella Applicazioni
+- **Portable:** estrai lo `.zip` e avvia l'app
 
 ## Sviluppo
 
@@ -57,7 +71,7 @@ npm install
 | Comando | Descrizione |
 |---------|-------------|
 | `npm start` | Avvia l'app in modalità sviluppo |
-| `npm run make` | Crea il pacchetto distribuibile (.zip) |
+| `npm run make` | Crea i pacchetti distribuibili (installer + zip) |
 
 ### Struttura progetto
 
