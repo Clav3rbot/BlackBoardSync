@@ -74,7 +74,7 @@ module.exports = {
                     name: 'BlackBoardSync',
                     owner: 'Clav3rbot',
                 },
-                draft: true,
+                draft: false,
             },
         },
     ],
