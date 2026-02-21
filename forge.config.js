@@ -26,10 +26,15 @@ module.exports = {
     ],
     makers: [
         {
-            name: '@electron-forge/maker-squirrel',
+            name: '@electron-forge/maker-wix',
             config: {
-                name: 'BlackBoardSync',
-                setupIcon: './static/icons/win/icon.ico',
+                name: 'BlackBoard Sync',
+                manufacturer: 'Clav3r',
+                icon: './static/icons/win/icon.ico',
+                ui: {
+                    chooseDirectory: true,
+                },
+                shortcutFolderName: 'BlackBoard Sync',
             },
         },
         {

@@ -58,7 +58,7 @@ jobs:
       - name: Collect release assets
         run: |
           mkdir -p release-assets
-          find artifacts -type f \( -name "*.exe" -o -name "*.zip" -o -name "*.dmg" -o -name "*.nupkg" \) \
+          find artifacts -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.zip" -o -name "*.dmg" \) \
             ! -name "RELEASES" \
             -exec cp {} release-assets/ \;
           ls -lh release-assets/
