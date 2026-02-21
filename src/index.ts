@@ -227,11 +227,14 @@ function setupIPC(): void {
     });
 
     ipcMain.handle('open-folder', async (_event, folderPath: string) => {
+        const normalizedPath = path.resolve(folderPath);
+        const syncDir = path.resolve(store.getConfig().syncDir);
+        if (!normalizedPath.startsWith(syncDir)) return;
         const fs = await import('fs');
-        if (!fs.existsSync(folderPath)) {
-            fs.mkdirSync(folderPath, { recursive: true });
+        if (!fs.existsSync(normalizedPath)) {
+            fs.mkdirSync(normalizedPath, { recursive: true });
         }
-        shell.openPath(folderPath);
+        shell.openPath(normalizedPath);
     });
 
     ipcMain.handle('window-minimize', () => mainWindow?.minimize());
