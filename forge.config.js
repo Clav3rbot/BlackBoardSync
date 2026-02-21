@@ -4,6 +4,23 @@ module.exports = {
     packagerConfig: {
         name: 'BlackBoard Sync',
         icon: path.resolve(__dirname, 'static/icons/win/icon'),
+        asar: true,
+    },
+    hooks: {
+        postPackage: async (forgeConfig, options) => {
+            // Remove unused locale files (keep only English and Italian)
+            const fs = require('fs')
+            const localesDir = path.join(options.outputPaths[0], 'locales')
+            if (fs.existsSync(localesDir)) {
+                const keep = ['en-US.pak', 'it.pak']
+                fs.readdirSync(localesDir).forEach(file => {
+                    if (!keep.includes(file)) {
+                        fs.unlinkSync(path.join(localesDir, file))
+                    }
+                })
+                console.log('Cleaned locales, kept:', keep.join(', '))
+            }
+        },
     },
     plugins: [
         {
