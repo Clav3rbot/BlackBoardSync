@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/electron-28-47848F?style=flat-square&logo=electron" />
   <img src="https://img.shields.io/badge/typescript-5.3-3178C6?style=flat-square&logo=typescript" />
-  <img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" /></a>
 </p>
 
 App desktop per sincronizzare automaticamente i file dei corsi dalla piattaforma Blackboard dell'**Università Bocconi** direttamente sul tuo computer.
