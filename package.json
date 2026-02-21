@@ -1,0 +1,48 @@
+{
+  "name": "blackboard-sync",
+  "version": "1.0.0",
+  "description": "Sincronizza i file dei corsi Blackboard (Università Bocconi)",
+  "main": ".webpack/main",
+  "scripts": {
+    "start": "electron-forge start",
+    "dev": "npx webpack serve --config webpack.dev.config.js",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "keywords": [
+    "electron",
+    "blackboard",
+    "bocconi",
+    "sync",
+    "typescript"
+  ],
+  "author": "Clav3r",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "@electron-forge/cli": "^7.2.0",
+    "@electron-forge/maker-zip": "^7.2.0",
+    "@electron-forge/plugin-webpack": "^7.2.0",
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "css-loader": "^6.9.0",
+    "electron": "^28.2.0",
+    "fork-ts-checker-webpack-plugin": "^9.0.0",
+    "html-webpack-plugin": "^5.6.6",
+    "node-loader": "^2.0.0",
+    "sass": "^1.70.0",
+    "sass-loader": "^14.1.0",
+    "style-loader": "^3.3.0",
+    "ts-loader": "^9.5.0",
+    "typescript": "^5.3.0",
+    "webpack-cli": "^6.0.1",
+    "webpack-dev-server": "^5.2.3"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.10",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
