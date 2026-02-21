@@ -10,14 +10,11 @@ permissions:
 
 jobs:
   build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        include:
-          - os: windows-latest
-            platform: win32
-          - os: macos-latest
-            platform: darwin
-    runs-on: ${{ matrix.os }}
+        os: [macos-latest, windows-latest]
 
     steps:
       - name: Checkout
@@ -32,41 +29,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build distributables
-        run: npx electron-forge make
+      - name: Build & Publish
+        run: npx electron-forge publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-${{ matrix.platform }}
-          path: out/make/**/*
-          if-no-files-found: error
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: List artifacts
-        run: find artifacts -type f | head -50
-
-      - name: Collect release assets
-        run: |
-          mkdir -p release-assets
-          find artifacts -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.zip" -o -name "*.dmg" \) \
-            ! -name "RELEASES" \
-            -exec cp {} release-assets/ \;
-          ls -lh release-assets/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release-assets/*
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      - name: Build for Apple Silicon
+        if: matrix.os == 'macos-latest'
+        run: npx electron-forge publish --arch=arm64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

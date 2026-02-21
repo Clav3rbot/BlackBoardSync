@@ -1,7 +1,11 @@
+const fs = require('fs')
+const path = require('path')
+const AdmZip = require('adm-zip')
+
 module.exports = {
     packagerConfig: {
         name: 'BlackBoard Sync',
-        icon: './static/icons/win/icon',
+        icon: path.resolve(__dirname, 'static/icons/win/icon'),
     },
     plugins: [
         {
@@ -26,28 +30,59 @@ module.exports = {
     ],
     makers: [
         {
-            name: '@electron-forge/maker-wix',
+            name: '@electron-forge/maker-squirrel',
             config: {
-                name: 'BlackBoard Sync',
-                manufacturer: 'Clav3r',
-                icon: './static/icons/win/icon.ico',
-                ui: {
-                    chooseDirectory: true,
-                },
-                shortcutFolderName: 'BlackBoard Sync',
+                name: 'BlackBoardSync',
+                setupIcon: './static/icons/win/icon.ico',
+                setupExe: 'BlackBoard Sync Windows Setup.exe',
             },
         },
         {
             name: '@electron-forge/maker-dmg',
-            config: {
-                name: 'BlackBoard Sync',
-                icon: './static/icons/mac/icon.icns',
+            config: arch => ({
+                name: `BlackBoard Sync macOS-${arch}`,
+                icon: path.resolve(__dirname, 'static/icons/mac/icon.icns'),
                 format: 'ULFO',
-            },
+                overwrite: true,
+            }),
         },
         {
             name: '@electron-forge/maker-zip',
-            platforms: ['win32', 'darwin', 'linux'],
+            platforms: ['darwin'],
         },
     ],
+    publishers: [
+        {
+            name: '@electron-forge/publisher-github',
+            config: {
+                repository: {
+                    name: 'BlackBoardSync',
+                    owner: 'Clav3rbot',
+                },
+                draft: true,
+            },
+        },
+    ],
+    hooks: {
+        postMake: (_config, makeResults) => {
+            // Zip the Windows .exe installer to avoid SmartScreen blocking
+            const winRelease = makeResults.find(m => m.platform === 'win32')
+            if (winRelease) {
+                let zipPath
+                console.log('Zipping exe installer...')
+                winRelease.artifacts.forEach(art => {
+                    if (art.endsWith('.exe')) {
+                        zipPath = art.slice(0, -3) + 'zip'
+                        const zip = new AdmZip()
+                        zip.addFile(path.basename(art), fs.readFileSync(art))
+                        fs.writeFileSync(zipPath, zip.toBuffer())
+                    }
+                })
+                if (zipPath) {
+                    winRelease.artifacts.push(zipPath)
+                }
+            }
+            return makeResults
+        },
+    },
 }

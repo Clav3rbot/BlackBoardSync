@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const appIcon = require('../../../static/icons/png/128x128.png') as string;
+
 interface LoginViewProps {
     onLogin: (user: any) => void;
 }
@@ -38,76 +41,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         <div className="login-view">
             <div className="login-header">
                 <div className="login-logo">
-                    <svg
-                        width="48"
-                        height="48"
-                        viewBox="0 0 48 48"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                    >
-                        <rect
-                            x="4"
-                            y="8"
-                            width="40"
-                            height="32"
-                            rx="3"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                        />
-                        <path
-                            d="M4 16H44"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                        />
-                        <path
-                            d="M16 16V40"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                        />
-                        <circle cx="10" cy="12" r="1.5" fill="currentColor" />
-                        <circle cx="15" cy="12" r="1.5" fill="currentColor" />
-                        <circle cx="20" cy="12" r="1.5" fill="currentColor" />
-                        <rect
-                            x="22"
-                            y="22"
-                            width="16"
-                            height="2"
-                            rx="1"
-                            fill="currentColor"
-                        />
-                        <rect
-                            x="22"
-                            y="28"
-                            width="12"
-                            height="2"
-                            rx="1"
-                            fill="currentColor"
-                        />
-                        <rect
-                            x="22"
-                            y="34"
-                            width="14"
-                            height="2"
-                            rx="1"
-                            fill="currentColor"
-                        />
-                        <rect
-                            x="8"
-                            y="22"
-                            width="5"
-                            height="2"
-                            rx="1"
-                            fill="currentColor"
-                        />
-                        <rect
-                            x="8"
-                            y="28"
-                            width="5"
-                            height="2"
-                            rx="1"
-                            fill="currentColor"
-                        />
-                    </svg>
+                    <img src={appIcon} alt="BlackBoard Sync" width="64" height="64" />
                 </div>
                 <h1>BlackBoard Sync</h1>
                 <p className="login-subtitle">Università Bocconi</p>
