@@ -9,6 +9,14 @@ interface HeaderProps {
     onLogout: () => void;
 }
 
+const getInitials = (name: string): string => {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+    return name.charAt(0).toUpperCase();
+};
+
 const Header: React.FC<HeaderProps> = ({
     userName,
     lastSync,
@@ -22,7 +30,7 @@ const Header: React.FC<HeaderProps> = ({
             <div className="header-top">
                 <div className="header-user">
                     <div className="user-avatar">
-                        {userName.charAt(0).toUpperCase()}
+                        {getInitials(userName)}
                     </div>
                     <div className="user-info">
                         <span className="user-name">{userName}</span>
