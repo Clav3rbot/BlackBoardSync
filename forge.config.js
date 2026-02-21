@@ -1,6 +1,4 @@
-const fs = require('fs')
 const path = require('path')
-const AdmZip = require('adm-zip')
 
 module.exports = {
     packagerConfig: {
@@ -34,8 +32,12 @@ module.exports = {
             config: {
                 name: 'BlackBoardSync',
                 setupIcon: './static/icons/win/icon.ico',
-                setupExe: 'BlackBoard Sync Windows Setup.exe',
+                setupExe: 'BlackBoard Sync Setup.exe',
             },
+        },
+        {
+            name: '@electron-forge/maker-zip',
+            platforms: ['win32'],
         },
         {
             name: '@electron-forge/maker-dmg',
@@ -45,10 +47,6 @@ module.exports = {
                 format: 'ULFO',
                 overwrite: true,
             }),
-        },
-        {
-            name: '@electron-forge/maker-zip',
-            platforms: ['darwin'],
         },
     ],
     publishers: [
@@ -63,26 +61,4 @@ module.exports = {
             },
         },
     ],
-    hooks: {
-        postMake: (_config, makeResults) => {
-            // Zip the Windows .exe installer to avoid SmartScreen blocking
-            const winRelease = makeResults.find(m => m.platform === 'win32')
-            if (winRelease) {
-                let zipPath
-                console.log('Zipping exe installer...')
-                winRelease.artifacts.forEach(art => {
-                    if (art.endsWith('.exe')) {
-                        zipPath = art.slice(0, -3) + 'zip'
-                        const zip = new AdmZip()
-                        zip.addFile(path.basename(art), fs.readFileSync(art))
-                        fs.writeFileSync(zipPath, zip.toBuffer())
-                    }
-                })
-                if (zipPath) {
-                    winRelease.artifacts.push(zipPath)
-                }
-            }
-            return makeResults
-        },
-    },
 }
