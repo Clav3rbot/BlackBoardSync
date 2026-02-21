@@ -8,6 +8,11 @@ import {
     Menu,
     nativeImage,
 } from 'electron';
+
+// Handle Squirrel events (install, update, uninstall shortcuts)
+// This must be at the very top before any other code runs
+if (require('electron-squirrel-startup')) app.quit();
+
 import * as path from 'path';
 import { LoginManager } from './modules/login';
 import { BlackboardAPI } from './modules/blackboard';
