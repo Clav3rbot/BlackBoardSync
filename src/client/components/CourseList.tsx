@@ -299,12 +299,6 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                 {displayName}
                                                             </span>
                                                         )}
-                                                        {courseAliases[course.id] &&
-                                                            !isEditing && (
-                                                                <span className="course-original-name">
-                                                                    {course.name}
-                                                                </span>
-                                                            )}
                                                         {course.instructor && !isEditing && (
                                                             <span className="course-instructor">
                                                                 {course.instructor}
