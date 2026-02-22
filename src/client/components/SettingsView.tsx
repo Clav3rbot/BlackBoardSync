@@ -25,6 +25,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
     const [checkingUpdate, setCheckingUpdate] = useState(false);
     const [updateMessage, setUpdateMessage] = useState('');
     const [updateStatus, setUpdateStatus] = useState<string>('');
+    const [localTime, setLocalTime] = useState(config.autoSyncScheduledTime);
 
     useEffect(() => {
         window.api.getAppVersion().then(setAppVersion).catch(() => {});
@@ -37,6 +38,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
         });
         return unsub;
     }, []);
+
+    useEffect(() => {
+        setLocalTime(config.autoSyncScheduledTime);
+    }, [config.autoSyncScheduledTime]);
 
     const updateSetting = async (partial: Partial<AppConfig>) => {
         const newConfig = await window.api.updateConfig(partial);
@@ -137,8 +142,13 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                         <input
                                             type="time"
                                             className="time-input"
-                                            value={config.autoSyncScheduledTime}
-                                            onChange={(e) => updateSetting({ autoSyncScheduledTime: e.target.value })}
+                                            value={localTime}
+                                            onChange={(e) => setLocalTime(e.target.value)}
+                                            onBlur={() => {
+                                                if (localTime && localTime !== config.autoSyncScheduledTime) {
+                                                    updateSetting({ autoSyncScheduledTime: localTime });
+                                                }
+                                            }}
                                         />
                                     </div>
                                 )}
