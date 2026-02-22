@@ -16,6 +16,7 @@ import {
 if (require('electron-squirrel-startup')) app.quit();
 
 import * as path from 'path';
+import * as fs from 'fs';
 import { LoginManager } from './modules/login';
 import { BlackboardAPI } from './modules/blackboard';
 import { DownloadManager } from './modules/download';
@@ -349,9 +350,66 @@ function setupIPC(): void {
     });
     ipcMain.handle('restart-for-update', () => {
         // Force quit even if minimize-to-tray is enabled
+        // 1. Remove the close-prevention listener on the window
+        if (mainWindow) {
+            mainWindow.removeAllListeners('close');
+        }
+        // 2. Destroy tray so app can fully quit
+        if (tray) {
+            tray.destroy();
+            tray = null;
+        }
+        // 3. Remove window-all-closed listener that could keep process alive
         app.removeAllListeners('window-all-closed');
+        // 4. Now quitAndInstall can close windows and restart
         autoUpdater.quitAndInstall();
     });
+}
+
+/**
+ * Clean up old Squirrel.Windows version folders.
+ * Squirrel keeps previous app-x.y.z directories under %LOCALAPPDATA%\BlackBoardSync.
+ * After an update, we remove all but the currently running version to save disk space.
+ */
+function cleanupOldVersions() {
+    if (process.platform !== 'win32' || !app.isPackaged) return;
+
+    try {
+        const appDir = path.dirname(path.dirname(app.getPath('exe'))); // up from app-x.y.z
+        const currentVersion = app.getVersion();
+        const currentFolder = `app-${currentVersion}`;
+
+        const entries = fs.readdirSync(appDir, { withFileTypes: true });
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            if (!entry.name.startsWith('app-')) continue;
+            if (entry.name === currentFolder) continue;
+
+            const oldPath = path.join(appDir, entry.name);
+            try {
+                fs.rmSync(oldPath, { recursive: true, force: true });
+                console.log(`Cleaned up old version: ${entry.name}`);
+            } catch {
+                // May be locked, ignore
+            }
+        }
+
+        // Also clean up old nupkg files (staging)
+        const packagesDir = path.join(appDir, 'packages');
+        if (fs.existsSync(packagesDir)) {
+            const pkgs = fs.readdirSync(packagesDir);
+            for (const pkg of pkgs) {
+                if (pkg.endsWith('.nupkg') && !pkg.includes(currentVersion)) {
+                    try {
+                        fs.unlinkSync(path.join(packagesDir, pkg));
+                        console.log(`Cleaned up old package: ${pkg}`);
+                    } catch {}
+                }
+            }
+        }
+    } catch (err) {
+        console.error('Cleanup old versions failed:', err);
+    }
 }
 
 function setupAutoUpdate() {
@@ -418,6 +476,7 @@ function setupAutoUpdate() {
 
 app.whenReady().then(() => {
     store = new AppStore();
+    cleanupOldVersions();
     createWindow();
     createTray();
     setupIPC();
