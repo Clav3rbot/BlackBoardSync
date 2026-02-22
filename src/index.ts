@@ -69,8 +69,8 @@ function createWindow(): void {
     const icon = getAppIcon();
 
     mainWindow = new BrowserWindow({
-        width: 440,
-        height: 680,
+        width: 480,
+        height: 780,
         minWidth: 380,
         minHeight: 520,
         resizable: true,
