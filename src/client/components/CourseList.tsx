@@ -12,9 +12,11 @@ interface CourseListProps {
     courses: Course[];
     enabledCourses: string[];
     courseAliases: Record<string, string>;
+    collapsedTerms: string[];
     loading: boolean;
     onToggle: (courseId: string) => void;
     onRename: (courseId: string, newName: string) => void;
+    onCollapsedTermsChange: (collapsed: string[]) => void;
 }
 
 interface TermGroup {
@@ -27,15 +29,17 @@ const CourseList: React.FC<CourseListProps> = ({
     courses,
     enabledCourses,
     courseAliases,
+    collapsedTerms: savedCollapsedTerms,
     loading,
     onToggle,
     onRename,
+    onCollapsedTermsChange,
 }) => {
     const allEnabled = enabledCourses.length === 0;
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
     const [activeTerm, setActiveTerm] = useState<string | null>(null);
-    const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set());
+    const [collapsedTerms, setCollapsedTerms] = useState<Set<string>>(new Set(savedCollapsedTerms));
 
 
     const termGroups = useMemo<TermGroup[]>(() => {
@@ -103,6 +107,7 @@ const CourseList: React.FC<CourseListProps> = ({
             } else {
                 next.add(termId);
             }
+            onCollapsedTermsChange(Array.from(next));
             return next;
         });
     };

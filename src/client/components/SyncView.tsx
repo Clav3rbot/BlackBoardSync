@@ -18,6 +18,7 @@ interface AppConfig {
     autoSyncScheduledTime: string;
     enabledCourses: string[];
     courseAliases: Record<string, string>;
+    collapsedTerms: string[];
     lastSync: string | null;
     minimizeToTray: boolean;
     startAtLogin: boolean;
@@ -146,6 +147,11 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         setConfig(newConfig);
     };
 
+    const handleCollapsedTermsChange = async (collapsed: string[]) => {
+        const newConfig = await window.api.updateConfig({ collapsedTerms: collapsed });
+        setConfig(newConfig);
+    };
+
     const formatLastSync = (iso: string | null): string => {
         if (!iso) return 'Mai';
         const date = new Date(iso);
@@ -174,10 +180,12 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 userName={`${user.name.given} ${user.name.family}`}
                 lastSync={formatLastSync(config.lastSync)}
                 syncing={syncing}
+                syncDir={config.syncDir}
                 onSync={handleSync}
                 onAbort={handleAbortSync}
                 onLogout={onLogout}
                 onSettings={() => setSettingsOpen(true)}
+                onOpenFolder={() => window.api.openFolder(config.syncDir)}
             />
 
             {syncing && progress && (
@@ -214,9 +222,11 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 courses={courses}
                 enabledCourses={config.enabledCourses}
                 courseAliases={config.courseAliases}
+                collapsedTerms={config.collapsedTerms || []}
                 loading={loadingCourses}
                 onToggle={handleToggleCourse}
                 onRename={handleRenameCourse}
+                onCollapsedTermsChange={handleCollapsedTermsChange}
             />
 
             {settingsOpen && (

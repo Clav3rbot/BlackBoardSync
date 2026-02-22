@@ -10,6 +10,7 @@ const DEFAULT_CONFIG: AppConfig = {
     autoSyncScheduledTime: '00:00',
     enabledCourses: [],
     courseAliases: {},
+    collapsedTerms: [],
     lastSync: null,
     minimizeToTray: true,
     startAtLogin: false,

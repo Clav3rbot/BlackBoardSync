@@ -40,6 +40,7 @@ export interface AppConfig {
     autoSyncScheduledTime: string;
     enabledCourses: string[];
     courseAliases: Record<string, string>;
+    collapsedTerms: string[];
     lastSync: string | null;
     minimizeToTray: boolean;
     startAtLogin: boolean;
