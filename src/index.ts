@@ -304,6 +304,16 @@ function setupIPC(): void {
             });
         }
 
+        // Handle minimize-to-tray changes: create/destroy tray dynamically
+        if ('minimizeToTray' in partial) {
+            if (partial.minimizeToTray && !tray) {
+                createTray();
+            } else if (!partial.minimizeToTray && tray) {
+                tray.destroy();
+                tray = null;
+            }
+        }
+
         return config;
     });
 
@@ -478,7 +488,9 @@ app.whenReady().then(() => {
     store = new AppStore();
     cleanupOldVersions();
     createWindow();
-    createTray();
+    if (store.getConfig().minimizeToTray) {
+        createTray();
+    }
     setupIPC();
     setupAutoSync();
     setupAutoUpdate();
@@ -492,11 +504,14 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-    // On macOS, keep the app running. On other platforms, quit only if minimize-to-tray is off
     if (process.platform === 'darwin') return;
-    if (!store?.getConfig().minimizeToTray) {
-        app.quit();
+    // If tray exists and minimize-to-tray is on, keep running; otherwise quit
+    if (store?.getConfig().minimizeToTray && tray) return;
+    if (tray) {
+        tray.destroy();
+        tray = null;
     }
+    app.quit();
 });
 
 app.on('activate', () => {
