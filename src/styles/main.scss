@@ -451,6 +451,37 @@ body {
     }
 }
 
+.header-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-header-icon {
+    width: 34px;
+    height: 34px;
+    border: 1px solid $border;
+    background: transparent;
+    color: $text-tertiary;
+    cursor: pointer;
+    border-radius: $radius-sm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all $transition-smooth;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: $text-primary;
+    }
+
+    &.btn-logout-icon:hover {
+        background: $error-subtle;
+        border-color: rgba($error, 0.2);
+        color: $error;
+    }
+}
+
 .sync-btn {
     width: 100%;
     padding: 10px 16px;
@@ -753,6 +784,164 @@ body {
     font-size: 11px;
     color: $text-tertiary;
     letter-spacing: 0.3px;
+}
+
+// Settings panel overlay
+.settings-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 50;
+    display: flex;
+    justify-content: flex-end;
+    animation: settingsOverlayIn 200ms ease-out;
+}
+
+@keyframes settingsOverlayIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.settings-panel {
+    width: 100%;
+    max-width: 380px;
+    height: 100%;
+    background: $bg-secondary;
+    border-left: 1px solid $border;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+    animation: settingsPanelIn 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes settingsPanelIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
+
+.settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px;
+    border-bottom: 1px solid $border;
+    flex-shrink: 0;
+}
+
+.settings-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: $text-primary;
+    letter-spacing: -0.3px;
+}
+
+.settings-close-btn {
+    width: 30px;
+    height: 30px;
+    border: 1px solid $border;
+    background: transparent;
+    color: $text-tertiary;
+    cursor: pointer;
+    border-radius: $radius-sm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all $transition-smooth;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: $text-primary;
+    }
+}
+
+.settings-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.settings-group {
+    padding: 14px 20px;
+    border-bottom: 1px solid $border;
+}
+
+.settings-group-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: $text-tertiary;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+}
+
+.schedule-time-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+}
+
+.time-input {
+    padding: 5px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid $border;
+    border-radius: $radius-sm;
+    color: $text-primary;
+    font-size: 13px;
+    font-family: $font-mono;
+    outline: none;
+    transition: border-color $transition-smooth, box-shadow $transition-smooth;
+    width: 100px;
+    text-align: center;
+
+    &::-webkit-calendar-picker-indicator {
+        filter: invert(0.7);
+        cursor: pointer;
+    }
+
+    &:focus {
+        border-color: rgba($accent, 0.5);
+        box-shadow: 0 0 0 3px rgba($accent, 0.08);
+    }
+}
+
+.update-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.btn-update {
+    width: 36px;
+    height: 36px;
+    border: 1px solid $border;
+    background: transparent;
+    color: $text-secondary;
+    cursor: pointer;
+    border-radius: $radius-sm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all $transition-smooth;
+
+    &:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: $text-primary;
+    }
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    &.checking {
+        border-color: rgba($accent, 0.3);
+    }
 }
 
 .course-section {

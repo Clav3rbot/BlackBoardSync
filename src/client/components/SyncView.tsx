@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Header from './Header';
 import CourseList from './CourseList';
 import SyncResultModal from './SyncResultModal';
+import SettingsView from './SettingsView';
 
 interface Course {
     id: string;
@@ -14,6 +15,7 @@ interface AppConfig {
     syncDir: string;
     autoSync: boolean;
     autoSyncInterval: number;
+    autoSyncScheduledTime: string;
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     lastSync: string | null;
@@ -54,11 +56,10 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
     const [progress, setProgress] = useState<SyncProgress | null>(null);
     const [loadingCourses, setLoadingCourses] = useState(true);
     const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
-    const [appVersion, setAppVersion] = useState('');
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     useEffect(() => {
         loadData();
-        window.api.getAppVersion().then(setAppVersion).catch(() => {});
 
         const unsubProgress = window.api.onSyncProgress((p: SyncProgress) => {
             setProgress(p);
@@ -121,20 +122,6 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         setProgress(null);
     };
 
-    const handleSelectFolder = async () => {
-        const folder = await window.api.selectFolder();
-        if (folder) {
-            const newConfig = await window.api.updateConfig({ syncDir: folder });
-            setConfig(newConfig);
-        }
-    };
-
-    const handleOpenFolder = () => {
-        if (config?.syncDir) {
-            window.api.openFolder(config.syncDir);
-        }
-    };
-
     const handleToggleCourse = async (courseId: string) => {
         if (!config) return;
         let enabled = [...config.enabledCourses];
@@ -156,36 +143,6 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
             delete aliases[courseId];
         }
         const newConfig = await window.api.updateConfig({ courseAliases: aliases });
-        setConfig(newConfig);
-    };
-
-    const handleToggleAutoSync = async () => {
-        if (!config) return;
-        const newConfig = await window.api.updateConfig({ autoSync: !config.autoSync });
-        setConfig(newConfig);
-    };
-
-    const handleChangeInterval = async (interval: number) => {
-        if (!config) return;
-        const newConfig = await window.api.updateConfig({ autoSyncInterval: interval });
-        setConfig(newConfig);
-    };
-
-    const handleToggleMinimizeToTray = async () => {
-        if (!config) return;
-        const newConfig = await window.api.updateConfig({ minimizeToTray: !config.minimizeToTray });
-        setConfig(newConfig);
-    };
-
-    const handleToggleStartAtLogin = async () => {
-        if (!config) return;
-        const newConfig = await window.api.updateConfig({ startAtLogin: !config.startAtLogin });
-        setConfig(newConfig);
-    };
-
-    const handleToggleNotifications = async () => {
-        if (!config) return;
-        const newConfig = await window.api.updateConfig({ notifications: !config.notifications });
         setConfig(newConfig);
     };
 
@@ -220,6 +177,7 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 onSync={handleSync}
                 onAbort={handleAbortSync}
                 onLogout={onLogout}
+                onSettings={() => setSettingsOpen(true)}
             />
 
             {syncing && progress && (
@@ -245,108 +203,6 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 </div>
             )}
 
-            <div className="section folder-section">
-                <div className="section-header">
-                    <span className="section-label">Cartella di sincronizzazione</span>
-                </div>
-                <div className="folder-row">
-                    <span className="folder-path" title={config.syncDir}>
-                        {config.syncDir}
-                    </span>
-                    <div className="folder-actions">
-                        <button
-                            className="btn-icon"
-                            onClick={handleOpenFolder}
-                            title="Apri cartella"
-                        >
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                                <path d="M1.5 2A1.5 1.5 0 000 3.5v9A1.5 1.5 0 001.5 14h13a1.5 1.5 0 001.5-1.5V5a1.5 1.5 0 00-1.5-1.5H7.707l-1.854-1.854A.5.5 0 005.5 1.5H1.5z" />
-                            </svg>
-                        </button>
-                        <button
-                            className="btn-icon"
-                            onClick={handleSelectFolder}
-                            title="Cambia cartella"
-                        >
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                                <path d="M12.146.146a.5.5 0 01.708 0l3 3a.5.5 0 010 .708l-10 10a.5.5 0 01-.168.11l-5 2a.5.5 0 01-.65-.65l2-5a.5.5 0 01.11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 01.5.5v.5h.5a.5.5 0 01.5.5v.5h.293l6.5-6.5z" />
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div className="section auto-sync-section">
-                <div className="toggle-row" onClick={handleToggleAutoSync}>
-                    <span className="toggle-label">Sincronizzazione automatica</span>
-                    <div className={`toggle ${config.autoSync ? 'active' : ''}`}>
-                        <div className="toggle-thumb" />
-                    </div>
-                </div>
-                {config.autoSync && (
-                    <div className="auto-sync-options">
-                        <span className="auto-sync-info">Intervallo di sincronizzazione</span>
-                        <div className="interval-picker">
-                            {[15, 30, 60, 120].map((mins) => (
-                                <button
-                                    key={mins}
-                                    className={`interval-btn ${config.autoSyncInterval === mins ? 'active' : ''}`}
-                                    onClick={() => handleChangeInterval(mins)}
-                                >
-                                    {mins < 60 ? `${mins}m` : `${mins / 60}h`}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            <div className="section settings-section">
-                <div className="section-header">
-                    <span className="section-label">Impostazioni</span>
-                </div>
-
-                <div className="toggle-row" onClick={handleToggleMinimizeToTray}>
-                    <div className="setting-info">
-                        <span className="toggle-label">Minimizza nel tray</span>
-                        <span className="setting-desc">Chiudendo la finestra, l'app resta attiva</span>
-                    </div>
-                    <div className={`toggle ${config.minimizeToTray ? 'active' : ''}`}>
-                        <div className="toggle-thumb" />
-                    </div>
-                </div>
-
-                <div className="setting-divider" />
-
-                <div className="toggle-row" onClick={handleToggleStartAtLogin}>
-                    <div className="setting-info">
-                        <span className="toggle-label">Avvia con Windows</span>
-                        <span className="setting-desc">Avvia l'app automaticamente all'accesso</span>
-                    </div>
-                    <div className={`toggle ${config.startAtLogin ? 'active' : ''}`}>
-                        <div className="toggle-thumb" />
-                    </div>
-                </div>
-
-                <div className="setting-divider" />
-
-                <div className="toggle-row" onClick={handleToggleNotifications}>
-                    <div className="setting-info">
-                        <span className="toggle-label">Notifiche</span>
-                        <span className="setting-desc">Mostra notifiche al completamento della sincronizzazione</span>
-                    </div>
-                    <div className={`toggle ${config.notifications ? 'active' : ''}`}>
-                        <div className="toggle-thumb" />
-                    </div>
-                </div>
-            </div>
-
-            {appVersion && (
-                <div className="app-version">
-                    BlackBoard Sync v{appVersion}
-                </div>
-            )}
-
             {syncResult && (
                 <SyncResultModal
                     result={syncResult}
@@ -362,6 +218,14 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 onToggle={handleToggleCourse}
                 onRename={handleRenameCourse}
             />
+
+            {settingsOpen && (
+                <SettingsView
+                    config={config}
+                    onConfigChange={setConfig}
+                    onClose={() => setSettingsOpen(false)}
+                />
+            )}
         </div>
     );
 };

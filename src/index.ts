@@ -8,6 +8,7 @@ import {
     Menu,
     nativeImage,
     Notification,
+    autoUpdater,
 } from 'electron';
 
 // Handle Squirrel events (install, update, uninstall shortcuts)
@@ -21,6 +22,9 @@ import { DownloadManager } from './modules/download';
 import { AppStore } from './modules/store';
 import { SyncProgress, Course, SyncResult } from './types.d';
 
+// Auto-update via GitHub Releases (Squirrel)
+import { updateElectronApp } from 'update-electron-app';
+
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
 
@@ -29,7 +33,7 @@ let tray: Tray | null = null;
 let store: AppStore;
 let bbApi: BlackboardAPI | null = null;
 let downloadManager: DownloadManager | null = null;
-let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
+let autoSyncTimer: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | null = null;
 let sessionCookies: string[] = [];
 
 function getIconPath(): string {
@@ -123,16 +127,42 @@ function createTray(): void {
 
 function setupAutoSync(): void {
     if (autoSyncTimer) {
-        clearInterval(autoSyncTimer);
+        clearInterval(autoSyncTimer as ReturnType<typeof setInterval>);
+        clearTimeout(autoSyncTimer as ReturnType<typeof setTimeout>);
         autoSyncTimer = null;
     }
 
     const config = store.getConfig();
-    if (config.autoSync && config.autoSyncInterval > 0) {
+    if (!config.autoSync) return;
+
+    if (config.autoSyncInterval === 0) {
+        // Scheduled mode: sync daily at the configured time
+        scheduleNextSync(config.autoSyncScheduledTime);
+    } else if (config.autoSyncInterval > 0) {
+        // Interval mode
         autoSyncTimer = setInterval(() => {
             triggerSync();
         }, config.autoSyncInterval * 60 * 1000);
     }
+}
+
+function scheduleNextSync(timeStr: string): void {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const now = new Date();
+    const next = new Date();
+    next.setHours(hours, minutes, 0, 0);
+
+    // If the scheduled time already passed today, target tomorrow
+    if (next.getTime() <= now.getTime()) {
+        next.setDate(next.getDate() + 1);
+    }
+
+    const delay = next.getTime() - now.getTime();
+    autoSyncTimer = setTimeout(() => {
+        triggerSync();
+        // After triggering, schedule the next one
+        scheduleNextSync(timeStr);
+    }, delay);
 }
 
 async function triggerSync(): Promise<void> {
@@ -307,6 +337,13 @@ function setupIPC(): void {
     });
     ipcMain.handle('window-close', () => mainWindow?.close());
     ipcMain.handle('get-app-version', () => app.getVersion());
+    ipcMain.handle('check-for-updates', () => {
+        try {
+            autoUpdater.checkForUpdates();
+        } catch {
+            // autoUpdater may not be configured in dev mode
+        }
+    });
 }
 
 app.whenReady().then(() => {
@@ -315,6 +352,13 @@ app.whenReady().then(() => {
     createTray();
     setupIPC();
     setupAutoSync();
+
+    // Auto-update: check for updates every 10 minutes
+    updateElectronApp({
+        repo: 'Clav3rbot/BlackBoardSync',
+        updateInterval: '10 minutes',
+        notifyUser: true,
+    });
 
     // Sync start-at-login setting on launch
     const config = store.getConfig();

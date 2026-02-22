@@ -16,6 +16,7 @@ const api = {
     maximize: () => ipcRenderer.invoke('window-maximize'),
     close: () => ipcRenderer.invoke('window-close'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     onSyncProgress: (callback: (progress: any) => void) => {
         const listener = (_event: any, progress: any) => callback(progress);
         ipcRenderer.on('sync-progress', listener);

@@ -7,6 +7,7 @@ const DEFAULT_CONFIG: AppConfig = {
     syncDir: '',
     autoSync: false,
     autoSyncInterval: 30,
+    autoSyncScheduledTime: '00:00',
     enabledCourses: [],
     courseAliases: {},
     lastSync: null,

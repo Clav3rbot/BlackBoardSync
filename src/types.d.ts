@@ -37,6 +37,7 @@ export interface AppConfig {
     syncDir: string;
     autoSync: boolean;
     autoSyncInterval: number;
+    autoSyncScheduledTime: string;
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     lastSync: string | null;
@@ -96,6 +97,7 @@ declare global {
             maximize: () => Promise<void>;
             close: () => Promise<void>;
             getAppVersion: () => Promise<string>;
+            checkForUpdates: () => Promise<void>;
             onSyncProgress: (callback: (progress: SyncProgress) => void) => () => void;
             onSyncComplete: (callback: (result: SyncResult) => void) => () => void;
         };
