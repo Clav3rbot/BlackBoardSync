@@ -22,8 +22,8 @@ import { DownloadManager } from './modules/download';
 import { AppStore } from './modules/store';
 import { SyncProgress, Course, SyncResult } from './types.d';
 
-// Auto-update via GitHub Releases (Squirrel)
-import { updateElectronApp } from 'update-electron-app';
+// GitHub repo for auto-update feed
+const GITHUB_RELEASES_URL = 'https://github.com/Clav3rbot/BlackBoardSync/releases/latest/download';
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
@@ -349,7 +349,17 @@ function setupIPC(): void {
     });
 }
 
-function setupAutoUpdaterEvents() {
+function setupAutoUpdate() {
+    // Set feed URL directly to GitHub Releases (Squirrel.Windows)
+    // Squirrel appends /RELEASES?id=...&localVersion=...&arch=... to this URL
+    try {
+        autoUpdater.setFeedURL({ url: GITHUB_RELEASES_URL });
+    } catch {
+        // Not available in dev mode
+        return;
+    }
+
+    // Event listeners for update status feedback
     autoUpdater.on('checking-for-update', () => {
         mainWindow?.webContents.send('update-status', {
             status: 'checking',
@@ -371,11 +381,23 @@ function setupAutoUpdaterEvents() {
         });
     });
 
-    autoUpdater.on('update-downloaded', () => {
+    autoUpdater.on('update-downloaded', (_event, releaseNotes, releaseName) => {
         mainWindow?.webContents.send('update-status', {
             status: 'downloaded',
             message: 'Aggiornamento scaricato. Riavvia per installare.',
         });
+
+        // Show native dialog to restart
+        const response = dialog.showMessageBoxSync(mainWindow!, {
+            type: 'info',
+            buttons: ['Riavvia ora', 'Dopo'],
+            title: 'Aggiornamento disponibile',
+            message: `Una nuova versione${releaseName ? ` (${releaseName})` : ''} è stata scaricata.`,
+            detail: 'Riavvia l\'applicazione per installare l\'aggiornamento.',
+        });
+        if (response === 0) {
+            autoUpdater.quitAndInstall();
+        }
     });
 
     autoUpdater.on('error', (err) => {
@@ -384,6 +406,16 @@ function setupAutoUpdaterEvents() {
             message: `Errore aggiornamento: ${err?.message || 'sconosciuto'}`,
         });
     });
+
+    // Initial check after 10 seconds
+    setTimeout(() => {
+        try { autoUpdater.checkForUpdates(); } catch {}
+    }, 10_000);
+
+    // Check every 4 hours
+    setInterval(() => {
+        try { autoUpdater.checkForUpdates(); } catch {}
+    }, 4 * 60 * 60 * 1000);
 }
 
 app.whenReady().then(() => {
@@ -392,14 +424,7 @@ app.whenReady().then(() => {
     createTray();
     setupIPC();
     setupAutoSync();
-    setupAutoUpdaterEvents();
-
-    // Auto-update: check for updates every 4 hours
-    updateElectronApp({
-        repo: 'Clav3rbot/BlackBoardSync',
-        updateInterval: '4 hours',
-        notifyUser: true,
-    });
+    setupAutoUpdate();
 
     // Sync start-at-login setting on launch
     const config = store.getConfig();
