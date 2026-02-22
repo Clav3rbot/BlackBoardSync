@@ -353,10 +353,10 @@ app.whenReady().then(() => {
     setupIPC();
     setupAutoSync();
 
-    // Auto-update: check for updates every 10 minutes
+    // Auto-update: check for updates every 4 hours
     updateElectronApp({
         repo: 'Clav3rbot/BlackBoardSync',
-        updateInterval: '10 minutes',
+        updateInterval: '4 hours',
         notifyUser: true,
     });
 

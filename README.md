@@ -23,8 +23,13 @@ App desktop per sincronizzare automaticamente i file dei corsi dalla piattaforma
 - **Filtro per semestre** — filtra i corsi per semestre con pill selezionabili
 - **Rinomina corsi** — assegna alias personalizzati alle cartelle dei corsi
 - **Selezione corsi** — scegli quali corsi sincronizzare
-- **Sincronizzazione automatica** — intervallo configurabile (default: 30 minuti)
+- **Sincronizzazione automatica** — intervallo configurabile (30m, 1h, 2h) o programmata a un orario specifico (es. mezzanotte)
 - **Riepilogo sync** — modale con dettaglio dei file scaricati per ogni corso
+- **Pannello impostazioni** — accessibile dall'icona ⚙️ nell'header
+- **Minimizza nel tray** — l'app resta attiva nella system tray anche chiudendo la finestra
+- **Avvio con Windows** — avvia l'app automaticamente all'accesso
+- **Notifiche desktop** — notifica al completamento della sincronizzazione
+- **Aggiornamento automatico** — l'app si aggiorna automaticamente tramite GitHub Releases
 - **Installer nativo** — setup `.exe` per Windows e `.dmg` per macOS
 - **Portabile** — versione `.zip` senza installazione per tutte le piattaforme
 
@@ -93,6 +98,7 @@ src/
 │       ├── SyncView.tsx        # Schermata principale
 │       ├── Header.tsx          # Header con avatar e sync
 │       ├── CourseList.tsx       # Lista corsi con filtri
+│       ├── SettingsView.tsx    # Pannello impostazioni
 │       └── SyncResultModal.tsx # Modale risultato sync
 ├── modules/
 │   ├── blackboard.ts           # Client API Blackboard REST
@@ -112,6 +118,7 @@ src/
 - **Webpack** — bundling
 - **axios** — chiamate HTTP
 - **cheerio** — parsing HTML per il flusso SAML
+- **update-electron-app** — aggiornamenti automatici via Squirrel + GitHub Releases
 
 ## Licenza
 
