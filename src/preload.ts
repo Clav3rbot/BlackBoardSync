@@ -31,6 +31,13 @@ const api = {
             ipcRenderer.removeListener('sync-complete', listener);
         };
     },
+    onUpdateStatus: (callback: (status: { status: string; message: string }) => void) => {
+        const listener = (_event: any, status: any) => callback(status);
+        ipcRenderer.on('update-status', listener);
+        return () => {
+            ipcRenderer.removeListener('update-status', listener);
+        };
+    },
 };
 
 contextBridge.exposeInMainWorld('api', api);

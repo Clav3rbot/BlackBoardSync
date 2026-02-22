@@ -36,6 +36,7 @@ jobs:
             out/make/**/*.exe
             out/make/**/*.zip
             out/make/**/*.nupkg
+            out/make/**/RELEASES
           if-no-files-found: error
 
   build-macos:
@@ -93,5 +94,6 @@ jobs:
             artifacts/**/*.zip
             artifacts/**/*.dmg
             artifacts/**/*.nupkg
+            artifacts/**/RELEASES
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

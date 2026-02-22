@@ -917,6 +917,36 @@ body {
     gap: 12px;
 }
 
+.update-message {
+    margin-top: 8px;
+    padding: 8px 12px;
+    border-radius: $radius-sm;
+    font-size: 12px;
+    line-height: 1.4;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid $border;
+    color: $text-secondary;
+
+    &.update-available,
+    &.update-downloaded {
+        background: rgba($accent, 0.08);
+        border-color: rgba($accent, 0.25);
+        color: $accent;
+    }
+
+    &.update-error {
+        background: rgba(#ef4444, 0.08);
+        border-color: rgba(#ef4444, 0.25);
+        color: #ef4444;
+    }
+
+    &.update-not-available {
+        background: rgba(#22c55e, 0.08);
+        border-color: rgba(#22c55e, 0.25);
+        color: #22c55e;
+    }
+}
+
 .btn-update {
     width: 36px;
     height: 36px;
@@ -944,6 +974,35 @@ body {
 
     &.checking {
         border-color: rgba($accent, 0.3);
+    }
+}
+
+.update-message {
+    margin-top: 8px;
+    font-size: 11px;
+    padding: 6px 10px;
+    border-radius: $radius-sm;
+    line-height: 1.4;
+
+    &.update-not-available {
+        color: $text-secondary;
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    &.update-available,
+    &.update-downloaded {
+        color: $accent;
+        background: rgba($accent, 0.08);
+    }
+
+    &.update-error {
+        color: #e74c3c;
+        background: rgba(#e74c3c, 0.08);
+    }
+
+    &.update-checking {
+        color: $text-secondary;
+        background: rgba(255, 255, 255, 0.03);
     }
 }
 

@@ -22,9 +22,19 @@ interface SettingsViewProps {
 const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onClose }) => {
     const [appVersion, setAppVersion] = useState('');
     const [checkingUpdate, setCheckingUpdate] = useState(false);
+    const [updateMessage, setUpdateMessage] = useState('');
+    const [updateStatus, setUpdateStatus] = useState<string>('');
 
     useEffect(() => {
         window.api.getAppVersion().then(setAppVersion).catch(() => {});
+        const unsub = window.api.onUpdateStatus(({ status, message }) => {
+            setUpdateStatus(status);
+            setUpdateMessage(message);
+            if (status !== 'checking') {
+                setCheckingUpdate(false);
+            }
+        });
+        return unsub;
     }, []);
 
     const updateSetting = async (partial: Partial<AppConfig>) => {
@@ -48,10 +58,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
 
     const handleCheckForUpdates = async () => {
         setCheckingUpdate(true);
+        setUpdateMessage('');
+        setUpdateStatus('');
         try {
             await window.api.checkForUpdates();
         } catch { /* ignore */ }
-        setTimeout(() => setCheckingUpdate(false), 3000);
     };
 
     return (
@@ -200,6 +211,11 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                 )}
                             </button>
                         </div>
+                        {updateMessage && (
+                            <div className={`update-message update-${updateStatus}`}>
+                                {updateMessage}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

@@ -100,6 +100,7 @@ declare global {
             checkForUpdates: () => Promise<void>;
             onSyncProgress: (callback: (progress: SyncProgress) => void) => () => void;
             onSyncComplete: (callback: (result: SyncResult) => void) => () => void;
+            onUpdateStatus: (callback: (status: { status: string; message: string }) => void) => () => void;
         };
     }
 }

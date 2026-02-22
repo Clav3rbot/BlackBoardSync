@@ -340,9 +340,49 @@ function setupIPC(): void {
     ipcMain.handle('check-for-updates', () => {
         try {
             autoUpdater.checkForUpdates();
-        } catch {
-            // autoUpdater may not be configured in dev mode
+        } catch (e) {
+            mainWindow?.webContents.send('update-status', {
+                status: 'error',
+                message: 'Impossibile controllare gli aggiornamenti',
+            });
         }
+    });
+}
+
+function setupAutoUpdaterEvents() {
+    autoUpdater.on('checking-for-update', () => {
+        mainWindow?.webContents.send('update-status', {
+            status: 'checking',
+            message: 'Controllo aggiornamenti...',
+        });
+    });
+
+    autoUpdater.on('update-available', () => {
+        mainWindow?.webContents.send('update-status', {
+            status: 'available',
+            message: 'Aggiornamento disponibile! Scaricamento in corso...',
+        });
+    });
+
+    autoUpdater.on('update-not-available', () => {
+        mainWindow?.webContents.send('update-status', {
+            status: 'not-available',
+            message: 'Nessun aggiornamento disponibile',
+        });
+    });
+
+    autoUpdater.on('update-downloaded', () => {
+        mainWindow?.webContents.send('update-status', {
+            status: 'downloaded',
+            message: 'Aggiornamento scaricato. Riavvia per installare.',
+        });
+    });
+
+    autoUpdater.on('error', (err) => {
+        mainWindow?.webContents.send('update-status', {
+            status: 'error',
+            message: `Errore aggiornamento: ${err?.message || 'sconosciuto'}`,
+        });
     });
 }
 
@@ -352,6 +392,7 @@ app.whenReady().then(() => {
     createTray();
     setupIPC();
     setupAutoSync();
+    setupAutoUpdaterEvents();
 
     // Auto-update: check for updates every 4 hours
     updateElectronApp({
