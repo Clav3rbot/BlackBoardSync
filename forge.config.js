@@ -53,7 +53,6 @@ module.exports = {
                 name: 'BlackBoardSync',
                 setupIcon: './static/icons/win/icon.ico',
                 setupExe: 'BlackBoard Sync Setup.exe',
-                remoteReleases: 'https://github.com/Clav3rbot/BlackBoardSync',
             },
         },
         {
