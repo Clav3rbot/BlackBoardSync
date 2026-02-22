@@ -5,6 +5,9 @@ module.exports = {
         name: 'BlackBoard Sync',
         icon: path.resolve(__dirname, 'static/icons/win/icon'),
         asar: true,
+        extraResource: [
+            path.resolve(__dirname, 'static'),
+        ],
     },
     hooks: {
         postPackage: async (forgeConfig, options) => {

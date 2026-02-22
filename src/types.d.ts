@@ -41,6 +41,8 @@ export interface AppConfig {
     courseAliases: Record<string, string>;
     lastSync: string | null;
     minimizeToTray: boolean;
+    startAtLogin: boolean;
+    notifications: boolean;
 }
 
 export interface SyncProgress {
@@ -93,6 +95,7 @@ declare global {
             minimize: () => Promise<void>;
             maximize: () => Promise<void>;
             close: () => Promise<void>;
+            getAppVersion: () => Promise<string>;
             onSyncProgress: (callback: (progress: SyncProgress) => void) => () => void;
             onSyncComplete: (callback: (result: SyncResult) => void) => () => void;
         };

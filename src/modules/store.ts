@@ -11,6 +11,8 @@ const DEFAULT_CONFIG: AppConfig = {
     courseAliases: {},
     lastSync: null,
     minimizeToTray: true,
+    startAtLogin: false,
+    notifications: true,
 };
 
 export class AppStore {

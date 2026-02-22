@@ -18,6 +18,8 @@ interface AppConfig {
     courseAliases: Record<string, string>;
     lastSync: string | null;
     minimizeToTray: boolean;
+    startAtLogin: boolean;
+    notifications: boolean;
 }
 
 interface SyncProgress {
@@ -52,9 +54,11 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
     const [progress, setProgress] = useState<SyncProgress | null>(null);
     const [loadingCourses, setLoadingCourses] = useState(true);
     const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+    const [appVersion, setAppVersion] = useState('');
 
     useEffect(() => {
         loadData();
+        window.api.getAppVersion().then(setAppVersion).catch(() => {});
 
         const unsubProgress = window.api.onSyncProgress((p: SyncProgress) => {
             setProgress(p);
@@ -161,6 +165,30 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         setConfig(newConfig);
     };
 
+    const handleChangeInterval = async (interval: number) => {
+        if (!config) return;
+        const newConfig = await window.api.updateConfig({ autoSyncInterval: interval });
+        setConfig(newConfig);
+    };
+
+    const handleToggleMinimizeToTray = async () => {
+        if (!config) return;
+        const newConfig = await window.api.updateConfig({ minimizeToTray: !config.minimizeToTray });
+        setConfig(newConfig);
+    };
+
+    const handleToggleStartAtLogin = async () => {
+        if (!config) return;
+        const newConfig = await window.api.updateConfig({ startAtLogin: !config.startAtLogin });
+        setConfig(newConfig);
+    };
+
+    const handleToggleNotifications = async () => {
+        if (!config) return;
+        const newConfig = await window.api.updateConfig({ notifications: !config.notifications });
+        setConfig(newConfig);
+    };
+
     const formatLastSync = (iso: string | null): string => {
         if (!iso) return 'Mai';
         const date = new Date(iso);
@@ -256,11 +284,68 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                     </div>
                 </div>
                 {config.autoSync && (
-                    <span className="auto-sync-info">
-                        Ogni {config.autoSyncInterval} minuti
-                    </span>
+                    <div className="auto-sync-options">
+                        <span className="auto-sync-info">Intervallo di sincronizzazione</span>
+                        <div className="interval-picker">
+                            {[15, 30, 60, 120].map((mins) => (
+                                <button
+                                    key={mins}
+                                    className={`interval-btn ${config.autoSyncInterval === mins ? 'active' : ''}`}
+                                    onClick={() => handleChangeInterval(mins)}
+                                >
+                                    {mins < 60 ? `${mins}m` : `${mins / 60}h`}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 )}
             </div>
+
+            <div className="section settings-section">
+                <div className="section-header">
+                    <span className="section-label">Impostazioni</span>
+                </div>
+
+                <div className="toggle-row" onClick={handleToggleMinimizeToTray}>
+                    <div className="setting-info">
+                        <span className="toggle-label">Minimizza nel tray</span>
+                        <span className="setting-desc">Chiudendo la finestra, l'app resta attiva</span>
+                    </div>
+                    <div className={`toggle ${config.minimizeToTray ? 'active' : ''}`}>
+                        <div className="toggle-thumb" />
+                    </div>
+                </div>
+
+                <div className="setting-divider" />
+
+                <div className="toggle-row" onClick={handleToggleStartAtLogin}>
+                    <div className="setting-info">
+                        <span className="toggle-label">Avvia con Windows</span>
+                        <span className="setting-desc">Avvia l'app automaticamente all'accesso</span>
+                    </div>
+                    <div className={`toggle ${config.startAtLogin ? 'active' : ''}`}>
+                        <div className="toggle-thumb" />
+                    </div>
+                </div>
+
+                <div className="setting-divider" />
+
+                <div className="toggle-row" onClick={handleToggleNotifications}>
+                    <div className="setting-info">
+                        <span className="toggle-label">Notifiche</span>
+                        <span className="setting-desc">Mostra notifiche al completamento della sincronizzazione</span>
+                    </div>
+                    <div className={`toggle ${config.notifications ? 'active' : ''}`}>
+                        <div className="toggle-thumb" />
+                    </div>
+                </div>
+            </div>
+
+            {appVersion && (
+                <div className="app-version">
+                    BlackBoard Sync v{appVersion}
+                </div>
+            )}
 
             {syncResult && (
                 <SyncResultModal

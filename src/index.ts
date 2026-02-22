@@ -7,6 +7,7 @@ import {
     Tray,
     Menu,
     nativeImage,
+    Notification,
 } from 'electron';
 
 // Handle Squirrel events (install, update, uninstall shortcuts)
@@ -31,7 +32,38 @@ let downloadManager: DownloadManager | null = null;
 let autoSyncTimer: ReturnType<typeof setInterval> | null = null;
 let sessionCookies: string[] = [];
 
+function getIconPath(): string {
+    // In production (packaged), icons live next to the asar
+    // In dev (webpack), CopyPlugin copies them to .webpack/main/static/icons
+    if (app.isPackaged) {
+        return path.join(process.resourcesPath, 'static', 'icons');
+    }
+    return path.join(__dirname, 'static', 'icons');
+}
+
+function getAppIcon(): Electron.NativeImage {
+    const iconsDir = getIconPath();
+    const icoPath = path.join(iconsDir, 'win', 'icon.ico');
+    const pngPath = path.join(iconsDir, 'png', '128x128.png');
+
+    if (process.platform === 'win32') {
+        try {
+            const icon = nativeImage.createFromPath(icoPath);
+            if (!icon.isEmpty()) return icon;
+        } catch { /* fallback to png */ }
+    }
+
+    try {
+        const icon = nativeImage.createFromPath(pngPath);
+        if (!icon.isEmpty()) return icon;
+    } catch { /* empty fallback */ }
+
+    return nativeImage.createEmpty();
+}
+
 function createWindow(): void {
+    const icon = getAppIcon();
+
     mainWindow = new BrowserWindow({
         width: 440,
         height: 680,
@@ -39,6 +71,7 @@ function createWindow(): void {
         minHeight: 520,
         resizable: true,
         frame: false,
+        icon,
         backgroundColor: '#0d1117',
         webPreferences: {
             preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
@@ -62,14 +95,14 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-    const icon = nativeImage.createFromBuffer(
-        Buffer.from(
-            'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAADklEQVQ4jWNgGAWDEwAAAhAAARqr7OAAAAAASUVORK5CYII=',
-            'base64'
-        )
-    );
+    const icon = getAppIcon();
 
-    tray = new Tray(icon);
+    // Resize for tray (16x16 on Windows)
+    const trayIcon = process.platform === 'win32'
+        ? icon.resize({ width: 16, height: 16 })
+        : icon;
+
+    tray = new Tray(trayIcon);
     const contextMenu = Menu.buildFromTemplate([
         { label: 'Apri BlackBoard Sync', click: () => mainWindow?.show() },
         { label: 'Sincronizza ora', click: () => triggerSync() },
@@ -126,6 +159,19 @@ async function triggerSync(): Promise<void> {
 
         store.updateConfig({ lastSync: new Date().toISOString() });
         mainWindow.webContents.send('sync-complete', result);
+
+        // Show notification if enabled and window is not visible
+        if (config.notifications && !mainWindow.isVisible()) {
+            const n = new Notification({
+                title: 'BlackBoard Sync',
+                body: result.totalDownloaded > 0
+                    ? `Scaricati ${result.totalDownloaded} file nuovi`
+                    : 'Nessun file nuovo trovato',
+                icon: getAppIcon(),
+            });
+            n.on('click', () => mainWindow?.show());
+            n.show();
+        }
     } catch (err: any) {
         mainWindow.webContents.send('sync-progress', {
             phase: 'error',
@@ -218,6 +264,15 @@ function setupIPC(): void {
     ipcMain.handle('update-config', (_event, partial: any) => {
         const config = store.updateConfig(partial);
         setupAutoSync();
+
+        // Handle start-at-login changes
+        if ('startAtLogin' in partial) {
+            app.setLoginItemSettings({
+                openAtLogin: partial.startAtLogin,
+                path: app.getPath('exe'),
+            });
+        }
+
         return config;
     });
 
@@ -251,6 +306,7 @@ function setupIPC(): void {
         }
     });
     ipcMain.handle('window-close', () => mainWindow?.close());
+    ipcMain.handle('get-app-version', () => app.getVersion());
 }
 
 app.whenReady().then(() => {
@@ -259,10 +315,19 @@ app.whenReady().then(() => {
     createTray();
     setupIPC();
     setupAutoSync();
+
+    // Sync start-at-login setting on launch
+    const config = store.getConfig();
+    app.setLoginItemSettings({
+        openAtLogin: config.startAtLogin,
+        path: app.getPath('exe'),
+    });
 });
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
+    // On macOS, keep the app running. On other platforms, quit only if minimize-to-tray is off
+    if (process.platform === 'darwin') return;
+    if (!store?.getConfig().minimizeToTray) {
         app.quit();
     }
 });
