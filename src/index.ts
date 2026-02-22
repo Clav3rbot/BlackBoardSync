@@ -36,6 +36,7 @@ let bbApi: BlackboardAPI | null = null;
 let downloadManager: DownloadManager | null = null;
 let autoSyncTimer: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | null = null;
 let sessionCookies: string[] = [];
+let isQuitting = false;
 
 function getIconPath(): string {
     // In production (packaged), icons live next to the asar
@@ -88,7 +89,7 @@ function createWindow(): void {
     mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
     mainWindow.on('close', (e) => {
-        if (store.getConfig().minimizeToTray && tray) {
+        if (!isQuitting && store.getConfig().minimizeToTray && tray) {
             e.preventDefault();
             mainWindow?.hide();
         }
@@ -115,7 +116,9 @@ function createTray(): void {
         {
             label: 'Esci',
             click: () => {
+                isQuitting = true;
                 tray?.destroy();
+                tray = null;
                 app.quit();
             },
         },
@@ -360,18 +363,11 @@ function setupIPC(): void {
     });
     ipcMain.handle('restart-for-update', () => {
         // Force quit even if minimize-to-tray is enabled
-        // 1. Remove the close-prevention listener on the window
-        if (mainWindow) {
-            mainWindow.removeAllListeners('close');
-        }
-        // 2. Destroy tray so app can fully quit
+        isQuitting = true;
         if (tray) {
             tray.destroy();
             tray = null;
         }
-        // 3. Remove window-all-closed listener that could keep process alive
-        app.removeAllListeners('window-all-closed');
-        // 4. Now quitAndInstall can close windows and restart
         autoUpdater.quitAndInstall();
     });
 }
@@ -501,6 +497,10 @@ app.whenReady().then(() => {
         openAtLogin: config.startAtLogin,
         path: app.getPath('exe'),
     });
+});
+
+app.on('before-quit', () => {
+    isQuitting = true;
 });
 
 app.on('window-all-closed', () => {
