@@ -36,7 +36,7 @@ App desktop per sincronizzare automaticamente i file dei corsi dalla piattaforma
 ## Screenshot
 
 <p align="center">
-  <img src="https://i.imgur.com/lOLPIUi.png" alt="BlackBoard Sync" width="600" />
+  <img src="https://i.imgur.com/Kr3nEac.png" alt="BlackBoard Sync" width="600" />
 </p>
 
 ## Installazione
