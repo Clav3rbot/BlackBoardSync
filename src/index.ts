@@ -8,7 +8,7 @@ import {
     Menu,
     nativeImage,
     Notification,
-    autoUpdater,
+    net,
 } from 'electron';
 
 // Handle Squirrel events (install, update, uninstall shortcuts)
@@ -23,8 +23,9 @@ import { DownloadManager } from './modules/download';
 import { AppStore } from './modules/store';
 import { SyncProgress, Course, SyncResult } from './types.d';
 
-// GitHub repo for auto-update feed
-const GITHUB_RELEASES_URL = 'https://github.com/Clav3rbot/BlackBoardSync/releases/latest/download';
+// GitHub API endpoint for latest release
+const GITHUB_API_LATEST = 'https://api.github.com/repos/Clav3rbot/BlackBoardSync/releases/latest';
+let pendingSetupPath: string | null = null;
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
@@ -351,24 +352,14 @@ function setupIPC(): void {
     });
     ipcMain.handle('window-close', () => mainWindow?.close());
     ipcMain.handle('get-app-version', () => app.getVersion());
-    ipcMain.handle('check-for-updates', () => {
-        try {
-            autoUpdater.checkForUpdates();
-        } catch (e) {
-            mainWindow?.webContents.send('update-status', {
-                status: 'error',
-                message: 'Impossibile controllare gli aggiornamenti',
-            });
-        }
-    });
     ipcMain.handle('restart-for-update', () => {
-        // Force quit even if minimize-to-tray is enabled
+        if (!pendingSetupPath || !fs.existsSync(pendingSetupPath)) return;
+        // Launch the downloaded installer and quit
+        const { spawn } = require('child_process');
+        spawn(pendingSetupPath, [], { detached: true, stdio: 'ignore' }).unref();
         isQuitting = true;
-        if (tray) {
-            tray.destroy();
-            tray = null;
-        }
-        autoUpdater.quitAndInstall();
+        if (tray) { tray.destroy(); tray = null; }
+        app.quit();
     });
 }
 
@@ -418,66 +409,108 @@ function cleanupOldVersions() {
     }
 }
 
-function setupAutoUpdate() {
-    // Set feed URL directly to GitHub Releases (Squirrel.Windows)
-    // Squirrel appends /RELEASES?id=...&localVersion=...&arch=... to this URL
-    try {
-        autoUpdater.setFeedURL({ url: GITHUB_RELEASES_URL });
-    } catch {
-        // Not available in dev mode
-        return;
+/**
+ * Compare two semver strings. Returns true if remote > local.
+ */
+function isNewerVersion(remote: string, local: string): boolean {
+    const r = remote.replace(/^v/, '').split('.').map(Number);
+    const l = local.split('.').map(Number);
+    for (let i = 0; i < Math.max(r.length, l.length); i++) {
+        const rv = r[i] || 0;
+        const lv = l[i] || 0;
+        if (rv > lv) return true;
+        if (rv < lv) return false;
     }
+    return false;
+}
 
-    // Event listeners for update status feedback
-    autoUpdater.on('checking-for-update', () => {
+/**
+ * Custom auto-update using GitHub API.
+ * Checks for newer releases, downloads the Setup .exe, and prompts user to restart.
+ */
+function setupAutoUpdate() {
+    if (!app.isPackaged) return;
+
+    async function checkForUpdates() {
         mainWindow?.webContents.send('update-status', {
             status: 'checking',
             message: 'Controllo aggiornamenti...',
         });
-    });
 
-    autoUpdater.on('update-available', () => {
-        mainWindow?.webContents.send('update-status', {
-            status: 'available',
-            message: 'Aggiornamento disponibile! Download in corso...',
-        });
-    });
+        try {
+            // Fetch latest release info from GitHub API
+            const response = await net.fetch(GITHUB_API_LATEST, {
+                headers: { 'User-Agent': 'BlackBoardSync' },
+            });
+            if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
 
-    autoUpdater.on('update-not-available', () => {
-        mainWindow?.webContents.send('update-status', {
-            status: 'not-available',
-            message: 'Nessun aggiornamento disponibile',
-        });
-    });
+            const release = await response.json() as {
+                tag_name: string;
+                assets: { name: string; browser_download_url: string }[];
+            };
 
-    autoUpdater.on('update-downloaded', (_event, releaseNotes, releaseName) => {
-        mainWindow?.webContents.send('update-status', {
-            status: 'downloaded',
-            message: 'Aggiornamento scaricato. Riavvia per installare.',
-        });
+            const remoteVersion = release.tag_name.replace(/^v/, '');
+            const localVersion = app.getVersion();
 
-        // Send event to renderer for in-app update dialog
-        mainWindow?.webContents.send('update-ready', {
-            releaseName: releaseName || '',
-        });
-    });
+            if (!isNewerVersion(remoteVersion, localVersion)) {
+                mainWindow?.webContents.send('update-status', {
+                    status: 'not-available',
+                    message: 'Nessun aggiornamento disponibile',
+                });
+                return;
+            }
 
-    autoUpdater.on('error', (err) => {
-        mainWindow?.webContents.send('update-status', {
-            status: 'error',
-            message: `Errore aggiornamento: ${err?.message || 'sconosciuto'}`,
-        });
-    });
+            // Find the Setup .exe asset
+            const setupAsset = release.assets.find(a => a.name.endsWith('.exe'));
+            if (!setupAsset) {
+                mainWindow?.webContents.send('update-status', {
+                    status: 'error',
+                    message: 'Installer non trovato nella release',
+                });
+                return;
+            }
+
+            mainWindow?.webContents.send('update-status', {
+                status: 'available',
+                message: `Aggiornamento v${remoteVersion} disponibile! Download in corso...`,
+            });
+
+            // Download the Setup .exe to temp
+            const tmpDir = app.getPath('temp');
+            const setupPath = path.join(tmpDir, setupAsset.name);
+            const dlResponse = await net.fetch(setupAsset.browser_download_url);
+            if (!dlResponse.ok) throw new Error(`Download failed: ${dlResponse.status}`);
+
+            const buffer = Buffer.from(await dlResponse.arrayBuffer());
+            fs.writeFileSync(setupPath, buffer);
+
+            pendingSetupPath = setupPath;
+
+            mainWindow?.webContents.send('update-status', {
+                status: 'downloaded',
+                message: 'Aggiornamento scaricato. Riavvia per installare.',
+            });
+
+            mainWindow?.webContents.send('update-ready', {
+                releaseName: `v${remoteVersion}`,
+            });
+        } catch (err: any) {
+            mainWindow?.webContents.send('update-status', {
+                status: 'error',
+                message: `Errore aggiornamento: ${err?.message || 'sconosciuto'}`,
+            });
+        }
+    }
 
     // Initial check after 10 seconds
-    setTimeout(() => {
-        try { autoUpdater.checkForUpdates(); } catch {}
-    }, 10_000);
+    setTimeout(() => checkForUpdates(), 10_000);
 
     // Check every 4 hours
-    setInterval(() => {
-        try { autoUpdater.checkForUpdates(); } catch {}
-    }, 4 * 60 * 60 * 1000);
+    setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
+
+    // Manual check from renderer
+    ipcMain.removeHandler('check-for-updates');
+    ipcMain.handle('check-for-updates', () => checkForUpdates());
 }
 
 app.whenReady().then(() => {
