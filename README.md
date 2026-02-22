@@ -118,7 +118,15 @@ src/
 - **Webpack** — bundling
 - **axios** — chiamate HTTP
 - **cheerio** — parsing HTML per il flusso SAML
-- **update-electron-app** — aggiornamenti automatici via Squirrel + GitHub Releases
+- **GitHub API** — aggiornamenti automatici tramite GitHub Releases
+
+## Disclaimer
+
+Questa applicazione **non è affiliata, associata o approvata dall'Università Bocconi** in alcun modo. È uno strumento indipendente creato per velocizzare il download dei documenti dalla piattaforma Blackboard.
+
+Le credenziali inserite vengono salvate localmente sul dispositivo dell'utente tramite `safeStorage` di Electron e non vengono mai trasmesse a terzi. Il creatore dell'app **non è in alcun modo responsabile** dell'uso, della gestione o della sicurezza delle credenziali inserite dall'utente.
+
+L'utilizzo dell'app è a proprio rischio e pericolo.
 
 ## Licenza
 

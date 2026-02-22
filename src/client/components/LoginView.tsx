@@ -87,9 +87,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 </button>
             </form>
 
-            <p className="login-footer">
-                Le credenziali vengono salvate in modo sicuro sul tuo dispositivo.
-            </p>
+            <div className="login-footer">
+                <p>Le credenziali vengono salvate in modo sicuro sul tuo dispositivo.</p>
+                <p className="login-disclaimer">
+                    Questa app non è affiliata, associata o approvata dall'Università Bocconi.
+                    È uno strumento indipendente per velocizzare il download dei documenti.
+                    Il creatore non è in alcun modo responsabile dell'uso delle credenziali inserite.
+                </p>
+            </div>
         </div>
     );
 };

@@ -369,6 +369,18 @@ body {
     font-size: 11px;
     color: $text-tertiary;
     text-align: center;
+
+    p {
+        margin: 0 0 8px 0;
+    }
+
+    .login-disclaimer {
+        margin-top: 12px;
+        font-size: 10px;
+        color: $text-tertiary;
+        opacity: 0.7;
+        line-height: 1.5;
+    }
 }
 
 .sync-view {
