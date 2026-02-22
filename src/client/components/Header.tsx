@@ -10,6 +10,7 @@ interface HeaderProps {
     onLogout: () => void;
     onSettings: () => void;
     onOpenFolder: () => void;
+    onChangeFolder: () => void;
 }
 
 const getInitials = (name: string): string => {
@@ -30,6 +31,7 @@ const Header: React.FC<HeaderProps> = ({
     onLogout,
     onSettings,
     onOpenFolder,
+    onChangeFolder,
 }) => {
     return (
         <div className="header">
@@ -88,11 +90,18 @@ const Header: React.FC<HeaderProps> = ({
             </button>
 
             {syncDir && (
-                <div className="sync-dir-row" onClick={onOpenFolder} title={syncDir}>
-                    <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M.54 3.87L.5 3a2 2 0 012-2h3.672a2 2 0 011.414.586l.828.828A2 2 0 009.828 3H13.5a2 2 0 012 2v.5H8.312a2 2 0 00-1.414.586l-.828.828A2 2 0 014.672 7.5H.5v-.382a1 1 0 01.54-.868zM1 8.5v5a2 2 0 002 2h10a2 2 0 002-2v-5H1z" />
-                    </svg>
-                    <span className="sync-dir-path">{syncDir}</span>
+                <div className="sync-dir-box">
+                    <div className="sync-dir-input" onClick={onOpenFolder} title={syncDir}>
+                        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M.54 3.87L.5 3a2 2 0 012-2h3.672a2 2 0 011.414.586l.828.828A2 2 0 009.828 3H13.5a2 2 0 012 2v.5H8.312a2 2 0 00-1.414.586l-.828.828A2 2 0 014.672 7.5H.5v-.382a1 1 0 01.54-.868zM1 8.5v5a2 2 0 002 2h10a2 2 0 002-2v-5H1z" />
+                        </svg>
+                        <span className="sync-dir-path">{syncDir}</span>
+                    </div>
+                    <button className="sync-dir-change" onClick={onChangeFolder} title="Cambia cartella">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                            <path d="M12.146.146a.5.5 0 01.708 0l3 3a.5.5 0 010 .708l-10 10a.5.5 0 01-.168.11l-5 2a.5.5 0 01-.65-.65l2-5a.5.5 0 01.11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 01.5.5v.5h.5a.5.5 0 01.5.5v.5h.293l6.5-6.5z" />
+                        </svg>
+                    </button>
                 </div>
             )}
         </div>

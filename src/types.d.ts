@@ -99,9 +99,11 @@ declare global {
             close: () => Promise<void>;
             getAppVersion: () => Promise<string>;
             checkForUpdates: () => Promise<void>;
+            restartForUpdate: () => Promise<void>;
             onSyncProgress: (callback: (progress: SyncProgress) => void) => () => void;
             onSyncComplete: (callback: (result: SyncResult) => void) => () => void;
             onUpdateStatus: (callback: (status: { status: string; message: string }) => void) => () => void;
+            onUpdateReady: (callback: (info: { releaseName: string }) => void) => () => void;
         };
     }
 }

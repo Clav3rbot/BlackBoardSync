@@ -538,33 +538,67 @@ body {
     animation: none;
 }
 
-.sync-dir-row {
+.sync-dir-box {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    margin-top: 6px;
+    gap: 0;
+    margin-top: 8px;
+    border: 1px solid $border;
     border-radius: $radius-sm;
-    cursor: pointer;
-    color: $text-tertiary;
-    font-size: 11px;
-    transition: all $transition-smooth;
+    background: rgba(255, 255, 255, 0.03);
     overflow: hidden;
+    transition: border-color $transition-smooth;
 
     &:hover {
-        color: $text-secondary;
-        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+}
+
+.sync-dir-input {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    cursor: pointer;
+    color: $text-secondary;
+    font-size: 11px;
+    min-width: 0;
+    transition: color $transition-smooth;
+
+    &:hover {
+        color: $text-primary;
     }
 
     svg {
         flex-shrink: 0;
-        opacity: 0.6;
+        opacity: 0.5;
     }
 
     .sync-dir-path {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+}
+
+.sync-dir-change {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-left: 1px solid $border;
+    color: $text-tertiary;
+    cursor: pointer;
+    transition: all $transition-smooth;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: $text-primary;
     }
 }
 
@@ -1007,32 +1041,119 @@ body {
     }
 }
 
-.update-message {
-    margin-top: 8px;
-    font-size: 11px;
-    padding: 6px 10px;
-    border-radius: $radius-sm;
+// In-app update dialog
+.update-dialog-overlay {
+    position: fixed;
+    top: 36px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: fadeIn 200ms ease-out;
+}
+
+.update-dialog {
+    background: $bg-elevated;
+    border: 1px solid $border;
+    border-radius: $radius-lg;
+    padding: 28px 24px 20px;
+    width: 320px;
+    max-width: 90%;
+    text-align: center;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+    animation: slideUp 250ms ease-out;
+}
+
+.update-dialog-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba($accent, 0.1);
+    border-radius: $radius-full;
+    color: $accent;
+}
+
+.update-dialog-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: $text-primary;
+    margin: 0 0 8px;
+}
+
+.update-dialog-text {
+    font-size: 13px;
+    color: $text-secondary;
+    margin: 0 0 4px;
     line-height: 1.4;
+}
 
-    &.update-not-available {
-        color: $text-secondary;
-        background: rgba(255, 255, 255, 0.03);
+.update-dialog-subtext {
+    font-size: 11px;
+    color: $text-tertiary;
+    margin: 0 0 20px;
+}
+
+.update-dialog-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-update-later {
+    flex: 1;
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid $border;
+    border-radius: $radius-sm;
+    color: $text-secondary;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: $font-family;
+    cursor: pointer;
+    transition: all $transition-smooth;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.15);
+        color: $text-primary;
     }
+}
 
-    &.update-available,
-    &.update-downloaded {
-        color: $accent;
-        background: rgba($accent, 0.08);
+.btn-update-restart {
+    flex: 1;
+    padding: 8px 16px;
+    background: $accent-gradient;
+    border: none;
+    border-radius: $radius-sm;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: $font-family;
+    cursor: pointer;
+    transition: all $transition-smooth;
+    box-shadow: 0 2px 8px rgba($accent, 0.25);
+
+    &:hover {
+        box-shadow: 0 4px 16px rgba($accent, 0.35);
+        transform: translateY(-0.5px);
     }
+}
 
-    &.update-error {
-        color: #e74c3c;
-        background: rgba(#e74c3c, 0.08);
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.97);
     }
-
-    &.update-checking {
-        color: $text-secondary;
-        background: rgba(255, 255, 255, 0.03);
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
     }
 }
 

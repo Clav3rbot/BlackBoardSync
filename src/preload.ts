@@ -17,6 +17,7 @@ const api = {
     close: () => ipcRenderer.invoke('window-close'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    restartForUpdate: () => ipcRenderer.invoke('restart-for-update'),
     onSyncProgress: (callback: (progress: any) => void) => {
         const listener = (_event: any, progress: any) => callback(progress);
         ipcRenderer.on('sync-progress', listener);
@@ -36,6 +37,13 @@ const api = {
         ipcRenderer.on('update-status', listener);
         return () => {
             ipcRenderer.removeListener('update-status', listener);
+        };
+    },
+    onUpdateReady: (callback: (info: { releaseName: string }) => void) => {
+        const listener = (_event: any, info: any) => callback(info);
+        ipcRenderer.on('update-ready', listener);
+        return () => {
+            ipcRenderer.removeListener('update-ready', listener);
         };
     },
 };

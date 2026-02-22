@@ -347,6 +347,11 @@ function setupIPC(): void {
             });
         }
     });
+    ipcMain.handle('restart-for-update', () => {
+        // Force quit even if minimize-to-tray is enabled
+        app.removeAllListeners('window-all-closed');
+        autoUpdater.quitAndInstall();
+    });
 }
 
 function setupAutoUpdate() {
@@ -370,7 +375,7 @@ function setupAutoUpdate() {
     autoUpdater.on('update-available', () => {
         mainWindow?.webContents.send('update-status', {
             status: 'available',
-            message: 'Aggiornamento disponibile! Scaricamento in corso...',
+            message: 'Aggiornamento disponibile! Download in corso...',
         });
     });
 
@@ -387,17 +392,10 @@ function setupAutoUpdate() {
             message: 'Aggiornamento scaricato. Riavvia per installare.',
         });
 
-        // Show native dialog to restart
-        const response = dialog.showMessageBoxSync(mainWindow!, {
-            type: 'info',
-            buttons: ['Riavvia ora', 'Dopo'],
-            title: 'Aggiornamento disponibile',
-            message: `Una nuova versione${releaseName ? ` (${releaseName})` : ''} è stata scaricata.`,
-            detail: 'Riavvia l\'applicazione per installare l\'aggiornamento.',
+        // Send event to renderer for in-app update dialog
+        mainWindow?.webContents.send('update-ready', {
+            releaseName: releaseName || '',
         });
-        if (response === 0) {
-            autoUpdater.quitAndInstall();
-        }
     });
 
     autoUpdater.on('error', (err) => {
