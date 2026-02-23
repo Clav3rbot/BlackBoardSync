@@ -387,6 +387,27 @@ function setupIPC(): void {
 }
 
 /**
+ * Clean up Chromium cache folders in userData (Roaming AppData).
+ * These grow over time and are safe to delete — Chromium recreates them as needed.
+ */
+function cleanupChromiumCaches() {
+    const userDataPath = app.getPath('userData');
+    const cacheDirs = ['Cache', 'Code Cache', 'GPUCache', 'DawnGraphiteCache', 'DawnWebGPUCache', 'Shared Dictionary'];
+
+    for (const dir of cacheDirs) {
+        const dirPath = path.join(userDataPath, dir);
+        try {
+            if (fs.existsSync(dirPath)) {
+                fs.rmSync(dirPath, { recursive: true, force: true });
+                console.log(`Cleaned cache: ${dir}`);
+            }
+        } catch {
+            // May be locked on first run, ignore
+        }
+    }
+}
+
+/**
  * Clean up old Squirrel.Windows version folders.
  * Squirrel keeps previous app-x.y.z directories under %LOCALAPPDATA%\BlackBoardSync.
  * After an update, we remove all but the currently running version to save disk space.
@@ -575,6 +596,7 @@ function setupAutoUpdate() {
 app.whenReady().then(() => {
     store = new AppStore();
     cleanupOldVersions();
+    cleanupChromiumCaches();
     createWindow();
 
     // Always create tray when minimize-to-tray is on, or when launched hidden
