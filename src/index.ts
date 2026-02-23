@@ -558,13 +558,36 @@ function setupAutoUpdate() {
                 message: `Aggiornamento v${remoteVersion} disponibile! Download in corso...`,
             });
 
-            // Download the Setup .exe to temp
+            // Download the Setup .exe to temp with progress tracking
             const tmpDir = app.getPath('temp');
             const setupPath = path.join(tmpDir, setupAsset.name);
             const dlResponse = await net.fetch(setupAsset.browser_download_url);
             if (!dlResponse.ok) throw new Error(`Download failed: ${dlResponse.status}`);
 
-            const buffer = Buffer.from(await dlResponse.arrayBuffer());
+            const contentLength = parseInt(dlResponse.headers.get('content-length') || '0', 10);
+            const reader = dlResponse.body?.getReader();
+            if (!reader) throw new Error('No response body');
+
+            const chunks: Uint8Array[] = [];
+            let received = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                received += value.length;
+
+                if (contentLength > 0) {
+                    const percent = Math.round((received / contentLength) * 100);
+                    mainWindow?.webContents.send('update-download-progress', {
+                        percent,
+                        received,
+                        total: contentLength,
+                    });
+                }
+            }
+
+            const buffer = Buffer.concat(chunks);
             fs.writeFileSync(setupPath, buffer);
 
             pendingSetupPath = setupPath;

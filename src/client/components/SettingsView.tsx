@@ -25,6 +25,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
     const [checkingUpdate, setCheckingUpdate] = useState(false);
     const [updateMessage, setUpdateMessage] = useState('');
     const [updateStatus, setUpdateStatus] = useState<string>('');
+    const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
     const [localTime, setLocalTime] = useState(config.autoSyncScheduledTime);
 
     useEffect(() => {
@@ -35,8 +36,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
             if (status !== 'checking') {
                 setCheckingUpdate(false);
             }
+            if (status === 'available') {
+                setDownloadProgress(0);
+            } else if (status === 'downloaded' || status === 'error' || status === 'not-available') {
+                setDownloadProgress(null);
+            }
         });
-        return unsub;
+        const unsubProgress = window.api.onUpdateDownloadProgress(({ percent }) => {
+            setDownloadProgress(percent);
+        });
+        return () => {
+            unsub();
+            unsubProgress();
+        };
     }, []);
 
     useEffect(() => {
@@ -225,6 +237,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                         {updateMessage && (
                             <div className={`update-message update-${updateStatus}`}>
                                 {updateMessage}
+                            </div>
+                        )}
+                        {downloadProgress !== null && (
+                            <div className="update-progress-container">
+                                <div className="update-progress-bar">
+                                    <div
+                                        className="update-progress-fill"
+                                        style={{ width: `${downloadProgress}%` }}
+                                    />
+                                </div>
+                                <span className="update-progress-text">{downloadProgress}%</span>
                             </div>
                         )}
                     </div>
