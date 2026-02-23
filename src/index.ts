@@ -68,8 +68,13 @@ function getAppIcon(): Electron.NativeImage {
     return nativeImage.createEmpty();
 }
 
+function wasLaunchedAtLogin(): boolean {
+    return process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
+}
+
 function createWindow(): void {
     const icon = getAppIcon();
+    const startHidden = wasLaunchedAtLogin();
 
     mainWindow = new BrowserWindow({
         width: 480,
@@ -78,6 +83,7 @@ function createWindow(): void {
         minHeight: 520,
         resizable: true,
         frame: false,
+        show: !startHidden,
         icon,
         backgroundColor: '#0d1117',
         webPreferences: {
@@ -305,6 +311,7 @@ function setupIPC(): void {
             app.setLoginItemSettings({
                 openAtLogin: partial.startAtLogin,
                 path: app.getPath('exe'),
+                args: ['--hidden'],
             });
         }
 
@@ -517,7 +524,9 @@ app.whenReady().then(() => {
     store = new AppStore();
     cleanupOldVersions();
     createWindow();
-    if (store.getConfig().minimizeToTray) {
+
+    // Always create tray when minimize-to-tray is on, or when launched hidden
+    if (store.getConfig().minimizeToTray || wasLaunchedAtLogin()) {
         createTray();
     }
     setupIPC();
@@ -529,6 +538,7 @@ app.whenReady().then(() => {
     app.setLoginItemSettings({
         openAtLogin: config.startAtLogin,
         path: app.getPath('exe'),
+        args: ['--hidden'],
     });
 });
 
