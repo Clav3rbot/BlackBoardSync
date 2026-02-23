@@ -11,9 +11,11 @@ module.exports = {
     },
     hooks: {
         postPackage: async (forgeConfig, options) => {
-            // Remove unused locale files (keep only English and Italian)
             const fs = require('fs')
-            const localesDir = path.join(options.outputPaths[0], 'locales')
+            const outDir = options.outputPaths[0]
+
+            // Remove unused locale files (keep only English and Italian)
+            const localesDir = path.join(outDir, 'locales')
             if (fs.existsSync(localesDir)) {
                 const keep = ['en-US.pak', 'it.pak']
                 fs.readdirSync(localesDir).forEach(file => {
@@ -22,6 +24,24 @@ module.exports = {
                     }
                 })
                 console.log('Cleaned locales, kept:', keep.join(', '))
+            }
+
+            // Remove DLLs and files not needed by this app
+            // (Vulkan/SwiftShader/Dawn/ANGLE GPU backends, DX shader compiler)
+            const unnecessaryFiles = [
+                'vk_swiftshader.dll',
+                'vk_swiftshader_icd.json',
+                'vulkan-1.dll',
+                'dxcompiler.dll',    // ~24 MB - DirectX shader compiler
+                'dxil.dll',          // ~1.4 MB - DirectX IL
+                'd3dcompiler_47.dll', // ~4.5 MB - D3D shader compiler
+            ]
+            for (const file of unnecessaryFiles) {
+                const filePath = path.join(outDir, file)
+                if (fs.existsSync(filePath)) {
+                    fs.unlinkSync(filePath)
+                    console.log(`Removed unnecessary file: ${file}`)
+                }
             }
         },
     },
