@@ -44,6 +44,7 @@ let pendingSetupPath: string | null = null;
 
 declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
 declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
+declare const BUILD_COMMIT_HASH: string;
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -468,13 +469,20 @@ function setupAutoUpdate() {
 
             const release = await response.json() as {
                 tag_name: string;
+                target_commitish: string;
                 assets: { name: string; browser_download_url: string }[];
             };
 
             const remoteVersion = release.tag_name.replace(/^v/, '');
             const localVersion = app.getVersion();
+            const remoteCommit = release.target_commitish;
+            const localCommit = typeof BUILD_COMMIT_HASH !== 'undefined' ? BUILD_COMMIT_HASH : '';
 
-            if (!isNewerVersion(remoteVersion, localVersion)) {
+            // Update available if: newer version OR same version but different commit
+            const newerVersion = isNewerVersion(remoteVersion, localVersion);
+            const sameVersionNewBuild = remoteVersion === localVersion && localCommit && remoteCommit !== localCommit;
+
+            if (!newerVersion && !sameVersionNewBuild) {
                 mainWindow?.webContents.send('update-status', {
                     status: 'not-available',
                     message: 'Nessun aggiornamento disponibile',
