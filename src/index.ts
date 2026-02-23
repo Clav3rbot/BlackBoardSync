@@ -99,7 +99,7 @@ function createWindow(): void {
         minHeight: 520,
         resizable: true,
         frame: false,
-        show: !startHidden,
+        show: false,
         icon,
         backgroundColor: '#0d1117',
         webPreferences: {
@@ -110,6 +110,13 @@ function createWindow(): void {
     });
 
     mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+
+    // Show window only once content is fully loaded — avoids flash of Electron default page
+    mainWindow.once('ready-to-show', () => {
+        if (!startHidden) {
+            mainWindow?.show();
+        }
+    });
 
     mainWindow.on('close', (e) => {
         if (!isQuitting && store.getConfig().minimizeToTray && tray) {
