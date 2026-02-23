@@ -25,6 +25,13 @@ const api = {
             ipcRenderer.removeListener('sync-progress', listener);
         };
     },
+    onSyncStart: (callback: () => void) => {
+        const listener = () => callback();
+        ipcRenderer.on('sync-start', listener);
+        return () => {
+            ipcRenderer.removeListener('sync-start', listener);
+        };
+    },
     onSyncComplete: (callback: (result: any) => void) => {
         const listener = (_event: any, result: any) => callback(result);
         ipcRenderer.on('sync-complete', listener);
