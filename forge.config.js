@@ -52,6 +52,7 @@ module.exports = {
             config: {
                 name: 'BlackBoardSync',
                 setupIcon: './static/icons/win/icon.ico',
+                iconUrl: 'https://raw.githubusercontent.com/Clav3rbot/BlackBoardSync/master/static/icons/win/icon.ico',
                 setupExe: 'BlackBoard Sync Setup.exe',
             },
         },
