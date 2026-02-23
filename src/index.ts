@@ -15,10 +15,10 @@ import {
 // This must be at the very top before any other code runs
 if (require('electron-squirrel-startup')) app.quit();
 
-// Enforce single instance — if another instance is already running, quit this one
+// Enforce single instance — if another instance is already running, quit immediately
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
-    app.quit();
+    process.exit(0);
 } else {
     app.on('second-instance', () => {
         // When a second instance is launched, focus the existing window
@@ -469,18 +469,47 @@ function setupAutoUpdate() {
 
             const release = await response.json() as {
                 tag_name: string;
-                target_commitish: string;
                 assets: { name: string; browser_download_url: string }[];
             };
 
             const remoteVersion = release.tag_name.replace(/^v/, '');
             const localVersion = app.getVersion();
-            const remoteCommit = release.target_commitish;
-            const localCommit = typeof BUILD_COMMIT_HASH !== 'undefined' ? BUILD_COMMIT_HASH : '';
 
-            // Update available if: newer version OR same version but different commit
+            // Compare versions first
             const newerVersion = isNewerVersion(remoteVersion, localVersion);
-            const sameVersionNewBuild = remoteVersion === localVersion && localCommit && remoteCommit !== localCommit;
+
+            // If same version, compare commit hashes via the Git tag API
+            let sameVersionNewBuild = false;
+            if (!newerVersion && remoteVersion === localVersion) {
+                const localCommit = typeof BUILD_COMMIT_HASH !== 'undefined' ? BUILD_COMMIT_HASH : '';
+                if (localCommit) {
+                    try {
+                        const tagRef = await net.fetch(
+                            `https://api.github.com/repos/Clav3rbot/BlackBoardSync/git/ref/tags/${release.tag_name}`,
+                            { headers: { 'User-Agent': 'BlackBoardSync' } },
+                        );
+                        if (tagRef.ok) {
+                            const refData = await tagRef.json() as { object: { sha: string; type: string; url: string } };
+                            let remoteCommit = refData.object.sha;
+
+                            // If the tag points to a tag object (annotated tag), resolve to the commit
+                            if (refData.object.type === 'tag') {
+                                const tagObj = await net.fetch(refData.object.url, {
+                                    headers: { 'User-Agent': 'BlackBoardSync' },
+                                });
+                                if (tagObj.ok) {
+                                    const tagData = await tagObj.json() as { object: { sha: string } };
+                                    remoteCommit = tagData.object.sha;
+                                }
+                            }
+
+                            sameVersionNewBuild = remoteCommit !== localCommit;
+                        }
+                    } catch {
+                        // If we can't resolve the tag, skip hash comparison
+                    }
+                }
+            }
 
             if (!newerVersion && !sameVersionNewBuild) {
                 mainWindow?.webContents.send('update-status', {
