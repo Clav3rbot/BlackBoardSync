@@ -9,9 +9,22 @@
   <img src="https://img.shields.io/badge/electron-28-47848F?style=flat-square&logo=electron" />
   <img src="https://img.shields.io/badge/typescript-5.3-3178C6?style=flat-square&logo=typescript" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" /></a>
+  <a href="https://github.com/Clav3rbot/BlackBoardSync/releases/latest"><img src="https://img.shields.io/github/downloads/Clav3rbot/BlackBoardSync/latest/total?label=downloads%40latest&style=flat-square" /></a>
 </p>
 
-App desktop per sincronizzare automaticamente i file dei corsi dalla piattaforma Blackboard dell'**Università Bocconi** direttamente sul tuo computer.
+**BlackBoard Sync** è una semplice app che serve per tenere sincronizzati tutti i tuoi file di Blackboard, user-friendly e senza compromessi.
+
+Sto sviluppando quest'app come strumento ad uso personale, ma ho pensato potesse essere utile ad altri studenti, perciò è completamente opensource e gratuita sotto [licenza GPLv3](LICENSE).
+
+---
+
+## Cos'è esattamente?
+
+BlackBoard Sync nasce come strumento complementare a Blackboard Learn dell'**Università Bocconi**, visto che la piattaforma non offre un modo semplice per scaricare e mantenere aggiornati tutti i materiali dei corsi. Punta a essere una soluzione completa e definitiva: l'obiettivo è avere qualcosa che puoi avviare e dimenticartene, essendo sicuro che tutti i file di Blackboard saranno sempre aggiornati.
+
+## A cosa serve?
+
+Serve per tenere sincronizzati i propri file di Blackboard in una cartella locale sul proprio PC. Se vuoi un'esperienza senza pensieri, puoi lasciare che l'app si apra in background e scegliere ogni quanto avverranno le sincronizzazioni, così da avere sempre tutti i file aggiornati. Oppure puoi disattivare l'autosync e scaricare tutti i file in una volta sola quando preferisci.
 
 ---
 
