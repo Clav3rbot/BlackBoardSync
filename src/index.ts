@@ -195,6 +195,9 @@ function scheduleNextSync(timeStr: string): void {
 async function triggerSync(): Promise<void> {
     if (!bbApi || !mainWindow) return;
 
+    // Notify renderer that sync has started (e.g. from tray)
+    mainWindow.webContents.send('sync-start');
+
     try {
         const config = store.getConfig();
         const user = await bbApi.getCurrentUser();

@@ -79,6 +79,11 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
             loadConfig();
         });
 
+        const unsubSyncStart = window.api.onSyncStart(() => {
+            setSyncing(true);
+            setProgress(null);
+        });
+
         const unsubUpdateReady = window.api.onUpdateReady((info: { releaseName: string }) => {
             setUpdateReady(info);
         });
@@ -86,6 +91,7 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         return () => {
             unsubProgress();
             unsubComplete();
+            unsubSyncStart();
             unsubUpdateReady();
         };
     }, []);
