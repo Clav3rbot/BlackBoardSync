@@ -15,6 +15,21 @@ import {
 // This must be at the very top before any other code runs
 if (require('electron-squirrel-startup')) app.quit();
 
+// Enforce single instance — if another instance is already running, quit this one
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        // When a second instance is launched, focus the existing window
+        if (mainWindow) {
+            if (!mainWindow.isVisible()) mainWindow.show();
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
+}
+
 import * as path from 'path';
 import * as fs from 'fs';
 import { LoginManager } from './modules/login';
