@@ -46,6 +46,13 @@ const api = {
             ipcRenderer.removeListener('update-status', listener);
         };
     },
+    onUpdateDownloadProgress: (callback: (progress: { percent: number; received: number; total: number }) => void) => {
+        const listener = (_event: any, progress: any) => callback(progress);
+        ipcRenderer.on('update-download-progress', listener);
+        return () => {
+            ipcRenderer.removeListener('update-download-progress', listener);
+        };
+    },
     onUpdateReady: (callback: (info: { releaseName: string }) => void) => {
         const listener = (_event: any, info: any) => callback(info);
         ipcRenderer.on('update-ready', listener);

@@ -104,6 +104,7 @@ declare global {
             onSyncStart: (callback: () => void) => () => void;
             onSyncComplete: (callback: (result: SyncResult) => void) => () => void;
             onUpdateStatus: (callback: (status: { status: string; message: string }) => void) => () => void;
+            onUpdateDownloadProgress: (callback: (progress: { percent: number; received: number; total: number }) => void) => () => void;
             onUpdateReady: (callback: (info: { releaseName: string }) => void) => () => void;
         };
     }
