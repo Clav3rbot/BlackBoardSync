@@ -1,6 +1,6 @@
 {
   "name": "blackboard-sync",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Sincronizza i file dei corsi Blackboard (Università Bocconi)",
   "main": ".webpack/main",
   "scripts": {
