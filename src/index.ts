@@ -88,13 +88,39 @@ function wasLaunchedAtLogin(): boolean {
     return process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin;
 }
 
+interface WindowBounds { x: number; y: number; width: number; height: number; }
+
+function getWindowBoundsPath(): string {
+    return path.join(app.getPath('userData'), 'window-bounds.json');
+}
+
+function loadWindowBounds(): WindowBounds {
+    try {
+        const data = fs.readFileSync(getWindowBoundsPath(), 'utf-8');
+        return JSON.parse(data);
+    } catch {
+        return { x: undefined as any, y: undefined as any, width: 480, height: 780 };
+    }
+}
+
+function saveWindowBounds(): void {
+    if (!mainWindow) return;
+    try {
+        const bounds = mainWindow.getBounds();
+        fs.writeFileSync(getWindowBoundsPath(), JSON.stringify(bounds));
+    } catch { /* ignore */ }
+}
+
 function createWindow(): void {
     const icon = getAppIcon();
     const startHidden = wasLaunchedAtLogin();
+    const savedBounds = loadWindowBounds();
 
     mainWindow = new BrowserWindow({
-        width: 480,
-        height: 780,
+        width: savedBounds.width,
+        height: savedBounds.height,
+        x: savedBounds.x,
+        y: savedBounds.y,
         minWidth: 380,
         minHeight: 520,
         resizable: true,
@@ -118,7 +144,12 @@ function createWindow(): void {
         }
     });
 
+    // Save position/size when moved or resized
+    mainWindow.on('moved', saveWindowBounds);
+    mainWindow.on('resized', saveWindowBounds);
+
     mainWindow.on('close', (e) => {
+        saveWindowBounds();
         if (!isQuitting && store.getConfig().minimizeToTray && tray) {
             e.preventDefault();
             mainWindow?.hide();
