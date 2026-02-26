@@ -15,6 +15,14 @@ import {
 // This must be at the very top before any other code runs
 if (require('electron-squirrel-startup')) app.quit();
 
+// Disable GPU process to reduce memory footprint (~40MB saved)
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+// Reduce utility/network service processes
+app.commandLine.appendSwitch('disable-features', 'SpareRendererForSitePerProcess,AudioServiceOutOfProcess');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=64');
+
 // Enforce single instance — if another instance is already running, quit immediately
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
@@ -26,6 +34,8 @@ if (!gotTheLock) {
             if (!mainWindow.isVisible()) mainWindow.show();
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.focus();
+        } else {
+            createWindow();
         }
     });
 }
@@ -54,6 +64,7 @@ let downloadManager: DownloadManager | null = null;
 let autoSyncTimer: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | null = null;
 let sessionCookies: string[] = [];
 let isQuitting = false;
+let hasCompletedFirstLaunch = false;
 
 function getIconPath(): string {
     // In production (packaged), icons live next to the asar
@@ -152,13 +163,24 @@ function createWindow(): void {
         saveWindowBounds();
         if (!isQuitting && store.getConfig().minimizeToTray && tray) {
             e.preventDefault();
-            mainWindow?.hide();
+            // Destroy the window to free renderer & GPU process memory (~80MB)
+            mainWindow?.destroy();
+            mainWindow = null;
         }
     });
 
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
+}
+
+function showOrCreateWindow(): void {
+    if (mainWindow) {
+        mainWindow.show();
+        mainWindow.focus();
+    } else {
+        createWindow();
+    }
 }
 
 function createTray(): void {
@@ -171,7 +193,7 @@ function createTray(): void {
 
     tray = new Tray(trayIcon);
     const contextMenu = Menu.buildFromTemplate([
-        { label: 'Apri BlackBoard Sync', click: () => mainWindow?.show() },
+        { label: 'Apri BlackBoard Sync', click: () => showOrCreateWindow() },
         { label: 'Sincronizza ora', click: () => triggerSync() },
         { type: 'separator' },
         {
@@ -187,7 +209,7 @@ function createTray(): void {
 
     tray.setToolTip('BlackBoard Sync');
     tray.setContextMenu(contextMenu);
-    tray.on('click', () => mainWindow?.show());
+    tray.on('click', () => showOrCreateWindow());
 }
 
 function setupAutoSync(): void {
@@ -231,10 +253,10 @@ function scheduleNextSync(timeStr: string): void {
 }
 
 async function triggerSync(): Promise<void> {
-    if (!bbApi || !mainWindow) return;
+    if (!bbApi) return;
 
-    // Notify renderer that sync has started (e.g. from tray)
-    mainWindow.webContents.send('sync-start');
+    // Notify renderer that sync has started (if window exists)
+    mainWindow?.webContents.send('sync-start');
 
     try {
         const config = store.getConfig();
@@ -256,10 +278,10 @@ async function triggerSync(): Promise<void> {
         const result: SyncResult = await downloadManager.syncAll(courses);
 
         store.updateConfig({ lastSync: new Date().toISOString() });
-        mainWindow.webContents.send('sync-complete', result);
+        mainWindow?.webContents.send('sync-complete', result);
 
-        // Show notification if enabled and window is not visible
-        if (config.notifications && !mainWindow.isVisible()) {
+        // Show notification if enabled and window is not visible (or destroyed)
+        if (config.notifications && (!mainWindow || !mainWindow.isVisible())) {
             const n = new Notification({
                 title: 'BlackBoard Sync',
                 body: result.totalDownloaded > 0
@@ -267,11 +289,11 @@ async function triggerSync(): Promise<void> {
                     : 'Nessun file nuovo trovato',
                 icon: getAppIcon(),
             });
-            n.on('click', () => mainWindow?.show());
+            n.on('click', () => showOrCreateWindow());
             n.show();
         }
     } catch (err: any) {
-        mainWindow.webContents.send('sync-progress', {
+        mainWindow?.webContents.send('sync-progress', {
             phase: 'error',
             current: 0,
             total: 0,
@@ -317,6 +339,13 @@ function setupIPC(): void {
 
             try {
                 const user = await bbApi.getCurrentUser();
+                // Trigger a sync only on first app launch, not on window recreation from tray
+                if (!hasCompletedFirstLaunch && store.getConfig().syncOnStartup) {
+                    hasCompletedFirstLaunch = true;
+                    setTimeout(() => triggerSync(), 2000);
+                } else {
+                    hasCompletedFirstLaunch = true;
+                }
                 return { success: true, user };
             } catch {
                 return { success: false, error: 'Sessione scaduta' };
@@ -516,7 +545,12 @@ function isNewerVersion(remote: string, local: string): boolean {
 function setupAutoUpdate() {
     if (!app.isPackaged) return;
 
+    let isCheckingForUpdates = false;
+
     async function checkForUpdates() {
+        if (isCheckingForUpdates) return;
+        isCheckingForUpdates = true;
+
         mainWindow?.webContents.send('update-status', {
             status: 'checking',
             message: 'Controllo aggiornamenti...',
@@ -643,6 +677,8 @@ function setupAutoUpdate() {
                 status: 'error',
                 message: `Errore aggiornamento: ${err?.message || 'sconosciuto'}`,
             });
+        } finally {
+            isCheckingForUpdates = false;
         }
     }
 

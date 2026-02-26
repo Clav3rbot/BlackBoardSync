@@ -15,6 +15,7 @@ const DEFAULT_CONFIG: AppConfig = {
     minimizeToTray: true,
     startAtLogin: false,
     notifications: true,
+    syncOnStartup: false,
 };
 
 export class AppStore {
