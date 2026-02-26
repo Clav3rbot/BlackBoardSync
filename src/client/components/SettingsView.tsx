@@ -12,6 +12,7 @@ interface AppConfig {
     minimizeToTray: boolean;
     startAtLogin: boolean;
     notifications: boolean;
+    syncOnStartup: boolean;
 }
 
 interface SettingsViewProps {
@@ -190,6 +191,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                 <span className="setting-desc">Avvia l'app automaticamente all'accesso</span>
                             </div>
                             <div className={`toggle ${config.startAtLogin ? 'active' : ''}`}>
+                                <div className="toggle-thumb" />
+                            </div>
+                        </div>
+
+                        <div className="setting-divider" />
+
+                        <div className="toggle-row" onClick={() => updateSetting({ syncOnStartup: !config.syncOnStartup })}>
+                            <div className="setting-info">
+                                <span className="toggle-label">Sincronizza all'avvio</span>
+                                <span className="setting-desc">Avvia una sincronizzazione automaticamente all'apertura dell'app</span>
+                            </div>
+                            <div className={`toggle ${config.syncOnStartup ? 'active' : ''}`}>
                                 <div className="toggle-thumb" />
                             </div>
                         </div>

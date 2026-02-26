@@ -23,6 +23,7 @@ interface AppConfig {
     minimizeToTray: boolean;
     startAtLogin: boolean;
     notifications: boolean;
+    syncOnStartup: boolean;
 }
 
 interface SyncProgress {

@@ -45,6 +45,7 @@ export interface AppConfig {
     minimizeToTray: boolean;
     startAtLogin: boolean;
     notifications: boolean;
+    syncOnStartup: boolean;
 }
 
 export interface SyncProgress {
