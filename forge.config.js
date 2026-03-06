@@ -3,11 +3,14 @@ const path = require('path')
 module.exports = {
     packagerConfig: {
         name: 'BlackBoard Sync',
-        icon: path.resolve(__dirname, 'static/icons/win/icon'),
+        icon: process.platform === 'darwin'
+            ? path.resolve(__dirname, 'static/icons/mac/icon')
+            : path.resolve(__dirname, 'static/icons/win/icon'),
         asar: true,
         extraResource: [
             path.resolve(__dirname, 'static'),
         ],
+        osxSign: {},  // ad-hoc signing: fixes "corrupted" on ARM and "malware" on x64
     },
     hooks: {
         postPackage: async (forgeConfig, options) => {
