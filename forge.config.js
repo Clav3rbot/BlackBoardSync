@@ -1,5 +1,15 @@
 const path = require('path')
 
+// macOS code-signing + notarization (requires Apple Developer Program $99/year)
+// Set these GitHub Actions secrets to enable:
+//   APPLE_CERTIFICATE        – Base64 .p12 Developer ID Application certificate
+//   APPLE_CERTIFICATE_PASSWORD – password for the .p12
+//   APPLE_ID                 – Apple ID email for notarization
+//   APPLE_PASSWORD           – app-specific password (appleid.apple.com → Security)
+//   APPLE_TEAM_ID            – 10-char Team ID from developer.apple.com/account
+const hasSigningCert = !!process.env.APPLE_CERTIFICATE
+const hasNotarize = !!(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID)
+
 module.exports = {
     packagerConfig: {
         name: 'BlackBoard Sync',
@@ -10,7 +20,23 @@ module.exports = {
         extraResource: [
             path.resolve(__dirname, 'static'),
         ],
-        osxSign: {},  // ad-hoc signing: fixes "corrupted" on ARM and "malware" on x64
+        ...(process.platform === 'darwin' && {
+            osxSign: hasSigningCert
+                ? {
+                    optionsForFile: () => ({
+                        entitlements: path.resolve(__dirname, 'entitlements.plist'),
+                        'entitlements-inherit': path.resolve(__dirname, 'entitlements.plist'),
+                    }),
+                }
+                : { identity: '-' },  // ad-hoc signing (no cert): fixes "corrupted" on ARM
+            ...(hasNotarize && {
+                osxNotarize: {
+                    appleId: process.env.APPLE_ID,
+                    appleIdPassword: process.env.APPLE_PASSWORD,
+                    teamId: process.env.APPLE_TEAM_ID,
+                },
+            }),
+        }),
     },
     hooks: {
         postPackage: async (forgeConfig, options) => {
