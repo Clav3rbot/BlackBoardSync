@@ -5,7 +5,6 @@ declare module '*.png' {
     export default src;
 }
 
-declare module '*.scss' {}
 
 export interface UserInfo {
     id: string;
