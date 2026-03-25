@@ -26,9 +26,16 @@ module.exports = {
                     optionsForFile: () => ({
                         entitlements: path.resolve(__dirname, 'entitlements.plist'),
                         'entitlements-inherit': path.resolve(__dirname, 'entitlements.plist'),
+                        hardenedRuntime: true,
                     }),
                 }
-                : { identity: '-' },  // ad-hoc signing (no cert): fixes "corrupted" on ARM
+                : {
+                    identity: '-',  // ad-hoc signing (no cert): fixes "corrupted" on ARM
+                    optionsForFile: () => ({
+                        entitlements: path.resolve(__dirname, 'entitlements.plist'),
+                        'entitlements-inherit': path.resolve(__dirname, 'entitlements.plist'),
+                    }),
+                },
             ...(hasNotarize && {
                 osxNotarize: {
                     appleId: process.env.APPLE_ID,

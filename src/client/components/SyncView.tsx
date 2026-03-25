@@ -125,8 +125,6 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
     };
 
     const handleSync = async () => {
-        setSyncing(true);
-        setProgress(null);
         await window.api.sync();
     };
 
