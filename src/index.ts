@@ -65,6 +65,7 @@ let autoSyncTimer: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout
 let sessionCookies: string[] = [];
 let isQuitting = false;
 let hasCompletedFirstLaunch = false;
+let isSyncing = false;
 
 function getIconPath(): string {
     // In production (packaged), icons live next to the asar
@@ -253,7 +254,19 @@ function scheduleNextSync(timeStr: string): void {
 }
 
 async function triggerSync(): Promise<void> {
-    if (!bbApi) return;
+    if (!bbApi) {
+        mainWindow?.webContents.send('sync-progress', {
+            phase: 'error',
+            current: 0,
+            total: 0,
+            error: 'Sessione non attiva. Rieffettua il login.',
+        } as SyncProgress);
+        return;
+    }
+
+    // Prevent concurrent syncs (e.g. auto-sync firing during manual sync)
+    if (isSyncing) return;
+    isSyncing = true;
 
     // Notify renderer that sync has started (if window exists)
     mainWindow?.webContents.send('sync-start');
@@ -299,6 +312,8 @@ async function triggerSync(): Promise<void> {
             total: 0,
             error: err.message,
         } as SyncProgress);
+    } finally {
+        isSyncing = false;
     }
 }
 
