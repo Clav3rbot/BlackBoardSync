@@ -12,7 +12,9 @@
     "outDir": "./dist",
     "sourceMap": true,
     "declaration": true,
-    "moduleResolution": "node",
+    "rootDir": "./src",
+    "moduleResolution": "bundler",
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "*": ["src/*"]
