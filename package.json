@@ -46,7 +46,7 @@
     "webpack-dev-server": "^5.2.3"
   },
   "dependencies": {
-    "axios": "^1.13.6",
+    "axios": "^1.14.0",
     "cheerio": "^1.2.0",
     "electron-squirrel-startup": "^1.0.1",
     "react": "^19.2.4",
