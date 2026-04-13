@@ -46,10 +46,10 @@
     "webpack-dev-server": "^5.2.3"
   },
   "dependencies": {
-    "axios": "^1.13.6",
+    "axios": "^1.15.0",
     "cheerio": "^1.2.0",
     "electron-squirrel-startup": "^1.0.1",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
   }
 }
