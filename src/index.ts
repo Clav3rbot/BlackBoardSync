@@ -62,6 +62,7 @@ let store: AppStore;
 let bbApi: BlackboardAPI | null = null;
 let downloadManager: DownloadManager | null = null;
 let autoSyncTimer: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | null = null;
+let updateCheckInterval: ReturnType<typeof setInterval> | null = null;
 let sessionCookies: string[] = [];
 let isQuitting = false;
 let hasCompletedFirstLaunch = false;
@@ -148,6 +149,14 @@ function createWindow(): void {
     });
 
     mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith(MAIN_WINDOW_WEBPACK_ENTRY)) {
+            event.preventDefault();
+        }
+    });
 
     // Show window only once content is fully loaded — avoids flash of Electron default page
     mainWindow.once('ready-to-show', () => {
@@ -442,7 +451,8 @@ function setupIPC(): void {
     ipcMain.handle('open-folder', async (_event, folderPath: string) => {
         const normalizedPath = path.resolve(folderPath);
         const syncDir = path.resolve(store.getConfig().syncDir);
-        if (!normalizedPath.startsWith(syncDir)) return;
+        const rel = path.relative(syncDir, normalizedPath);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) return;
         const fs = await import('fs');
         if (!fs.existsSync(normalizedPath)) {
             fs.mkdirSync(normalizedPath, { recursive: true });
@@ -701,7 +711,7 @@ function setupAutoUpdate() {
     setTimeout(() => checkForUpdates(), 10_000);
 
     // Check every 4 hours
-    setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
+    updateCheckInterval = setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
 
     // Manual check from renderer
     ipcMain.removeHandler('check-for-updates');
@@ -733,6 +743,10 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
     isQuitting = true;
+    if (updateCheckInterval) {
+        clearInterval(updateCheckInterval);
+        updateCheckInterval = null;
+    }
 });
 
 app.on('window-all-closed', () => {

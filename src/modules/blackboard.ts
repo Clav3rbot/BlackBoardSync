@@ -147,7 +147,7 @@ export class BlackboardAPI {
     ): Promise<{ data: Buffer; fileName: string }> {
         const response = await this.client.get(
             `/courses/${courseId}/contents/${contentId}/attachments/${attachmentId}/download`,
-            { responseType: 'arraybuffer', maxRedirects: 5 }
+            { responseType: 'arraybuffer', maxRedirects: 5, maxContentLength: 500 * 1024 * 1024, maxBodyLength: 500 * 1024 * 1024 }
         );
 
         const disposition = response.headers['content-disposition'] || '';

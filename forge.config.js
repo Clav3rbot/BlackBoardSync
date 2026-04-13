@@ -7,6 +7,10 @@ const path = require('path')
 //   APPLE_ID                 – Apple ID email for notarization
 //   APPLE_PASSWORD           – app-specific password (appleid.apple.com → Security)
 //   APPLE_TEAM_ID            – 10-char Team ID from developer.apple.com/account
+//
+// Without these secrets the app ships UNSIGNED. Gatekeeper shows "unidentified developer"
+// which users can bypass with right-click → Open (much better than "damaged package",
+// which is what ad-hoc signing causes on Intel Macs).
 const hasSigningCert = !!process.env.APPLE_CERTIFICATE
 const hasNotarize = !!(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID)
 
@@ -20,22 +24,14 @@ module.exports = {
         extraResource: [
             path.resolve(__dirname, 'static'),
         ],
-        ...(process.platform === 'darwin' && {
-            osxSign: hasSigningCert
-                ? {
-                    optionsForFile: () => ({
-                        entitlements: path.resolve(__dirname, 'entitlements.plist'),
-                        'entitlements-inherit': path.resolve(__dirname, 'entitlements.plist'),
-                        hardenedRuntime: true,
-                    }),
-                }
-                : {
-                    identity: '-',  // ad-hoc signing (no cert): fixes "corrupted" on ARM
-                    optionsForFile: () => ({
-                        entitlements: path.resolve(__dirname, 'entitlements.plist'),
-                        'entitlements-inherit': path.resolve(__dirname, 'entitlements.plist'),
-                    }),
-                },
+        ...(process.platform === 'darwin' && hasSigningCert && {
+            osxSign: {
+                optionsForFile: () => ({
+                    entitlements: path.resolve(__dirname, 'entitlements.plist'),
+                    'entitlements-inherit': path.resolve(__dirname, 'entitlements.plist'),
+                    hardenedRuntime: true,
+                }),
+            },
             ...(hasNotarize && {
                 osxNotarize: {
                     appleId: process.env.APPLE_ID,
@@ -118,12 +114,12 @@ module.exports = {
         },
         {
             name: '@electron-forge/maker-dmg',
-            config: arch => ({
-                name: `BlackBoard Sync macOS-${arch}`,
+            config: {
+                name: 'BlackBoard Sync',
                 icon: path.resolve(__dirname, 'static/icons/mac/icon.icns'),
-                format: 'ULFO',
+                format: 'UDZO',
                 overwrite: true,
-            }),
+            },
         },
     ],
     publishers: [
