@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(while read:*)",
+      "Bash(do if:*)",
+      "Bash(then echo:*)",
+      "Bash(fi)",
+      "Bash(done)",
+      "Bash(gh repo:*)",
+      "Bash(gh release:*)",
+      "Bash(for tag:*)",
+      "Bash(do)",
+      "Bash(echo \"=== $tag ===\")",
+      "Bash(mkdir -p /tmp/bbsync_releases)",
+      "Bash(do echo:*)",
+      "Bash(/tmp/bbsync_releases/$tag.json cat:*)",
+      "Read(//tmp/bbsync_assets/**)",
+      "Bash(gh auth:*)",
+      "Bash(gh api:*)",
+      "Bash(git push:*)",
+      "Bash(grep -r \"autoUpdater\\\\|update\\\\|github\\\\|repo\\\\|repository\" src/index.ts --include=*.ts -n)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(git remote:*)",
+      "Bash(git branch:*)",
+      "Bash(gh pr:*)",
+      "Bash(gh run:*)",
+      "Bash(node -e \"console.log\\(require\\(''./node_modules/typescript/package.json''\\).version\\)\")",
+      "Bash(npm install:*)",
+      "Bash(node -e \"const l=require\\(''./package-lock.json''\\); console.log\\(l.packages[''node_modules/typescript''].version\\)\")",
+      "Bash(python -c \"import sys,json,base64; d=json.load\\(sys.stdin\\); print\\(base64.b64decode\\(d['content']\\).decode\\(\\)\\)\")",
+      "Bash(python -c \"import sys,json; [print\\(f['name']\\) for f in json.load\\(sys.stdin\\)]\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d[k] for k in ['name','version','scripts','devDependencies'] if k in d}, indent=2\\)\\)\")"
+    ]
+  }
+}

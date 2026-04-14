@@ -62,6 +62,7 @@ let store: AppStore;
 let bbApi: BlackboardAPI | null = null;
 let downloadManager: DownloadManager | null = null;
 let autoSyncTimer: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | null = null;
+let updateCheckInterval: ReturnType<typeof setInterval> | null = null;
 let sessionCookies: string[] = [];
 let isQuitting = false;
 let hasCompletedFirstLaunch = false;
@@ -148,6 +149,14 @@ function createWindow(): void {
     });
 
     mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith(MAIN_WINDOW_WEBPACK_ENTRY)) {
+            event.preventDefault();
+        }
+    });
 
     // Show window only once content is fully loaded — avoids flash of Electron default page
     mainWindow.once('ready-to-show', () => {
@@ -282,6 +291,12 @@ async function triggerSync(): Promise<void> {
         } else {
             courses = allCourses;
         }
+        if (config.hiddenCourses && config.hiddenCourses.length > 0) {
+            courses = courses.filter((c) => !config.hiddenCourses.includes(c.id));
+        }
+        if (config.hiddenTerms && config.hiddenTerms.length > 0) {
+            courses = courses.filter((c) => !c.term?.id || !config.hiddenTerms.includes(c.term.id));
+        }
 
         downloadManager = new DownloadManager(bbApi, config.syncDir, config.courseAliases);
         downloadManager.on('progress', (progress: SyncProgress) => {
@@ -374,6 +389,11 @@ function setupIPC(): void {
         store.clearCredentials();
         bbApi = null;
         sessionCookies = [];
+        if (autoSyncTimer) {
+            clearInterval(autoSyncTimer as ReturnType<typeof setInterval>);
+            clearTimeout(autoSyncTimer as ReturnType<typeof setTimeout>);
+            autoSyncTimer = null;
+        }
         return { success: true };
     });
 
@@ -442,7 +462,8 @@ function setupIPC(): void {
     ipcMain.handle('open-folder', async (_event, folderPath: string) => {
         const normalizedPath = path.resolve(folderPath);
         const syncDir = path.resolve(store.getConfig().syncDir);
-        if (!normalizedPath.startsWith(syncDir)) return;
+        const rel = path.relative(syncDir, normalizedPath);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) return;
         const fs = await import('fs');
         if (!fs.existsSync(normalizedPath)) {
             fs.mkdirSync(normalizedPath, { recursive: true });
@@ -655,27 +676,29 @@ function setupAutoUpdate() {
             const reader = dlResponse.body?.getReader();
             if (!reader) throw new Error('No response body');
 
-            const chunks: Uint8Array[] = [];
+            const fileStream = fs.createWriteStream(setupPath);
             let received = 0;
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                chunks.push(value);
-                received += value.length;
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    fileStream.write(value);
+                    received += value.length;
 
-                if (contentLength > 0) {
-                    const percent = Math.round((received / contentLength) * 100);
-                    mainWindow?.webContents.send('update-download-progress', {
-                        percent,
-                        received,
-                        total: contentLength,
-                    });
+                    if (contentLength > 0) {
+                        const percent = Math.round((received / contentLength) * 100);
+                        mainWindow?.webContents.send('update-download-progress', {
+                            percent,
+                            received,
+                            total: contentLength,
+                        });
+                    }
                 }
+            } finally {
+                fileStream.end();
+                await new Promise<void>((resolve) => fileStream.on('finish', resolve));
             }
-
-            const buffer = Buffer.concat(chunks);
-            fs.writeFileSync(setupPath, buffer);
 
             pendingSetupPath = setupPath;
 
@@ -701,7 +724,7 @@ function setupAutoUpdate() {
     setTimeout(() => checkForUpdates(), 10_000);
 
     // Check every 4 hours
-    setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
+    updateCheckInterval = setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
 
     // Manual check from renderer
     ipcMain.removeHandler('check-for-updates');
@@ -733,6 +756,10 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
     isQuitting = true;
+    if (updateCheckInterval) {
+        clearInterval(updateCheckInterval);
+        updateCheckInterval = null;
+    }
 });
 
 app.on('window-all-closed', () => {

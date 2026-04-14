@@ -88,7 +88,11 @@ export class LoginManager {
             if (followRedirects && [301, 302, 303, 307, 308].includes(response.status)) {
                 const location = response.headers.location;
                 if (!location) break;
-                currentUrl = new URL(location, currentUrl).toString();
+                const nextUrl = new URL(location, currentUrl);
+                if (nextUrl.protocol !== 'https:') {
+                    throw new Error('Redirect to non-HTTPS URL blocked');
+                }
+                currentUrl = nextUrl.toString();
                 if (response.status === 303 || currentMethod === 'POST') {
                     currentMethod = 'GET';
                     currentData = undefined;

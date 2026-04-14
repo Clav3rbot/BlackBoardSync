@@ -11,6 +11,8 @@ const DEFAULT_CONFIG: AppConfig = {
     enabledCourses: [],
     courseAliases: {},
     collapsedTerms: [],
+    hiddenCourses: [],
+    hiddenTerms: [],
     lastSync: null,
     minimizeToTray: true,
     startAtLogin: false,

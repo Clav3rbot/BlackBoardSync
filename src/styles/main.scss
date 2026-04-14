@@ -694,6 +694,12 @@ body {
     border: 1px solid rgba($accent, 0.1);
 }
 
+.section-badge-hidden {
+    color: $text-tertiary;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .folder-row {
     display: flex;
     align-items: center;
@@ -1231,6 +1237,18 @@ body {
     position: relative;
 }
 
+.course-row.course-hidden {
+    opacity: 0.4;
+    cursor: default;
+    font-style: italic;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: $radius-sm;
+
+    .course-info {
+        pointer-events: none;
+    }
+}
+
 .course-row {
     display: flex;
     align-items: center;
@@ -1247,6 +1265,10 @@ body {
         border-color: $border;
 
         .btn-rename {
+            opacity: 1;
+        }
+
+        .btn-hide {
             opacity: 1;
         }
     }
@@ -1363,6 +1385,48 @@ body {
     }
 }
 
+.btn-hide {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: $text-tertiary;
+    cursor: pointer;
+    border-radius: $radius-sm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: all $transition-smooth;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: $text-secondary;
+    }
+}
+
+.btn-unhide {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: transparent;
+    color: $accent;
+    cursor: pointer;
+    border-radius: $radius-sm;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all $transition-smooth;
+    opacity: 0.7;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        opacity: 1;
+    }
+}
+
 .course-id {
     font-size: 11px;
     color: $text-tertiary;
@@ -1402,6 +1466,69 @@ body {
         color: $accent;
         border-color: rgba($accent, 0.3);
         box-shadow: 0 0 12px rgba($accent, 0.1);
+    }
+}
+
+.term-pill-hidden-toggle {
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: $font-family;
+    color: $text-tertiary;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: $radius-full;
+    cursor: pointer;
+    transition: all $transition-smooth;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.7;
+
+    &:hover,
+    &.active {
+        background: rgba(255, 255, 255, 0.06);
+        color: $text-secondary;
+        opacity: 1;
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+}
+
+.term-pill.hidden-term {
+    opacity: 0.5;
+    font-style: italic;
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.05);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 8px 5px 12px;
+    cursor: default;
+
+    .hidden-term-name {
+        pointer-events: none;
+    }
+}
+
+.term-pill-unhide-x {
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: transparent;
+    color: $accent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.8;
+    transition: all $transition-smooth;
+
+    &:hover {
+        opacity: 1;
+        background: rgba($accent, 0.15);
     }
 }
 
@@ -1462,6 +1589,97 @@ body {
     border-radius: $radius-full;
     flex-shrink: 0;
     font-weight: 600;
+}
+
+.term-hidden-btn {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 7px;
+    border: none;
+    background: rgba(255, 255, 255, 0.04);
+    color: $text-tertiary;
+    border-radius: $radius-full;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all $transition-smooth;
+    opacity: 0.7;
+
+    &:hover, &.active {
+        background: rgba(255, 255, 255, 0.08);
+        color: $text-secondary;
+        opacity: 1;
+    }
+}
+
+.term-pill-wrap {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid $border;
+    border-radius: $radius-full;
+    background: rgba(255, 255, 255, 0.03);
+    transition: all $transition-smooth;
+    overflow: hidden;
+
+    &.active {
+        background: $accent-subtle;
+        border-color: rgba($accent, 0.3);
+        box-shadow: 0 0 12px rgba($accent, 0.1);
+
+        .term-pill-label {
+            color: $accent;
+        }
+    }
+
+    &:hover {
+        border-color: rgba(255, 255, 255, 0.1);
+
+        .term-pill-hide-btn {
+            max-width: 52px;
+            opacity: 1;
+            padding-right: 10px;
+        }
+    }
+}
+
+.term-pill-label {
+    padding: 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: $font-family;
+    color: $text-tertiary;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color $transition-smooth;
+
+    &:hover {
+        color: $text-secondary;
+    }
+}
+
+.term-pill-hide-btn {
+    max-width: 0;
+    overflow: hidden;
+    opacity: 0;
+    padding: 5px 0;
+    font-size: 10px;
+    font-weight: 600;
+    font-family: $font-family;
+    color: $text-tertiary;
+    background: transparent;
+    border: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all $transition-smooth;
+
+    &:hover {
+        color: $text-secondary;
+    }
 }
 
 .term-courses {

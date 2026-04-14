@@ -8,6 +8,8 @@ interface AppConfig {
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     collapsedTerms: string[];
+    hiddenCourses: string[];
+    hiddenTerms: string[];
     lastSync: string | null;
     minimizeToTray: boolean;
     startAtLogin: boolean;
