@@ -33,8 +33,7 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 - **Login SSO Bocconi** — autenticazione SAML2 tramite Shibboleth IDP, le credenziali vengono salvate in modo sicuro con `safeStorage` di Electron
 - **Sincronizzazione file** — scansiona tutti i corsi e scarica automaticamente gli allegati mancanti con controllo della concorrenza
 - **Nomi docenti** — mostra i professori e i direttori di corso accanto a ogni insegnamento
-- **Filtro per semestre** — filtra i corsi per semestre con pill selezionabili; ogni pill può essere nascosta per tenere la barra ordinata
-- **Nascondi corsi** — nascondi singoli corsi dalla lista; ogni semestre mostra un bottone "mostra nascosti" per visualizzarli temporaneamente
+- **Filtro per semestre** — filtra i corsi per semestre con pill selezionabili
 - **Rinomina corsi** — assegna alias personalizzati alle cartelle dei corsi
 - **Selezione corsi** — scegli quali corsi sincronizzare
 - **Sincronizzazione automatica** — intervallo configurabile (30m, 1h, 2h) o programmata a un orario specifico (es. mezzanotte)
@@ -59,8 +58,8 @@ Scarica l'ultima release dalla pagina [Releases](../../releases).
 
 | Piattaforma | Installer (setup) | Portable (no install) |
 |-------------|--------------------|-----------------------|
-| **Windows** | `BlackBoard Sync Setup.exe` | `BlackBoard Sync-x.x.x-win32-x64.zip` |
-| **macOS** (universal) | `BlackBoard Sync-x.x.x.dmg` | — |
+| **Windows** | `BlackBoardSync-x.x.x Setup.exe` | `BlackBoard Sync-win32-x64-x.x.x.zip` |
+| **macOS** | `BlackBoard Sync-x.x.x.dmg` | `BlackBoard Sync-darwin-x64-x.x.x.zip` |
 
 ### Windows
 
@@ -71,12 +70,8 @@ Scarica l'ultima release dalla pagina [Releases](../../releases).
 
 ### macOS
 
-Il DMG è **universale** (arm64 + x64) e funziona sia su Mac con Apple Silicon che Intel.
-
-- **Installer:** apri il `.dmg` e trascina l'app nella cartella **Applicazioni**
-
-> **Nota:** l'app non è firmata con un certificato Apple. Al primo avvio macOS potrebbe bloccarla.  
-> **Come sbloccarla:** fai **clic destro → Apri** sul file dell'app (o da Preferenze di Sistema → Sicurezza e Privacy → "Apri comunque"). In alcuni casi può essere necessario ripetere l'operazione due volte.
+- **Installer:** apri il `.dmg` e trascina l'app nella cartella Applicazioni
+- **Portable:** estrai lo `.zip` e avvia l'app
 
 ## Sviluppo
 
