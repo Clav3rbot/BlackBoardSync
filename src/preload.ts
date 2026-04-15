@@ -15,6 +15,7 @@ const api = {
     minimize: () => ipcRenderer.invoke('window-minimize'),
     maximize: () => ipcRenderer.invoke('window-maximize'),
     close: () => ipcRenderer.invoke('window-close'),
+    resetWindowSize: () => ipcRenderer.invoke('reset-window-size'),
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     restartForUpdate: () => ipcRenderer.invoke('restart-for-update'),

@@ -8,6 +8,8 @@ interface AppConfig {
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     collapsedTerms: string[];
+    hiddenCourses: string[];
+    hiddenTerms: string[];
     lastSync: string | null;
     minimizeToTray: boolean;
     startAtLogin: boolean;
@@ -73,6 +75,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
         if (config.syncDir) {
             window.api.openFolder(config.syncDir);
         }
+    };
+
+    const handleResetWindowSize = () => {
+        window.api.resetWindowSize();
     };
 
     const handleCheckForUpdates = async () => {
@@ -217,6 +223,21 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                             <div className={`toggle ${config.notifications ? 'active' : ''}`}>
                                 <div className="toggle-thumb" />
                             </div>
+                        </div>
+
+                        <div className="setting-divider" />
+
+                        <div className="settings-action-row">
+                            <div className="setting-info">
+                                <span className="toggle-label">Dimensioni finestra</span>
+                                <span className="setting-desc">Ripristina le dimensioni predefinite (480 × 780)</span>
+                            </div>
+                            <button className="btn-settings-action" onClick={handleResetWindowSize}>
+                                <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+                                    <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 1 0V2.5h3.5a.5.5 0 0 0 0-1h-4zm9 0a.5.5 0 0 0 0 1H14.5v3.5a.5.5 0 0 0 1 0v-4a.5.5 0 0 0-.5-.5h-4zM.5 10a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 0-1H1.5v-3.5A.5.5 0 0 0 .5 10zm13 0a.5.5 0 0 0-.5.5V14h-3.5a.5.5 0 0 0 0 1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-.5-.5z"/>
+                                </svg>
+                                Resetta
+                            </button>
                         </div>
                     </div>
 

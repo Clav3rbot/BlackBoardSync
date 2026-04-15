@@ -19,6 +19,8 @@ interface AppConfig {
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     collapsedTerms: string[];
+    hiddenCourses: string[];
+    hiddenTerms: string[];
     lastSync: string | null;
     minimizeToTray: boolean;
     startAtLogin: boolean;
@@ -59,6 +61,7 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
     const [loadingCourses, setLoadingCourses] = useState(true);
     const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [coursesError, setCoursesError] = useState(false);
     const [updateReady, setUpdateReady] = useState<{ releaseName: string } | null>(null);
 
     useEffect(() => {
@@ -66,10 +69,7 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
 
         const unsubProgress = window.api.onSyncProgress((p: SyncProgress) => {
             setProgress(p);
-            if (p.phase === 'complete') {
-                setSyncing(false);
-                loadConfig();
-            } else if (p.phase === 'error') {
+            if (p.phase === 'error') {
                 setSyncing(false);
             }
         });
@@ -103,13 +103,17 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
 
     const loadCourses = async () => {
         setLoadingCourses(true);
+        setCoursesError(false);
         try {
             const result = await window.api.getCourses();
             if (result.success && result.courses) {
                 setCourses(result.courses);
+            } else {
+                setCoursesError(true);
             }
         } catch (err) {
             console.error('Failed to load courses:', err);
+            setCoursesError(true);
         } finally {
             setLoadingCourses(false);
         }
@@ -125,6 +129,7 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
     };
 
     const handleSync = async () => {
+        setSyncing(true);
         await window.api.sync();
     };
 
@@ -160,6 +165,36 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
 
     const handleCollapsedTermsChange = async (collapsed: string[]) => {
         const newConfig = await window.api.updateConfig({ collapsedTerms: collapsed });
+        setConfig(newConfig);
+    };
+
+    const handleHideCourse = async (courseId: string) => {
+        if (!config) return;
+        const hidden = [...(config.hiddenCourses || [])];
+        if (!hidden.includes(courseId)) hidden.push(courseId);
+        const newConfig = await window.api.updateConfig({ hiddenCourses: hidden });
+        setConfig(newConfig);
+    };
+
+    const handleUnhideCourse = async (courseId: string) => {
+        if (!config) return;
+        const hidden = (config.hiddenCourses || []).filter((id) => id !== courseId);
+        const newConfig = await window.api.updateConfig({ hiddenCourses: hidden });
+        setConfig(newConfig);
+    };
+
+    const handleHideTerm = async (termId: string) => {
+        if (!config) return;
+        const hidden = [...(config.hiddenTerms || [])];
+        if (!hidden.includes(termId)) hidden.push(termId);
+        const newConfig = await window.api.updateConfig({ hiddenTerms: hidden });
+        setConfig(newConfig);
+    };
+
+    const handleUnhideTerm = async (termId: string) => {
+        if (!config) return;
+        const hidden = (config.hiddenTerms || []).filter((id) => id !== termId);
+        const newConfig = await window.api.updateConfig({ hiddenTerms: hidden });
         setConfig(newConfig);
     };
 
@@ -208,7 +243,7 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 onChangeFolder={handleChangeFolder}
             />
 
-            {syncing && progress && (
+            {(syncing || progress?.phase === 'error') && progress && (
                 <div className="sync-progress">
                     <div className="progress-bar">
                         <div
@@ -238,15 +273,28 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 />
             )}
 
+            {coursesError && !loadingCourses && (
+                <div className="error-message" style={{ margin: '0 18px 12px' }}>
+                    Impossibile caricare i corsi.{' '}
+                    <a href="#" onClick={(e) => { e.preventDefault(); loadCourses(); }}>Riprova</a>
+                </div>
+            )}
+
             <CourseList
                 courses={courses}
                 enabledCourses={config.enabledCourses}
                 courseAliases={config.courseAliases}
                 collapsedTerms={config.collapsedTerms || []}
+                hiddenCourses={config.hiddenCourses || []}
+                hiddenTerms={config.hiddenTerms || []}
                 loading={loadingCourses}
                 onToggle={handleToggleCourse}
                 onRename={handleRenameCourse}
                 onCollapsedTermsChange={handleCollapsedTermsChange}
+                onHide={handleHideCourse}
+                onUnhide={handleUnhideCourse}
+                onHideTerm={handleHideTerm}
+                onUnhideTerm={handleUnhideTerm}
             />
 
             {settingsOpen && (

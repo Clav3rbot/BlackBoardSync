@@ -1,6 +1,6 @@
 {
   "name": "blackboard-sync",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Sincronizza i file dei corsi Blackboard (Università Bocconi)",
   "main": ".webpack/main",
   "scripts": {
@@ -9,7 +9,8 @@
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
-    "lint": "eslint src --ext .ts,.tsx"
+    "lint": "eslint src --ext .ts,.tsx",
+    "preview": "webpack serve --config webpack.dev.config.js"
   },
   "keywords": [
     "electron",

@@ -34,9 +34,14 @@ const App: React.FC = () => {
     };
 
     const handleLogout = async () => {
-        await window.api.logout();
-        setUser(null);
-        setLoggedIn(false);
+        try {
+            await window.api.logout();
+        } catch (err) {
+            console.error('Logout failed:', err);
+        } finally {
+            setUser(null);
+            setLoggedIn(false);
+        }
     };
 
     return (

@@ -61,6 +61,7 @@ export class DownloadManager extends EventEmitter {
 
         const toDownload = files.filter((f) => {
             const fullPath = path.join(this.syncDir, f.relativePath);
+            if (!this.isInsideSyncDir(fullPath)) return false;
             return !fs.existsSync(fullPath);
         });
 
@@ -86,26 +87,29 @@ export class DownloadManager extends EventEmitter {
                 while (queue.length > 0 && !this.aborted) {
                     const file = queue.shift()!;
                     try {
-                        this.emitProgress({
-                            phase: 'downloading',
-                            current: downloaded,
-                            total,
-                            currentFile: file.fileName,
-                        });
-
                         const { data } = await this.api.downloadFile(
                             file.courseId,
                             file.contentId,
                             file.attachmentId
                         );
 
+                        if (this.aborted) break;
+
                         const fullPath = path.join(this.syncDir, file.relativePath);
+                        if (!this.isInsideSyncDir(fullPath)) continue;
                         const dir = path.dirname(fullPath);
                         fs.mkdirSync(dir, { recursive: true });
                         fs.writeFileSync(fullPath, data);
 
                         downloadedFiles.push(file);
                         downloaded++;
+
+                        this.emitProgress({
+                            phase: 'downloading',
+                            current: downloaded,
+                            total,
+                            currentFile: file.fileName,
+                        });
                     } catch (err) {
                         console.error(`Failed to download ${file.fileName}:`, err);
                     }
@@ -137,8 +141,12 @@ export class DownloadManager extends EventEmitter {
         course: Course,
         contents: ContentItem[],
         basePath: string,
-        files: FileToDownload[]
+        files: FileToDownload[],
+        visited: Set<string> = new Set(),
+        depth = 0
     ): Promise<void> {
+        if (depth > 20) return;
+
         for (const item of contents) {
             if (this.aborted) return;
 
@@ -154,20 +162,35 @@ export class DownloadManager extends EventEmitter {
                         relativePath: path.join(basePath, this.sanitizePath(att.fileName)),
                     });
                 }
-            } catch {}
+            } catch (err) {
+                console.error(`Error fetching attachments for "${item.title}" in ${course.name}:`, err);
+            }
 
-            if (item.hasChildren) {
+            if (item.hasChildren && !visited.has(item.id)) {
+                visited.add(item.id);
                 try {
                     const children = await this.api.getChildren(course.id, item.id);
                     const folderPath = path.join(basePath, this.sanitizePath(item.title));
-                    await this.scanContents(course, children, folderPath, files);
-                } catch {}
+                    await this.scanContents(course, children, folderPath, files, visited, depth + 1);
+                } catch (err) {
+                    console.error(`Error fetching children for "${item.title}" in ${course.name}:`, err);
+                }
             }
         }
     }
 
     private sanitizePath(name: string): string {
-        return name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim();
+        return name
+            .replace(/[<>:"/\\|?*]/g, '_')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/^\.+$/, '_');
+    }
+
+    private isInsideSyncDir(fullPath: string): boolean {
+        const resolved = path.resolve(fullPath);
+        const base = path.resolve(this.syncDir);
+        return resolved === base || resolved.startsWith(base + path.sep);
     }
 
     private emitProgress(progress: SyncProgress): void {

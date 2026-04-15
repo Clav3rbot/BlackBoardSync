@@ -42,6 +42,8 @@ export interface AppConfig {
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     collapsedTerms: string[];
+    hiddenCourses: string[];
+    hiddenTerms: string[];
     lastSync: string | null;
     minimizeToTray: boolean;
     startAtLogin: boolean;
@@ -99,6 +101,7 @@ declare global {
             minimize: () => Promise<void>;
             maximize: () => Promise<void>;
             close: () => Promise<void>;
+            resetWindowSize: () => Promise<void>;
             getAppVersion: () => Promise<string>;
             checkForUpdates: () => Promise<void>;
             restartForUpdate: () => Promise<void>;

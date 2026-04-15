@@ -6,12 +6,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ── macOS (arm64 + x64 DMG) ──────────────────────────────────
+  # ── macOS (universal DMG: arm64 + x64 fat binary) ───────────
   build-macos:
-    runs-on: macos-latest          # Apple Silicon (M1) runner
-    strategy:
-      matrix:
-        arch: [arm64, x64]
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -32,15 +29,12 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASS=$(openssl rand -base64 32)
 
-          # Decode certificate
           echo "$APPLE_CERTIFICATE" | base64 --decode > $RUNNER_TEMP/certificate.p12
 
-          # Create & configure temporary keychain
           security create-keychain -p "$KEYCHAIN_PASS" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASS" $KEYCHAIN_PATH
 
-          # Import certificate
           security import $RUNNER_TEMP/certificate.p12 \
             -P "$APPLE_CERTIFICATE_PASSWORD" \
             -A -t cert -f pkcs12 \
@@ -49,15 +43,14 @@ jobs:
             -k "$KEYCHAIN_PASS" $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
 
-      - name: Build & Make (${{ matrix.arch }})
+      - name: Build universal DMG (arm64 + x64)
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx electron-forge make --arch=${{ matrix.arch }}
+        run: npx electron-forge make --arch=universal
 
-      # Cleanup keychain
       - name: Cleanup keychain
         if: always()
         run: |
@@ -68,7 +61,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: macos-${{ matrix.arch }}
+          name: macos-universal
           path: out/make/*.dmg
           if-no-files-found: error
 

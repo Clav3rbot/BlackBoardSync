@@ -694,6 +694,12 @@ body {
     border: 1px solid rgba($accent, 0.1);
 }
 
+.section-badge-hidden {
+    color: $text-tertiary;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .folder-row {
     display: flex;
     align-items: center;
@@ -995,6 +1001,37 @@ body {
     gap: 12px;
 }
 
+.settings-action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 2px 0;
+}
+
+.btn-settings-action {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border: 1px solid $border;
+    background: rgba(255, 255, 255, 0.03);
+    color: $text-tertiary;
+    border-radius: $radius-sm;
+    font-size: 11px;
+    font-family: $font-family;
+    cursor: pointer;
+    transition: all $transition-smooth;
+    white-space: nowrap;
+    flex-shrink: 0;
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: $text-secondary;
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+}
+
 .update-message {
     margin-top: 8px;
     padding: 8px 12px;
@@ -1229,6 +1266,22 @@ body {
 
 .course-item {
     position: relative;
+    
+    &.item-active {
+        z-index: 30; // Above actions-backdrop (29)
+    }
+}
+
+.course-row.course-hidden {
+    opacity: 0.4;
+    cursor: default;
+    font-style: italic;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: $radius-sm;
+
+    .course-info {
+        pointer-events: none;
+    }
 }
 
 .course-row {
@@ -1246,13 +1299,115 @@ body {
         background: rgba(255, 255, 255, 0.03);
         border-color: $border;
 
-        .btn-rename {
+        .course-actions {
             opacity: 1;
+            pointer-events: auto;
         }
     }
 
     &.disabled {
         opacity: 0.45;
+    }
+}
+
+.course-actions {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity $transition-smooth;
+    position: relative;
+
+    &.active {
+        opacity: 1;
+        pointer-events: auto;
+        z-index: 31;
+    }
+}
+
+.course-actions-trigger {
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: $text-tertiary;
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-radius: $radius-sm;
+    transition: all $transition-smooth;
+
+    &:hover,
+    &.active {
+        background: rgba(255, 255, 255, 0.07);
+        color: $text-secondary;
+    }
+}
+
+.actions-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 29;
+    background: transparent;
+    cursor: default;
+}
+
+.course-actions-popup {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px); /* Verso il basso per evitare tagli con lo scroll */
+    background: #111820; 
+    border: 1px solid rgba(255, 255, 255, 0.1); 
+    border-radius: $radius-md;
+    padding: 4px;
+    width: max-content; /* Si adatta perfettamente al testo senza spazi in più */
+    z-index: 30;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+    animation: fadeInScale 150ms ease-out both;
+}
+
+.course-actions-popup-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 10px;
+    border: none;
+    background: transparent;
+    color: $text-secondary;
+    cursor: pointer;
+    border-radius: $radius-sm;
+    font-size: 12px;
+    font-family: $font-family;
+    text-align: left;
+    transition: all $transition-smooth;
+    white-space: nowrap;
+
+    svg {
+        flex-shrink: 0;
+        color: $text-tertiary;
+        transition: color $transition-smooth;
+    }
+
+    &:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: $text-primary;
+
+        svg {
+            color: $text-secondary;
+        }
+    }
+
+    &.danger:hover {
+        background: rgba(255, 80, 80, 0.08);
+        color: #ff7070;
+
+        svg {
+            color: #ff7070;
+        }
     }
 }
 
@@ -1342,24 +1497,25 @@ body {
     box-shadow: 0 0 0 3px rgba($accent, 0.08);
 }
 
-.btn-rename {
+
+.btn-unhide {
     width: 28px;
     height: 28px;
     border: none;
     background: transparent;
-    color: $text-tertiary;
+    color: $accent;
     cursor: pointer;
     border-radius: $radius-sm;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    opacity: 0;
     transition: all $transition-smooth;
+    opacity: 0.7;
 
     &:hover {
         background: rgba(255, 255, 255, 0.06);
-        color: $text-primary;
+        opacity: 1;
     }
 }
 
@@ -1402,6 +1558,69 @@ body {
         color: $accent;
         border-color: rgba($accent, 0.3);
         box-shadow: 0 0 12px rgba($accent, 0.1);
+    }
+}
+
+.term-pill-hidden-toggle {
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: $font-family;
+    color: $text-tertiary;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: $radius-full;
+    cursor: pointer;
+    transition: all $transition-smooth;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0.7;
+
+    &:hover,
+    &.active {
+        background: rgba(255, 255, 255, 0.06);
+        color: $text-secondary;
+        opacity: 1;
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+}
+
+.term-pill.hidden-term {
+    opacity: 0.5;
+    font-style: italic;
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.05);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 8px 5px 12px;
+    cursor: default;
+
+    .hidden-term-name {
+        pointer-events: none;
+    }
+}
+
+.term-pill-unhide-x {
+    width: 16px;
+    height: 16px;
+    border: none;
+    background: transparent;
+    color: $accent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    flex-shrink: 0;
+    opacity: 0.8;
+    transition: all $transition-smooth;
+
+    &:hover {
+        opacity: 1;
+        background: rgba($accent, 0.15);
     }
 }
 
@@ -1462,6 +1681,130 @@ body {
     border-radius: $radius-full;
     flex-shrink: 0;
     font-weight: 600;
+}
+
+.term-hidden-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 18px;
+    padding: 0 6px;
+    border: 1px dashed rgba(255, 255, 255, 0.12);
+    background: transparent;
+    color: $text-tertiary;
+    border-radius: $radius-full;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all $transition-smooth;
+    opacity: 0.55;
+    letter-spacing: 0.3px;
+    font-family: $font-mono;
+
+    svg {
+        transition: transform $transition-smooth;
+    }
+
+    &:hover {
+        border-color: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 255, 255, 0.04);
+        color: $text-secondary;
+        opacity: 0.9;
+    }
+
+    &.active {
+        border-style: solid;
+        border-color: rgba($accent, 0.35);
+        background: rgba($accent, 0.1);
+        color: $accent;
+        opacity: 1;
+        box-shadow: 0 0 10px rgba($accent, 0.12);
+        padding: 0 7px;
+
+        svg {
+            transform: scale(1.1);
+        }
+    }
+}
+
+.term-hidden-count {
+    font-variant-numeric: tabular-nums;
+}
+
+.term-pill-wrap {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid $border;
+    border-radius: $radius-full;
+    background: rgba(255, 255, 255, 0.03);
+    transition: border-color $transition-smooth, background $transition-smooth, box-shadow $transition-smooth;
+
+    &.active {
+        background: $accent-subtle;
+        border-color: rgba($accent, 0.3);
+        box-shadow: 0 0 12px rgba($accent, 0.1);
+
+        .term-pill-label {
+            color: $accent;
+        }
+    }
+
+    &:hover {
+        border-color: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.05);
+
+        .term-pill-hide-btn {
+            width: 22px;
+            margin-right: 3px;
+            opacity: 1;
+            pointer-events: auto;
+        }
+    }
+}
+
+.term-pill-label {
+    padding: 5px 10px 5px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: $font-family;
+    color: $text-tertiary;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color $transition-smooth;
+
+    &:hover {
+        color: $text-secondary;
+    }
+}
+
+.term-pill-hide-btn {
+    width: 0;
+    height: 22px;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+    border: none;
+    background: transparent;
+    color: $text-tertiary;
+    cursor: pointer;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 13px;
+    line-height: 1;
+    margin-right: 0;
+    transition: opacity $transition-smooth, color $transition-smooth, background $transition-smooth;
+
+    &:hover {
+        color: $text-primary;
+        background: rgba(255, 255, 255, 0.08);
+    }
 }
 
 .term-courses {

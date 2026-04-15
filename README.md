@@ -56,22 +56,21 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 
 Scarica l'ultima release dalla pagina [Releases](../../releases).
 
-| Piattaforma | Installer (setup) | Portable (no install) |
-|-------------|--------------------|-----------------------|
+| Piattaforma | Installer (consigliato) | Versione Portable |
+|-------------|-------------------------|-------------------|
 | **Windows** | `BlackBoardSync-x.x.x Setup.exe` | `BlackBoard Sync-win32-x64-x.x.x.zip` |
-| **macOS** | `BlackBoard Sync-x.x.x.dmg` | `BlackBoard Sync-darwin-x64-x.x.x.zip` |
+| **macOS** | `BlackBoard Sync-x.x.x.dmg` (Universal) | _(Non disponibile)_ |
 
 ### Windows
 
-- **Installer:** esegui il `.exe` e segui il wizard — l'app viene installata e aggiunta al menu Start
-- **Portable:** estrai lo `.zip` in una cartella qualsiasi e avvia `BlackBoard Sync.exe`
+- **Installer:** esegui il `.exe` e segui le istruzioni base. L'app verrà installata e aggiunta al menu Start.
+  > **Nota SmartScreen:** Windows potrebbe mostrare un avviso blu "PC protetto da Windows" al primo avvio. Clicca su **Ulteriori informazioni** e poi su **Esegui comunque**.
+- **Portable:** estrai lo `.zip` in una cartella a tuo piacimento e avvia `BlackBoard Sync.exe`.
 
-> **Nota:** Windows potrebbe mostrare un avviso SmartScreen al primo avvio. Clicca su "Ulteriori informazioni" → "Esegui comunque".
+### macOS (Universal: Apple Silicon & Intel)
 
-### macOS
-
-- **Installer:** apri il `.dmg` e trascina l'app nella cartella Applicazioni
-- **Portable:** estrai lo `.zip` e avvia l'app
+- **Apri il file `.dmg` e trascina l'icona dell'app nella cartella Applicazioni.**
+  > **Nota Gatekeeper (Blocco Sviluppatore):** Essendo un'app opensource, macOS bloccherà il primo avvio. Per ovviare al blocco: vai nella cartella Applicazioni, fai **click con il tasto destro** (o Control-clic) sull'icona di BlackBoard Sync, seleziona **Apri** dal menu a tendina e poi clicca di nuovo su **Apri** nel popup di avviso.
 
 ## Sviluppo
 

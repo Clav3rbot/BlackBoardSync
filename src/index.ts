@@ -62,6 +62,7 @@ let store: AppStore;
 let bbApi: BlackboardAPI | null = null;
 let downloadManager: DownloadManager | null = null;
 let autoSyncTimer: ReturnType<typeof setInterval> | ReturnType<typeof setTimeout> | null = null;
+let updateCheckInterval: ReturnType<typeof setInterval> | null = null;
 let sessionCookies: string[] = [];
 let isQuitting = false;
 let hasCompletedFirstLaunch = false;
@@ -149,6 +150,14 @@ function createWindow(): void {
 
     mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
 
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith(MAIN_WINDOW_WEBPACK_ENTRY)) {
+            event.preventDefault();
+        }
+    });
+
     // Show window only once content is fully loaded — avoids flash of Electron default page
     mainWindow.once('ready-to-show', () => {
         if (!startHidden) {
@@ -187,10 +196,16 @@ function showOrCreateWindow(): void {
 function createTray(): void {
     const icon = getAppIcon();
 
-    // Resize for tray (16x16 on Windows)
-    const trayIcon = process.platform === 'win32'
-        ? icon.resize({ width: 16, height: 16 })
-        : icon;
+    // Resize for tray: 16×16 on Windows, 18×18 template on macOS, 22×22 on Linux
+    let trayIcon: Electron.NativeImage;
+    if (process.platform === 'win32') {
+        trayIcon = icon.resize({ width: 16, height: 16 });
+    } else if (process.platform === 'darwin') {
+        trayIcon = icon.resize({ width: 18, height: 18 });
+        trayIcon.setTemplateImage(true);
+    } else {
+        trayIcon = icon.resize({ width: 22, height: 22 });
+    }
 
     tray = new Tray(trayIcon);
     const contextMenu = Menu.buildFromTemplate([
@@ -281,6 +296,12 @@ async function triggerSync(): Promise<void> {
             courses = allCourses.filter((c) => config.enabledCourses.includes(c.id));
         } else {
             courses = allCourses;
+        }
+        if (config.hiddenCourses && config.hiddenCourses.length > 0) {
+            courses = courses.filter((c) => !config.hiddenCourses.includes(c.id));
+        }
+        if (config.hiddenTerms && config.hiddenTerms.length > 0) {
+            courses = courses.filter((c) => !c.term?.id || !config.hiddenTerms.includes(c.term.id));
         }
 
         downloadManager = new DownloadManager(bbApi, config.syncDir, config.courseAliases);
@@ -374,6 +395,11 @@ function setupIPC(): void {
         store.clearCredentials();
         bbApi = null;
         sessionCookies = [];
+        if (autoSyncTimer) {
+            clearInterval(autoSyncTimer as ReturnType<typeof setInterval>);
+            clearTimeout(autoSyncTimer as ReturnType<typeof setTimeout>);
+            autoSyncTimer = null;
+        }
         return { success: true };
     });
 
@@ -408,7 +434,7 @@ function setupIPC(): void {
         setupAutoSync();
 
         // Handle start-at-login changes
-        if ('startAtLogin' in partial) {
+        if ('startAtLogin' in partial && app.isPackaged) {
             app.setLoginItemSettings({
                 openAtLogin: partial.startAtLogin,
                 path: app.getPath('exe'),
@@ -442,7 +468,8 @@ function setupIPC(): void {
     ipcMain.handle('open-folder', async (_event, folderPath: string) => {
         const normalizedPath = path.resolve(folderPath);
         const syncDir = path.resolve(store.getConfig().syncDir);
-        if (!normalizedPath.startsWith(syncDir)) return;
+        const rel = path.relative(syncDir, normalizedPath);
+        if (rel.startsWith('..') || path.isAbsolute(rel)) return;
         const fs = await import('fs');
         if (!fs.existsSync(normalizedPath)) {
             fs.mkdirSync(normalizedPath, { recursive: true });
@@ -459,6 +486,13 @@ function setupIPC(): void {
         }
     });
     ipcMain.handle('window-close', () => mainWindow?.close());
+    ipcMain.handle('reset-window-size', () => {
+        if (mainWindow) {
+            mainWindow.setSize(480, 780);
+            mainWindow.center();
+        }
+        try { fs.unlinkSync(getWindowBoundsPath()); } catch { /* ignore */ }
+    });
     ipcMain.handle('get-app-version', () => app.getVersion());
     ipcMain.handle('restart-for-update', () => {
         if (!pendingSetupPath || !fs.existsSync(pendingSetupPath)) return;
@@ -655,27 +689,29 @@ function setupAutoUpdate() {
             const reader = dlResponse.body?.getReader();
             if (!reader) throw new Error('No response body');
 
-            const chunks: Uint8Array[] = [];
+            const fileStream = fs.createWriteStream(setupPath);
             let received = 0;
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                chunks.push(value);
-                received += value.length;
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    fileStream.write(value);
+                    received += value.length;
 
-                if (contentLength > 0) {
-                    const percent = Math.round((received / contentLength) * 100);
-                    mainWindow?.webContents.send('update-download-progress', {
-                        percent,
-                        received,
-                        total: contentLength,
-                    });
+                    if (contentLength > 0) {
+                        const percent = Math.round((received / contentLength) * 100);
+                        mainWindow?.webContents.send('update-download-progress', {
+                            percent,
+                            received,
+                            total: contentLength,
+                        });
+                    }
                 }
+            } finally {
+                fileStream.end();
+                await new Promise<void>((resolve) => fileStream.on('finish', resolve));
             }
-
-            const buffer = Buffer.concat(chunks);
-            fs.writeFileSync(setupPath, buffer);
 
             pendingSetupPath = setupPath;
 
@@ -701,7 +737,7 @@ function setupAutoUpdate() {
     setTimeout(() => checkForUpdates(), 10_000);
 
     // Check every 4 hours
-    setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
+    updateCheckInterval = setInterval(() => checkForUpdates(), 4 * 60 * 60 * 1000);
 
     // Manual check from renderer
     ipcMain.removeHandler('check-for-updates');
@@ -722,17 +758,23 @@ app.whenReady().then(() => {
     setupAutoSync();
     setupAutoUpdate();
 
-    // Sync start-at-login setting on launch
-    const config = store.getConfig();
-    app.setLoginItemSettings({
-        openAtLogin: config.startAtLogin,
-        path: app.getPath('exe'),
-        args: ['--hidden'],
-    });
+    // Sync start-at-login setting on launch (packaged only — dev electron.exe must not register)
+    if (app.isPackaged) {
+        const config = store.getConfig();
+        app.setLoginItemSettings({
+            openAtLogin: config.startAtLogin,
+            path: app.getPath('exe'),
+            args: ['--hidden'],
+        });
+    }
 });
 
 app.on('before-quit', () => {
     isQuitting = true;
+    if (updateCheckInterval) {
+        clearInterval(updateCheckInterval);
+        updateCheckInterval = null;
+    }
 });
 
 app.on('window-all-closed', () => {
