@@ -43,6 +43,22 @@ pub async fn login(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<LoginResponse, String> {
+    // Input validation
+    if username.is_empty() || password.is_empty() {
+        return Ok(LoginResponse {
+            success: false,
+            user: None,
+            error: Some("Credenziali non valide".to_string()),
+        });
+    }
+    if username.len() > 256 || password.len() > 256 {
+        return Ok(LoginResponse {
+            success: false,
+            user: None,
+            error: Some("Credenziali troppo lunghe".to_string()),
+        });
+    }
+
     let mut manager = LoginManager::new();
     let result = manager.login(&username, &password).await;
 
@@ -249,14 +265,30 @@ pub async fn open_folder(
     app: AppHandle,
 ) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
-    use std::path::{Path, PathBuf};
+    use std::path::{Component, PathBuf};
 
     let sync_dir_str = state.store.lock().unwrap().get_config().sync_dir;
     let sync_dir = PathBuf::from(&sync_dir_str);
     let requested = PathBuf::from(&folder_path);
 
-    let resolved = requested.canonicalize().unwrap_or(requested.clone());
-    let base = sync_dir.canonicalize().unwrap_or(sync_dir.clone());
+    // Use filesystem canonicalization when possible, lexical normalization as fallback
+    let (resolved, base) = match (requested.canonicalize(), sync_dir.canonicalize()) {
+        (Ok(r), Ok(b)) => (r, b),
+        _ => {
+            let normalize = |p: &std::path::Path| -> PathBuf {
+                let mut out: Vec<Component> = Vec::new();
+                for c in p.components() {
+                    match c {
+                        Component::ParentDir => { if matches!(out.last(), Some(Component::Normal(_))) { out.pop(); } }
+                        Component::CurDir => {}
+                        other => out.push(other),
+                    }
+                }
+                out.iter().collect()
+            };
+            (normalize(&requested), normalize(&sync_dir))
+        }
+    };
 
     if resolved != base && !resolved.starts_with(&base) {
         return Err("Path traversal non consentito".to_string());
@@ -285,7 +317,7 @@ pub async fn reset_window_size(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn check_for_updates(app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn(async move {
-        crate::updater::check_for_updates_internal(&app).await;
+        crate::updater::check_for_updates(&app).await;
     });
     Ok(())
 }
@@ -295,20 +327,7 @@ pub async fn restart_for_update(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let path = state.pending_setup_path.lock().unwrap().clone();
-    let Some(setup_path) = path else {
-        return Err("Nessun aggiornamento in attesa".to_string());
-    };
-
-    if !std::path::Path::new(&setup_path).exists() {
-        return Err("File installer non trovato".to_string());
-    }
-
-    std::process::Command::new(&setup_path)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-
     state.is_quitting.store(true, Ordering::SeqCst);
-    app.exit(0);
+    app.restart();
     Ok(())
 }

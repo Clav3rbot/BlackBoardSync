@@ -29,6 +29,7 @@ fn main() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             commands::login,
@@ -75,7 +76,7 @@ fn main() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
-                updater::check_for_updates_internal(&handle).await;
+                updater::check_for_updates(&handle).await;
             });
 
             // Repeat update check every 4 hours
@@ -84,7 +85,7 @@ fn main() {
                 let four_hours = tokio::time::Duration::from_secs(4 * 60 * 60);
                 loop {
                     tokio::time::sleep(four_hours).await;
-                    updater::check_for_updates_internal(&handle).await;
+                    updater::check_for_updates(&handle).await;
                 }
             });
 

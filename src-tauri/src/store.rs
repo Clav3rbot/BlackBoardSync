@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use zeroize::Zeroizing;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -121,12 +122,12 @@ impl AppStore {
         }
     }
 
-    pub fn load_credentials(&self) -> Option<(String, String)> {
+    pub fn load_credentials(&self) -> Option<(String, Zeroizing<String>)> {
         let entry = keyring::Entry::new("blackboard-sync", "credentials").ok()?;
         let json = entry.get_password().ok()?;
         let val: serde_json::Value = serde_json::from_str(&json).ok()?;
         let username = val["username"].as_str()?.to_string();
-        let password = val["password"].as_str()?.to_string();
+        let password = Zeroizing::new(val["password"].as_str()?.to_string());
         Some((username, password))
     }
 

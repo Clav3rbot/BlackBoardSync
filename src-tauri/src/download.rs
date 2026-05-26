@@ -356,21 +356,47 @@ pub fn sanitize_path(name: &str) -> String {
         .collect();
     let sanitized = sanitized.split_whitespace().collect::<Vec<_>>().join(" ");
     let sanitized = sanitized.trim().to_string();
-    if sanitized.chars().all(|c| c == '.') {
+
+    // Strip path traversal components (defense in depth)
+    let sanitized = sanitized.replace("..", "");
+    let sanitized = sanitized.trim().to_string();
+
+    if sanitized.is_empty() || sanitized.chars().all(|c| c == '.') {
         "_".to_string()
     } else {
         sanitized
     }
 }
 
+/// Normalize a path lexically by resolving `.` and `..` components
+/// without touching the filesystem (works on paths that don't exist yet).
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut components: Vec<Component> = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                // Only pop if the last component is a normal dir, never pop past root/prefix
+                match components.last() {
+                    Some(Component::Normal(_)) => { components.pop(); }
+                    _ => {} // Ignore `..` that would escape
+                }
+            }
+            Component::CurDir => {} // Skip `.`
+            other => components.push(other),
+        }
+    }
+    components.iter().collect()
+}
+
 fn is_inside_sync_dir(path: &Path, sync_dir: &Path) -> bool {
-    let resolved = match path.canonicalize() {
-        Ok(p) => p,
-        Err(_) => path.to_path_buf(),
-    };
-    let base = match sync_dir.canonicalize() {
-        Ok(p) => p,
-        Err(_) => sync_dir.to_path_buf(),
+    // Try filesystem-level canonicalization first (most accurate)
+    let (resolved, base) = match (path.canonicalize(), sync_dir.canonicalize()) {
+        (Ok(r), Ok(b)) => (r, b),
+        _ => {
+            // Fallback: lexical normalization (safe for non-existent paths)
+            (normalize_path(path), normalize_path(sync_dir))
+        }
     };
     resolved == base || resolved.starts_with(&base)
 }
