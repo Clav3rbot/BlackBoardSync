@@ -1,4 +1,4 @@
-// Stub di window.api per il dev-server browser (no Electron)
+// Stub di window.api per il dev-server browser (sostituisce il backend Tauri)
 // Modifica i dati qui sotto per vedere stati diversi dell'UI.
 
 import type { AppConfig, SyncProgress, SyncResult } from '../types';

@@ -63,7 +63,7 @@ html,
 body {
     height: 100%;
     overflow: hidden;
-    background-color: $bg-primary;
+    background-color: transparent;
     color: $text-primary;
     font-family: $font-family;
     font-size: 13px;
@@ -103,7 +103,7 @@ body {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: $bg-primary;
+    background: transparent;
     position: relative;
 
     &::before {

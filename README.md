@@ -6,7 +6,8 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/electron-28-47848F?style=flat-square&logo=electron" />
+  <img src="https://img.shields.io/badge/Tauri-v2-FFC107?style=flat-square&logo=tauri" />
+  <img src="https://img.shields.io/badge/Rust-2021-000000?style=flat-square&logo=rust" />
   <img src="https://img.shields.io/badge/typescript-5.3-3178C6?style=flat-square&logo=typescript" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" /></a>
   <a href="https://github.com/Clav3rbot/BlackBoardSync/releases/latest"><img src="https://img.shields.io/github/downloads/Clav3rbot/BlackBoardSync/latest/total?label=downloads%40latest&style=flat-square" /></a>
@@ -30,21 +31,20 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 
 ## Funzionalità
 
-- **Login SSO Bocconi** — autenticazione SAML2 tramite Shibboleth IDP, le credenziali vengono salvate in modo sicuro con `safeStorage` di Electron
-- **Sincronizzazione file** — scansiona tutti i corsi e scarica automaticamente gli allegati mancanti con controllo della concorrenza
-- **Nomi docenti** — mostra i professori e i direttori di corso accanto a ogni insegnamento
-- **Filtro per semestre** — filtra i corsi per semestre con pill selezionabili
-- **Rinomina corsi** — assegna alias personalizzati alle cartelle dei corsi
-- **Selezione corsi** — scegli quali corsi sincronizzare
-- **Sincronizzazione automatica** — intervallo configurabile (30m, 1h, 2h) o programmata a un orario specifico (es. mezzanotte)
-- **Riepilogo sync** — modale con dettaglio dei file scaricati per ogni corso
-- **Pannello impostazioni** — accessibile dall'icona ⚙️ nell'header
-- **Minimizza nel tray** — l'app resta attiva nella system tray anche chiudendo la finestra
-- **Avvio con Windows** — avvia l'app automaticamente all'accesso
-- **Notifiche desktop** — notifica al completamento della sincronizzazione
-- **Aggiornamento automatico** — l'app si aggiorna automaticamente tramite GitHub Releases
-- **Installer nativo** — setup `.exe` per Windows e `.dmg` per macOS
-- **Portabile** — versione `.zip` senza installazione per tutte le piattaforme
+- **Login SSO Bocconi** - autenticazione SAML2 tramite Shibboleth IDP, le credenziali vengono salvate in modo sicuro tramite il Keyring nativo di sistema (Windows Credential Manager / macOS Keychain) con azzeramento della memoria (`zeroize`)
+- **Sincronizzazione file** - scansiona tutti i corsi e scarica automaticamente gli allegati mancanti con controllo della concorrenza
+- **Nomi docenti** - mostra i professori e i direttori di corso accanto a ogni insegnamento
+- **Filtro per semestre** - filtra i corsi per semestre con pill selezionabili
+- **Rinomina corsi** - assegna alias personalizzati alle cartelle dei corsi
+- **Selezione corsi** - scegli quali corsi sincronizzare
+- **Sincronizzazione automatica** - intervallo configurabile (30m, 1h, 2h) o programmata a un orario specifico (es. mezzanotte)
+- **Riepilogo sync** - modale con dettaglio dei file scaricati per ogni corso
+- **Pannello impostazioni** - accessibile dall'icona ⚙️ nell'header
+- **Minimizza nel tray** - l'app resta attiva nella system tray anche chiudendo la finestra
+- **Avvio con Windows/macOS** - avvia l'app automaticamente all'accesso
+- **Notifiche desktop** - notifica al completamento della sincronizzazione
+- **Aggiornamento automatico** - l'app si aggiorna automaticamente tramite GitHub Releases (firmato crittograficamente con chiavi Ed25519)
+- **Installer nativo** - setup `.exe` per Windows e `.dmg` per macOS
 
 ## Screenshot
 
@@ -56,27 +56,19 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 
 Scarica l'ultima release dalla pagina [Releases](../../releases).
 
-| Piattaforma | Installer (consigliato) | Versione Portable |
-|-------------|-------------------------|-------------------|
-| **Windows** | `BlackBoardSync-x.x.x Setup.exe` | `BlackBoard Sync-win32-x64-x.x.x.zip` |
-| **macOS** | `BlackBoard Sync-x.x.x.dmg` (Universal) | _(Non disponibile)_ |
+| Piattaforma | Installer |
+|-------------|-----------|
+| **Windows** | `BlackBoard_Sync_x.x.x_x64-setup.exe` |
+| **macOS** | `BlackBoard_Sync_x.x.x_universal.dmg` |
 
-### Windows
-
-- **Installer:** esegui il `.exe` e segui le istruzioni base. L'app verrà installata e aggiunta al menu Start.
-  > **Nota SmartScreen:** Windows potrebbe mostrare un avviso blu "PC protetto da Windows" al primo avvio. Clicca su **Ulteriori informazioni** e poi su **Esegui comunque**.
-- **Portable:** estrai lo `.zip` in una cartella a tuo piacimento e avvia `BlackBoard Sync.exe`.
-
-### macOS (Universal: Apple Silicon & Intel)
-
-- **Apri il file `.dmg` e trascina l'icona dell'app nella cartella Applicazioni.**
-  > **Nota Gatekeeper (Blocco Sviluppatore):** Essendo un'app opensource, macOS bloccherà il primo avvio. Per ovviare al blocco: vai nella cartella Applicazioni, fai **click con il tasto destro** (o Control-clic) sull'icona di BlackBoard Sync, seleziona **Apri** dal menu a tendina e poi clicca di nuovo su **Apri** nel popup di avviso.
+---
 
 ## Sviluppo
 
 ### Prerequisiti
 
 - [Node.js](https://nodejs.org/) 18+
+- Rust e compilatore di sistema (MSVC su Windows, Xcode CLI su macOS)
 - npm 9+
 
 ### Setup
@@ -91,52 +83,54 @@ npm install
 
 | Comando | Descrizione |
 |---------|-------------|
-| `npm start` | Avvia l'app in modalità sviluppo |
-| `npm run make` | Crea i pacchetti distribuibili (installer + zip) |
+| `npm run tauri dev` | Avvia l'app in modalità sviluppo |
+| `npm run tauri build` | Crea i pacchetti distribuibili (installer) |
 
 ### Struttura progetto
 
 ```
-src/
-├── index.ts                    # Main process (Electron)
-├── preload.ts                  # Context bridge (IPC)
-├── renderer.tsx                # Entry point renderer
-├── types.d.ts                  # Tipi TypeScript condivisi
+src/                            # Frontend (React)
 ├── index.html                  # HTML template
+├── renderer.tsx                # Entry point renderer
+├── tauri-api.ts                # Bridge API per chiamare Rust
 ├── client/
 │   ├── App.tsx                 # Root component
-│   └── components/
-│       ├── LoginView.tsx       # Schermata di login
-│       ├── SyncView.tsx        # Schermata principale
-│       ├── Header.tsx          # Header con avatar e sync
-│       ├── CourseList.tsx       # Lista corsi con filtri
-│       ├── SettingsView.tsx    # Pannello impostazioni
-│       └── SyncResultModal.tsx # Modale risultato sync
-├── modules/
-│   ├── blackboard.ts           # Client API Blackboard REST
-│   ├── download.ts             # Download manager con concorrenza
-│   ├── login.ts                # Flusso SSO SAML2 Bocconi
-│   └── store.ts                # Persistenza configurazione
+│   └── components/             # Componenti UI (Login, Sync, Settings, ecc.)
 └── styles/
     └── main.scss               # Stili (dark theme, glassmorphism)
+
+src-tauri/                      # Backend (Tauri & Rust)
+├── Cargo.toml                  # Dipendenze Rust
+├── tauri.conf.json             # Configurazione Tauri (capabilities, updater, ecc.)
+└── src/
+    ├── main.rs                 # Inizializzazione app e plugin
+    ├── commands.rs             # Comandi Tauri invocabili dal frontend
+    ├── blackboard.rs           # Client API Blackboard
+    ├── login.rs                # Autenticazione SSO Bocconi (SAML)
+    ├── download.rs             # Gestore download e sincronizzazione
+    ├── store.rs                # Persistenza configurazione e Keyring
+    ├── state.rs                # Stato condiviso in memoria
+    ├── tray.rs                 # Configurazione system tray
+    └── updater.rs              # Gestione aggiornamenti crittografati
 ```
 
 ## Stack tecnologico
 
-- **Electron 28** + Electron Forge 7
+- **Tauri v2** + **Rust** - per il backend nativo ultraleggero
 - **TypeScript 5.3**
-- **React 18** — UI dichiarativa
-- **SCSS** — dark theme con glassmorphism e gradient
-- **Webpack** — bundling
-- **axios** — chiamate HTTP
-- **cheerio** — parsing HTML per il flusso SAML
-- **GitHub API** — aggiornamenti automatici tramite GitHub Releases
+- **React 19** - UI dichiarativa
+- **SCSS** - dark theme con glassmorphism e gradienti
+- **Webpack** - bundling frontend
+- **reqwest** - client HTTP asincrono in Rust
+- **scraper** - parsing HTML in Rust per il flusso SAML
+- **keyring-rs** - accesso sicuro al portachiavi di sistema
+- **zeroize** - pulizia sicura della memoria per le credenziali
 
 ## Disclaimer
 
 Questa applicazione **non è affiliata, associata o approvata dall'Università Bocconi** in alcun modo. È uno strumento indipendente creato per velocizzare il download dei documenti dalla piattaforma Blackboard.
 
-Le credenziali inserite vengono salvate localmente sul dispositivo dell'utente tramite `safeStorage` di Electron e non vengono mai trasmesse a terzi. Il creatore dell'app **non è in alcun modo responsabile** dell'uso, della gestione o della sicurezza delle credenziali inserite dall'utente.
+Le credenziali inserite vengono salvate localmente sul dispositivo dell'utente tramite i meccanismi nativi del sistema operativo (Credential Manager/Keychain) e non vengono mai trasmesse a terzi. Il creatore dell'app **non è in alcun modo responsabile** dell'uso, della gestione o della sicurezza delle credenziali inserite dall'utente.
 
 L'utilizzo dell'app è a proprio rischio e pericolo.
 
