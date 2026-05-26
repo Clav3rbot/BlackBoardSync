@@ -5,6 +5,9 @@ node_modules/
 .webpack/
 out/
 dist/
+dev-dist/
+src-tauri/target/
+src-tauri/gen/
 
 # IDE
 .vscode/
@@ -24,3 +27,4 @@ npm-debug.log*
 # Environment
 .env
 .env.local
+.clauge-worktrees/
