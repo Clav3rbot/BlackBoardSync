@@ -160,38 +160,42 @@ impl LoginManager {
             .await?;
 
         let body1 = step1_resp.text().await.map_err(|e| e.to_string())?;
-        let doc1 = Html::parse_document(&body1);
+        
+        let (saml_url, saml_body) = {
+            let doc1 = Html::parse_document(&body1);
+            let form_sel = Selector::parse("form").unwrap();
+            let saml_req_sel = Selector::parse(r#"input[name="SAMLRequest"]"#).unwrap();
+            let relay_sel = Selector::parse(r#"input[name="RelayState"]"#).unwrap();
 
-        let form_sel = Selector::parse("form").unwrap();
-        let saml_req_sel = Selector::parse(r#"input[name="SAMLRequest"]"#).unwrap();
-        let relay_sel = Selector::parse(r#"input[name="RelayState"]"#).unwrap();
+            let form = doc1.select(&form_sel).next();
+            let saml_action = form
+                .and_then(|f| f.value().attr("action"))
+                .ok_or_else(|| "Impossibile trovare il form SAML. Il flusso SSO potrebbe essere cambiato.".to_string())?;
+            let saml_request = doc1.select(&saml_req_sel)
+                .next()
+                .and_then(|e| e.value().attr("value"))
+                .ok_or_else(|| "SAMLRequest non trovato".to_string())?;
+            let relay_state = doc1.select(&relay_sel)
+                .next()
+                .and_then(|e| e.value().attr("value"))
+                .unwrap_or("");
 
-        let form = doc1.select(&form_sel).next();
-        let saml_action = form
-            .and_then(|f| f.value().attr("action"))
-            .ok_or_else(|| "Impossibile trovare il form SAML. Il flusso SSO potrebbe essere cambiato.".to_string())?;
-        let saml_request = doc1.select(&saml_req_sel)
-            .next()
-            .and_then(|e| e.value().attr("value"))
-            .ok_or_else(|| "SAMLRequest non trovato".to_string())?;
-        let relay_state = doc1.select(&relay_sel)
-            .next()
-            .and_then(|e| e.value().attr("value"))
-            .unwrap_or("");
+            let saml_url = if saml_action.starts_with("http") {
+                saml_action.to_string()
+            } else {
+                Url::parse(&step1_url)
+                    .and_then(|base| base.join(saml_action))
+                    .map(|u| u.to_string())
+                    .map_err(|e| e.to_string())?
+            };
 
-        let saml_url = if saml_action.starts_with("http") {
-            saml_action.to_string()
-        } else {
-            Url::parse(&step1_url)
-                .and_then(|base| base.join(saml_action))
-                .map(|u| u.to_string())
-                .map_err(|e| e.to_string())?
+            let saml_body = url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("SAMLRequest", saml_request)
+                .append_pair("RelayState", relay_state)
+                .finish();
+
+            (saml_url, saml_body)
         };
-
-        let saml_body = url::form_urlencoded::Serializer::new(String::new())
-            .append_pair("SAMLRequest", saml_request)
-            .append_pair("RelayState", relay_state)
-            .finish();
 
         // Step 2: POST SAMLRequest to IdP
         let (step2_resp, step2_url) = self
@@ -205,20 +209,23 @@ impl LoginManager {
             .await?;
 
         let body2 = step2_resp.text().await.map_err(|e| e.to_string())?;
-        let doc2 = Html::parse_document(&body2);
+        
+        let login_url = {
+            let doc2 = Html::parse_document(&body2);
+            let form_sel = Selector::parse("form").unwrap();
+            let login_action = doc2.select(&form_sel)
+                .next()
+                .and_then(|f| f.value().attr("action"))
+                .ok_or_else(|| "Impossibile trovare il form di login nell'IDP.".to_string())?;
 
-        let login_action = doc2.select(&form_sel)
-            .next()
-            .and_then(|f| f.value().attr("action"))
-            .ok_or_else(|| "Impossibile trovare il form di login nell'IDP.".to_string())?;
-
-        let login_url = if login_action.starts_with("http") {
-            login_action.to_string()
-        } else {
-            Url::parse(&step2_url)
-                .and_then(|base| base.join(login_action))
-                .map(|u| u.to_string())
-                .map_err(|e| e.to_string())?
+            if login_action.starts_with("http") {
+                login_action.to_string()
+            } else {
+                Url::parse(&step2_url)
+                    .and_then(|base| base.join(login_action))
+                    .map(|u| u.to_string())
+                    .map_err(|e| e.to_string())?
+            }
         };
 
         let cred_body = url::form_urlencoded::Serializer::new(String::new())
@@ -239,45 +246,51 @@ impl LoginManager {
             .await?;
 
         let body3 = step3_resp.text().await.map_err(|e| e.to_string())?;
-        let doc3 = Html::parse_document(&body3);
+        
+        let (return_url, return_body) = {
+            let doc3 = Html::parse_document(&body3);
+            
+            // Check for login error
+            let error_sel = Selector::parse(".error").unwrap();
+            if let Some(error_el) = doc3.select(&error_sel).next() {
+                let error_text: String = error_el.text().collect::<Vec<_>>().join("").trim().to_string();
+                return Err(if error_text.is_empty() { "Credenziali non valide".to_string() } else { error_text });
+            }
 
-        // Check for login error
-        let error_sel = Selector::parse(".error").unwrap();
-        if let Some(error_el) = doc3.select(&error_sel).next() {
-            let error_text: String = error_el.text().collect::<Vec<_>>().join("").trim().to_string();
-            return Err(if error_text.is_empty() { "Credenziali non valide".to_string() } else { error_text });
-        }
+            // Step 4: POST SAMLResponse back to SP
+            let form_sel = Selector::parse("form").unwrap();
+            let saml_resp_sel = Selector::parse(r#"input[name="SAMLResponse"]"#).unwrap();
+            let relay_ret_sel = Selector::parse(r#"input[name="RelayState"]"#).unwrap();
 
-        // Step 4: POST SAMLResponse back to SP
-        let saml_resp_sel = Selector::parse(r#"input[name="SAMLResponse"]"#).unwrap();
-        let relay_ret_sel = Selector::parse(r#"input[name="RelayState"]"#).unwrap();
+            let saml_response = doc3.select(&saml_resp_sel)
+                .next()
+                .and_then(|e| e.value().attr("value"))
+                .ok_or_else(|| "Autenticazione fallita. Nessuna risposta SAML ricevuta.".to_string())?;
+            let return_relay = doc3.select(&relay_ret_sel)
+                .next()
+                .and_then(|e| e.value().attr("value"))
+                .unwrap_or("");
+            let return_action = doc3.select(&form_sel)
+                .next()
+                .and_then(|f| f.value().attr("action"))
+                .ok_or_else(|| "Form SAMLResponse non trovato".to_string())?;
 
-        let saml_response = doc3.select(&saml_resp_sel)
-            .next()
-            .and_then(|e| e.value().attr("value"))
-            .ok_or_else(|| "Autenticazione fallita. Nessuna risposta SAML ricevuta.".to_string())?;
-        let return_relay = doc3.select(&relay_ret_sel)
-            .next()
-            .and_then(|e| e.value().attr("value"))
-            .unwrap_or("");
-        let return_action = doc3.select(&form_sel)
-            .next()
-            .and_then(|f| f.value().attr("action"))
-            .ok_or_else(|| "Form SAMLResponse non trovato".to_string())?;
+            let return_url = if return_action.starts_with("http") {
+                return_action.to_string()
+            } else {
+                Url::parse(&step3_url)
+                    .and_then(|base| base.join(return_action))
+                    .map(|u| u.to_string())
+                    .map_err(|e| e.to_string())?
+            };
 
-        let return_url = if return_action.starts_with("http") {
-            return_action.to_string()
-        } else {
-            Url::parse(&step3_url)
-                .and_then(|base| base.join(return_action))
-                .map(|u| u.to_string())
-                .map_err(|e| e.to_string())?
+            let return_body = url::form_urlencoded::Serializer::new(String::new())
+                .append_pair("SAMLResponse", saml_response)
+                .append_pair("RelayState", return_relay)
+                .finish();
+
+            (return_url, return_body)
         };
-
-        let return_body = url::form_urlencoded::Serializer::new(String::new())
-            .append_pair("SAMLResponse", saml_response)
-            .append_pair("RelayState", return_relay)
-            .finish();
 
         self.request(
             Method::POST,
