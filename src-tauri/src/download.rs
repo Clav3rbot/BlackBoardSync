@@ -416,7 +416,7 @@ pub fn setup_auto_sync(app: &AppHandle) {
 
     let new_handle = if config.auto_sync_interval == 0 {
         let time_str = config.auto_sync_scheduled_time.clone();
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 let delay = next_scheduled_delay(&time_str);
                 tokio::time::sleep(delay).await;
@@ -425,7 +425,7 @@ pub fn setup_auto_sync(app: &AppHandle) {
         })
     } else {
         let mins = config.auto_sync_interval as u64;
-        tauri::async_runtime::spawn(async move {
+        tokio::spawn(async move {
             let duration = tokio::time::Duration::from_secs(mins * 60);
             loop {
                 tokio::time::sleep(duration).await;
