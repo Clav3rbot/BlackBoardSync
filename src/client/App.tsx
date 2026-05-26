@@ -47,7 +47,7 @@ const App: React.FC = () => {
     return (
         <div className="app">
             <div className="titlebar">
-                <div className="titlebar-drag">
+                <div className="titlebar-drag" data-tauri-drag-region>
                     <span className="titlebar-title">BlackBoard Sync</span>
                 </div>
                 <div className="titlebar-controls">
