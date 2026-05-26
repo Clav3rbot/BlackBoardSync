@@ -5,6 +5,10 @@ node_modules/
 .webpack/
 out/
 dist/
+dev-dist/
+src-tauri/target/
+src-tauri/gen/
+src-tauri/keys/
 
 # IDE
 .vscode/
