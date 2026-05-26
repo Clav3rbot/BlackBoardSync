@@ -38,7 +38,6 @@
     "windows": {
       "nsis": {
         "displayLanguageSelector": false,
-        "shortcutName": "BlackBoard Sync",
         "installMode": "currentUser"
       }
     }
