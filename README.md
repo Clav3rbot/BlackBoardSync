@@ -10,7 +10,7 @@
   <img src="https://img.shields.io/badge/Rust-2021-000000?style=flat-square&logo=rust" />
   <img src="https://img.shields.io/badge/typescript-5.3-3178C6?style=flat-square&logo=typescript" />
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-green?style=flat-square" /></a>
-  <a href="https://github.com/Clav3rbot/BlackBoardSync/releases/latest"><img src="https://img.shields.io/github/downloads/Clav3rbot/BlackBoardSync/latest/total?label=downloads%40latest&style=flat-square" /></a>
+  <a href="https://github.com/Clav3rbot/BlackBoardSync/releases/latest"><img src="https://img.shields.io/github/downloads/Clav3rbot/BlackBoardSync/total?label=downloads&style=flat-square" /></a>
 </p>
 
 **BlackBoard Sync** è una semplice app che serve per tenere sincronizzati tutti i tuoi file di Blackboard, user-friendly e senza compromessi.
