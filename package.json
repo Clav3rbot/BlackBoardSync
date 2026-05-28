@@ -1,6 +1,6 @@
 {
   "name": "blackboard-sync",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "Sincronizza i file dei corsi Blackboard (Università Bocconi)",
   "scripts": {
     "dev": "npx webpack serve --config webpack.dev.config.js",

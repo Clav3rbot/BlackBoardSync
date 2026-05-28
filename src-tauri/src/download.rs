@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use futures_util::StreamExt;
 use tauri::{AppHandle, Manager, Emitter};
 
 #[derive(Clone)]
@@ -177,10 +178,8 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
         })
     }).collect();
 
-    if abort_flag.load(Ordering::SeqCst) {
-        return Ok(SyncResult { total_downloaded: 0, total_scanned: 0, courses: vec![], duration: 0 });
-    }
-
+    // Note: scan tasks are already spawned above; each checks `abort_flag`
+    // internally and returns early, so join completes promptly on abort.
     let scan_results = futures_util::future::join_all(scan_handles).await;
     let mut all_files: Vec<FileToDownload> = Vec::new();
     for result in scan_results {
@@ -190,11 +189,14 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
     }
 
     let sync_dir = PathBuf::from(&config.sync_dir);
+    // Resolve the base once; re-canonicalizing per file is a wasted syscall.
+    let canon_base = sync_dir.canonicalize().ok();
+    let lex_base = normalize_path(&sync_dir);
 
     let to_download: Vec<FileToDownload> = all_files.iter()
         .filter(|f| {
             let full = sync_dir.join(&f.relative_path);
-            is_inside_sync_dir(&full, &sync_dir) && !full.exists()
+            is_inside_resolved(&full, canon_base.as_deref(), &lex_base) && !full.exists()
         })
         .cloned()
         .collect();
@@ -233,6 +235,8 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
         let abort = Arc::clone(&abort_flag);
         let app_h = app.clone();
         let sync_dir = sync_dir.clone();
+        let canon_base = canon_base.clone();
+        let lex_base = lex_base.clone();
         let dl_count = Arc::clone(&downloaded_count);
         let dl_files = Arc::clone(&downloaded_files);
 
@@ -251,12 +255,12 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
                         if abort.load(Ordering::SeqCst) { break; }
 
                         let full_path = sync_dir.join(&file.relative_path);
-                        if !is_inside_sync_dir(&full_path, &sync_dir) { continue; }
+                        if !is_inside_resolved(&full_path, canon_base.as_deref(), &lex_base) { continue; }
 
                         if let Some(dir) = full_path.parent() {
-                            let _ = std::fs::create_dir_all(dir);
+                            let _ = tokio::fs::create_dir_all(dir).await;
                         }
-                        if std::fs::write(&full_path, &data).is_ok() {
+                        if tokio::fs::write(&full_path, &data).await.is_ok() {
                             let count = dl_count.fetch_add(1, Ordering::SeqCst) + 1;
                             dl_files.lock().await.push(file.clone());
                             app_h.emit("sync-progress", SyncProgressPayload {
@@ -322,36 +326,68 @@ async fn scan_course(
         Err(_) => return files,
     };
 
-    // Iterative DFS: (items, path, depth)
+    // Iterative DFS, one tree level at a time. Items within a level are
+    // independent, so their attachment + children fetches are issued
+    // concurrently (bounded) instead of one network round-trip at a time —
+    // this is the dominant cost of scanning a course.
+    const LEVEL_CONCURRENCY: usize = 6;
     let mut stack: Vec<(Vec<ContentItem>, String, usize)> = vec![(top_level, base_path.to_string(), 0)];
     let mut visited: HashSet<String> = HashSet::new();
 
     while let Some((items, path, depth)) = stack.pop() {
         if depth > 20 { continue; }
+        if abort_flag.load(Ordering::SeqCst) { return files; }
 
-        for item in items {
-            if abort_flag.load(Ordering::SeqCst) { return files; }
-
-            if let Ok(attachments) = api.get_attachments(&course.id, &item.id).await {
-                for att in attachments {
-                    let rel = PathBuf::from(&path).join(sanitize_path(&att.file_name));
-                    files.push(FileToDownload {
-                        course_id: course.id.clone(),
-                        course_name: course.name.clone(),
-                        content_id: item.id.clone(),
-                        attachment_id: att.id.clone(),
-                        file_name: att.file_name.clone(),
-                        relative_path: rel.to_string_lossy().into_owned(),
-                    });
-                }
-            }
-
-            if item.has_children.unwrap_or(false) && !visited.contains(&item.id) {
+        // Per-item fetch task: attachments always, children only when present
+        // and not already visited. Dedup of `visited` happens here (serial)
+        // before fan-out so concurrent items can't re-enqueue the same folder.
+        let tasks = items.into_iter().map(|item| {
+            let fetch_children = item.has_children.unwrap_or(false) && !visited.contains(&item.id);
+            if fetch_children {
                 visited.insert(item.id.clone());
-                let folder = PathBuf::from(&path).join(sanitize_path(&item.title));
-                if let Ok(children) = api.get_children(&course.id, &item.id).await {
-                    stack.push((children, folder.to_string_lossy().into_owned(), depth + 1));
+            }
+            let api = api.clone();
+            let course_id = course.id.clone();
+            let course_name = course.name.clone();
+            let path = path.clone();
+            async move {
+                let mut item_files = Vec::new();
+                if let Ok(attachments) = api.get_attachments(&course_id, &item.id).await {
+                    for att in attachments {
+                        let rel = PathBuf::from(&path).join(sanitize_path(&att.file_name));
+                        item_files.push(FileToDownload {
+                            course_id: course_id.clone(),
+                            course_name: course_name.clone(),
+                            content_id: item.id.clone(),
+                            attachment_id: att.id.clone(),
+                            file_name: att.file_name.clone(),
+                            relative_path: rel.to_string_lossy().into_owned(),
+                        });
+                    }
                 }
+
+                let child_level = if fetch_children {
+                    let folder = PathBuf::from(&path).join(sanitize_path(&item.title));
+                    api.get_children(&course_id, &item.id).await.ok()
+                        .map(|children| (children, folder.to_string_lossy().into_owned()))
+                } else {
+                    None
+                };
+
+                (item_files, child_level)
+            }
+        });
+
+        let level: Vec<(Vec<FileToDownload>, Option<(Vec<ContentItem>, String)>)> =
+            futures_util::stream::iter(tasks)
+                .buffer_unordered(LEVEL_CONCURRENCY)
+                .collect()
+                .await;
+
+        for (item_files, child_level) in level {
+            files.extend(item_files);
+            if let Some((children, folder)) = child_level {
+                stack.push((children, folder, depth + 1));
             }
         }
     }
@@ -399,16 +435,19 @@ fn normalize_path(path: &Path) -> PathBuf {
     components.iter().collect()
 }
 
-fn is_inside_sync_dir(path: &Path, sync_dir: &Path) -> bool {
-    // Try filesystem-level canonicalization first (most accurate)
-    let (resolved, base) = match (path.canonicalize(), sync_dir.canonicalize()) {
-        (Ok(r), Ok(b)) => (r, b),
+/// Containment check against a pre-resolved sync dir. `canon_base` is the
+/// canonicalized sync dir (None if it couldn't be canonicalized); `lex_base`
+/// is its lexical normalization, used when the path can't be canonicalized
+/// (e.g. it doesn't exist yet). Comparing canonical-vs-canonical or
+/// lexical-vs-lexical keeps both sides consistent (no \\?\ prefix mismatch).
+fn is_inside_resolved(path: &Path, canon_base: Option<&Path>, lex_base: &Path) -> bool {
+    match (path.canonicalize(), canon_base) {
+        (Ok(resolved), Some(base)) => resolved.as_path() == base || resolved.starts_with(base),
         _ => {
-            // Fallback: lexical normalization (safe for non-existent paths)
-            (normalize_path(path), normalize_path(sync_dir))
+            let resolved = normalize_path(path);
+            resolved.as_path() == lex_base || resolved.starts_with(lex_base)
         }
-    };
-    resolved == base || resolved.starts_with(&base)
+    }
 }
 
 pub fn setup_auto_sync(app: &AppHandle) {

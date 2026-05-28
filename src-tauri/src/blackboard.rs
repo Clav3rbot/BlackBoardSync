@@ -68,8 +68,14 @@ impl BlackboardAPI {
     pub fn new(cookies: &[String]) -> Self {
         let cookie_header = cookies.join("; ");
         let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("Cookie", cookie_header.parse().expect("invalid cookie header"));
-        headers.insert("User-Agent", USER_AGENT.parse().unwrap());
+        // Build cookie header defensively: a malformed/tampered cookie value
+        // (e.g. control chars from a corrupt keyring entry) must not panic the app.
+        if let Ok(value) = reqwest::header::HeaderValue::from_str(&cookie_header) {
+            headers.insert("Cookie", value);
+        }
+        if let Ok(ua) = reqwest::header::HeaderValue::from_str(USER_AGENT) {
+            headers.insert("User-Agent", ua);
+        }
 
         let client = Client::builder()
             .default_headers(headers)
@@ -160,18 +166,23 @@ impl BlackboardAPI {
             .into_iter()
             .collect();
 
-        let mut term_names: HashMap<String, String> = HashMap::new();
-        for term_id in &term_ids {
-            if let Ok(resp) = self.client
-                .get(self.url(&format!("/terms/{}", term_id)))
-                .send()
-                .await
-            {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    let name = json["name"].as_str().unwrap_or(term_id).to_string();
-                    term_names.insert(term_id.clone(), name);
+        let term_fetches = term_ids.iter().map(|term_id| {
+            let client = self.client.clone();
+            let url = self.url(&format!("/terms/{}", term_id));
+            let term_id = term_id.clone();
+            async move {
+                if let Ok(resp) = client.get(&url).send().await {
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        let name = json["name"].as_str().unwrap_or(&term_id).to_string();
+                        return Some((term_id, name));
+                    }
                 }
+                None
             }
+        });
+        let mut term_names: HashMap<String, String> = HashMap::new();
+        for entry in futures_util::future::join_all(term_fetches).await.into_iter().flatten() {
+            term_names.insert(entry.0, entry.1);
         }
 
         for course in &mut courses {
@@ -222,24 +233,32 @@ impl BlackboardAPI {
                         return (course_id, None);
                     }
 
-                    let mut names = Vec::new();
-                    for uid in &instructor_ids {
+                    let name_fetches = instructor_ids.iter().map(|uid| {
+                        let client = client.clone();
                         let url = format!(
                             "{}/courses/{}/users/{}?expand=user",
                             API_BASE, course_id, uid
                         );
-                        if let Ok(r) = client.get(&url).send().await {
-                            if let Ok(m) = r.json::<serde_json::Value>().await {
-                                let given = m["user"]["name"]["given"].as_str().unwrap_or("");
-                                let family = m["user"]["name"]["family"].as_str().unwrap_or("");
-                                let full = format!("{} {}", given, family).trim().to_string();
-                                if !full.is_empty() {
-                                    names.push(full);
+                        async move {
+                            if let Ok(r) = client.get(&url).send().await {
+                                if let Ok(m) = r.json::<serde_json::Value>().await {
+                                    let given = m["user"]["name"]["given"].as_str().unwrap_or("");
+                                    let family = m["user"]["name"]["family"].as_str().unwrap_or("");
+                                    let full = format!("{} {}", given, family).trim().to_string();
+                                    if !full.is_empty() {
+                                        return Some(full);
+                                    }
                                 }
                             }
+                            None
                         }
-                    }
-
+                    });
+                    // join_all preserves order, so consecutive-dedup stays valid.
+                    let mut names: Vec<String> = futures_util::future::join_all(name_fetches)
+                        .await
+                        .into_iter()
+                        .flatten()
+                        .collect();
                     names.dedup();
                     let instructor = if names.is_empty() { None } else { Some(names.join(", ")) };
                     (course_id, instructor)
@@ -261,7 +280,7 @@ impl BlackboardAPI {
     }
 
     pub async fn get_contents(&self, course_id: &str) -> Result<Vec<ContentItem>, String> {
-        let data: serde_json::Value = self.client
+        let mut data: serde_json::Value = self.client
             .get(self.url(&format!("/courses/{}/contents", course_id)))
             .send()
             .await
@@ -271,7 +290,7 @@ impl BlackboardAPI {
             .map_err(|e| e.to_string())?;
 
         let items: Vec<ContentItem> = serde_json::from_value(
-            data["results"].clone(),
+            data["results"].take(),
         ).unwrap_or_default();
         Ok(items)
     }
@@ -281,7 +300,7 @@ impl BlackboardAPI {
         course_id: &str,
         content_id: &str,
     ) -> Result<Vec<ContentItem>, String> {
-        let data: serde_json::Value = self.client
+        let mut data: serde_json::Value = self.client
             .get(self.url(&format!(
                 "/courses/{}/contents/{}/children",
                 course_id, content_id
@@ -293,7 +312,7 @@ impl BlackboardAPI {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::from_value(data["results"].clone()).unwrap_or_default())
+        Ok(serde_json::from_value(data["results"].take()).unwrap_or_default())
     }
 
     pub async fn get_attachments(
@@ -301,7 +320,7 @@ impl BlackboardAPI {
         course_id: &str,
         content_id: &str,
     ) -> Result<Vec<Attachment>, String> {
-        let data: serde_json::Value = self.client
+        let mut data: serde_json::Value = self.client
             .get(self.url(&format!(
                 "/courses/{}/contents/{}/attachments",
                 course_id, content_id
@@ -313,7 +332,7 @@ impl BlackboardAPI {
             .await
             .map_err(|e| e.to_string())?;
 
-        Ok(serde_json::from_value(data["results"].clone()).unwrap_or_default())
+        Ok(serde_json::from_value(data["results"].take()).unwrap_or_default())
     }
 
     pub async fn download_file(
