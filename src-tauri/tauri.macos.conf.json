@@ -1,0 +1,13 @@
+{
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "transparent": true,
+        "decorations": false,
+        "shadow": false
+      }
+    ]
+  }
+}

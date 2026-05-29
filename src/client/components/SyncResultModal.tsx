@@ -1,4 +1,5 @@
 import React from 'react';
+import { getT } from '../i18n';
 
 interface SyncResultCourse {
     courseName: string;
@@ -13,18 +14,32 @@ interface SyncResult {
 }
 
 interface SyncResultModalProps {
+    lang: 'it' | 'en';
     result: SyncResult;
     onClose: () => void;
 }
 
-const SyncResultModal: React.FC<SyncResultModalProps> = ({ result, onClose }) => {
+const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose }) => {
     const hasNewFiles = result.totalDownloaded > 0;
+    const t = getT(lang);
 
     const formatDuration = (seconds: number): string => {
         if (seconds < 60) return `${seconds}s`;
         const m = Math.floor(seconds / 60);
         const s = seconds % 60;
         return `${m}m ${s}s`;
+    };
+
+    const getSubtitleText = (): string => {
+        if (lang === 'en') {
+            return hasNewFiles
+                ? `${result.totalDownloaded} new file${result.totalDownloaded === 1 ? '' : 's'} downloaded in ${formatDuration(result.duration)}`
+                : `No new files found · ${result.totalScanned} file${result.totalScanned === 1 ? '' : 's'} verified`;
+        } else {
+            return hasNewFiles
+                ? `${result.totalDownloaded} nuov${result.totalDownloaded === 1 ? 'o file' : 'i file'} scaricati in ${formatDuration(result.duration)}`
+                : `Nessun nuovo file trovato · ${result.totalScanned} file verificati`;
+        }
     };
 
     return (
@@ -46,12 +61,12 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ result, onClose }) =>
                         )}
                     </div>
                     <h2 className="modal-title">
-                        {hasNewFiles ? 'Sincronizzazione completata' : 'Tutto aggiornato'}
+                        {hasNewFiles 
+                            ? (lang === 'en' ? 'Synchronization completed' : 'Sincronizzazione completata')
+                            : (lang === 'en' ? 'Everything up to date' : 'Tutto aggiornato')}
                     </h2>
                     <p className="modal-subtitle">
-                        {hasNewFiles
-                            ? `${result.totalDownloaded} nuov${result.totalDownloaded === 1 ? 'o file' : 'i file'} scaricati in ${formatDuration(result.duration)}`
-                            : `Nessun nuovo file trovato · ${result.totalScanned} file verificati`}
+                        {getSubtitleText()}
                     </p>
                 </div>
 
@@ -75,7 +90,7 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ result, onClose }) =>
                                                 <path d="M3.75 1.5a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V4.664a.25.25 0 00-.073-.177l-2.914-2.914a.25.25 0 00-.177-.073H3.75zM2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75z" />
                                             </svg>
                                             <span className="modal-file-name">{file}</span>
-                                            <span className="modal-file-badge">NUOVO</span>
+                                            <span className="modal-file-badge">{lang === 'en' ? 'NEW' : 'NUOVO'}</span>
                                         </li>
                                     ))}
                                 </ul>
@@ -86,7 +101,7 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ result, onClose }) =>
 
                 <div className="modal-footer">
                     <button className="modal-close-btn" onClick={onClose}>
-                        Chiudi
+                        {t('close')}
                     </button>
                 </div>
             </div>

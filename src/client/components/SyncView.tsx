@@ -3,6 +3,7 @@ import Header from './Header';
 import CourseList from './CourseList';
 import SyncResultModal from './SyncResultModal';
 import SettingsView from './SettingsView';
+import { getT } from '../i18n';
 
 interface Course {
     id: string;
@@ -26,6 +27,7 @@ interface AppConfig {
     startAtLogin: boolean;
     notifications: boolean;
     syncOnStartup: boolean;
+    language: string;
 }
 
 interface SyncProgress {
@@ -49,11 +51,14 @@ interface SyncResult {
 }
 
 interface SyncViewProps {
+    lang: 'it' | 'en';
+    onLanguageChange: (lang: 'it' | 'en') => void;
     user: { id: string; userName: string; name: { given: string; family: string } };
     onLogout: () => void;
 }
 
-const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
+const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLogout }) => {
+    const t = getT(lang);
     const [courses, setCourses] = useState<Course[]>([]);
     const [config, setConfig] = useState<AppConfig | null>(null);
     const [syncing, setSyncing] = useState(false);
@@ -63,6 +68,9 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [coursesError, setCoursesError] = useState(false);
     const [updateReady, setUpdateReady] = useState<{ releaseName: string } | null>(null);
+    const [progressVisible, setProgressVisible] = useState(false);
+    const [loadingInstructors, setLoadingInstructors] = useState(false);
+    const [cacheMisses, setCacheMisses] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         loadData();
@@ -97,8 +105,26 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         };
     }, []);
 
+    // Grace delay: don't flash the progress bar on the very first frame of a
+    // sync (feels abrupt, esp. on startup auto-sync). Show it after 250ms so it
+    // fades in deliberately; hide immediately when the sync ends.
+    useEffect(() => {
+        const active = syncing || progress?.phase === 'error';
+        if (!active) {
+            setProgressVisible(false);
+            return;
+        }
+        const t = window.setTimeout(() => setProgressVisible(true), 250);
+        return () => window.clearTimeout(t);
+    }, [syncing, progress]);
+
     const loadData = async () => {
-        await Promise.all([loadCourses(), loadConfig()]);
+        try {
+            await loadConfig();
+            await loadCourses();
+        } catch (err) {
+            console.error('Failed to load data:', err);
+        }
     };
 
     const loadCourses = async () => {
@@ -107,7 +133,33 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         try {
             const result = await window.api.getCourses();
             if (result.success && result.courses) {
-                setCourses(result.courses);
+                const list = result.courses;
+                
+                // Read cache first (extremely fast local disk read)
+                let cached: Record<string, string> = {};
+                try {
+                    const res = await window.api.getCachedInstructors();
+                    if (res) cached = res;
+                } catch (e) {
+                    console.error('Failed to load cached instructors:', e);
+                }
+
+                // Determine which ones are not in the cache (cache misses)
+                const misses = new Set<string>();
+                const listWithCache = list.map((c) => {
+                    if (cached && cached[c.id]) {
+                        return { ...c, instructor: cached[c.id] };
+                    } else {
+                        misses.add(c.id);
+                        return c;
+                    }
+                });
+
+                setCacheMisses(misses);
+                setCourses(listWithCache);
+                
+                // Start background fetch for instructor names
+                loadInstructors(list.map((c) => c.id));
             } else {
                 setCoursesError(true);
             }
@@ -119,10 +171,32 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         }
     };
 
+    const loadInstructors = async (courseIds: string[]) => {
+        if (courseIds.length === 0) return;
+        setLoadingInstructors(true);
+
+        // Background: fetch fresh data and update UI if anything changed
+        try {
+            const fresh = await window.api.getInstructors(courseIds);
+            if (fresh && Object.keys(fresh).length > 0) {
+                setCourses((prev) =>
+                    prev.map((c) => (fresh[c.id] ? { ...c, instructor: fresh[c.id] } : c))
+                );
+            }
+        } catch {
+            /* instructors are best-effort; ignore failures */
+        } finally {
+            setLoadingInstructors(false);
+        }
+    };
+
     const loadConfig = async () => {
         try {
             const cfg = await window.api.getConfig();
             setConfig(cfg);
+            if (cfg.language && cfg.language !== lang) {
+                onLanguageChange(cfg.language as 'it' | 'en');
+            }
         } catch (err) {
             console.error('Failed to load config:', err);
         }
@@ -207,9 +281,9 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
     };
 
     const formatLastSync = (iso: string | null): string => {
-        if (!iso) return 'Mai';
+        if (!iso) return t('never');
         const date = new Date(iso);
-        return date.toLocaleString('it-IT', {
+        return date.toLocaleString(lang === 'en' ? 'en-US' : 'it-IT', {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
@@ -228,10 +302,32 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         );
     }
 
+    const isSyncError = progress?.phase === 'error';
+    const showProgress = (syncing || isSyncError) && progressVisible;
+    const hasTotal = !!progress && progress.total > 0;
+    const indeterminate = (syncing || isSyncError) && !isSyncError && !hasTotal;
+    const progressPct = isSyncError ? 100 : hasTotal ? (progress!.current / progress!.total) * 100 : 0;
+
+    let phaseText = '';
+    if (isSyncError) {
+        phaseText = `${t('error')}: ${progress?.error ?? t('syncingPhaseError')}`;
+    } else if (!progress) {
+        phaseText = t('syncingPhaseConnecting');
+    } else if (progress.phase === 'scanning') {
+        phaseText = progress.total > 0
+            ? `${t('syncingPhaseScanning')} (${progress.current}/${progress.total})`
+            : t('syncingPhaseScanning');
+    } else if (progress.phase === 'downloading') {
+        phaseText = `${progress.currentFile || t('syncingPhaseDownloading')} (${progress.current}/${progress.total})`;
+    }
+
+
     return (
         <div className="sync-view">
             <Header
+                lang={lang}
                 userName={`${user.name.given} ${user.name.family}`}
+                matricola={user.userName}
                 lastSync={formatLastSync(config.lastSync)}
                 syncing={syncing}
                 syncDir={config.syncDir}
@@ -243,31 +339,33 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 onChangeFolder={handleChangeFolder}
             />
 
-            {(syncing || progress?.phase === 'error') && progress && (
-                <div className="sync-progress">
-                    <div className="progress-bar">
+            {showProgress && (
+                <div className={`sync-progress ${isSyncError ? 'error' : ''}`}>
+                    <div className={`progress-bar ${isSyncError ? 'error' : ''}`}>
+                        {/* Determinate fill: always anchored left, grows 0 -> pct.
+                            Stays at 0 while connecting, so when scanning starts it
+                            grows forward with no snap-back. */}
                         <div
                             className="progress-fill"
-                            style={{
-                                width:
-                                    progress.total > 0
-                                        ? `${(progress.current / progress.total) * 100}%`
-                                        : '0%',
-                            }}
+                            style={{ width: `${progressPct}%` }}
+                        />
+                        {/* Indeterminate overlay: a sliding segment for the
+                            "connecting" phase. Fades out (doesn't teleport) once a
+                            real total arrives, masking the hand-off. */}
+                        <div
+                            className={`progress-indeterminate ${indeterminate ? 'visible' : ''}`}
+                            aria-hidden="true"
                         />
                     </div>
-                    <p className="progress-text">
-                        {progress.phase === 'scanning' &&
-                            `Scansione corsi... (${progress.current}/${progress.total})`}
-                        {progress.phase === 'downloading' &&
-                            `Download: ${progress.currentFile} (${progress.current}/${progress.total})`}
-                        {progress.phase === 'error' && `Errore: ${progress.error}`}
+                    <p className="progress-text" aria-live="polite">
+                        <span className="progress-text-label">{phaseText}</span>
                     </p>
                 </div>
             )}
 
             {syncResult && (
                 <SyncResultModal
+                    lang={lang}
                     result={syncResult}
                     onClose={() => setSyncResult(null)}
                 />
@@ -275,12 +373,13 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
 
             {coursesError && !loadingCourses && (
                 <div className="error-message" style={{ margin: '0 18px 12px' }}>
-                    Impossibile caricare i corsi.{' '}
-                    <a href="#" onClick={(e) => { e.preventDefault(); loadCourses(); }}>Riprova</a>
+                    {lang === 'en' ? 'Unable to load courses.' : 'Impossibile caricare i corsi.'}{' '}
+                    <a href="#" onClick={(e) => { e.preventDefault(); loadCourses(); }}>{t('retry')}</a>
                 </div>
             )}
 
             <CourseList
+                lang={lang}
                 courses={courses}
                 enabledCourses={config.enabledCourses}
                 courseAliases={config.courseAliases}
@@ -295,12 +394,19 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 onUnhide={handleUnhideCourse}
                 onHideTerm={handleHideTerm}
                 onUnhideTerm={handleUnhideTerm}
+                loadingInstructors={loadingInstructors}
+                cacheMisses={cacheMisses}
             />
 
             {settingsOpen && (
                 <SettingsView
                     config={config}
-                    onConfigChange={setConfig}
+                    onConfigChange={(newConfig) => {
+                        setConfig(newConfig);
+                        if (newConfig.language && newConfig.language !== lang) {
+                            onLanguageChange(newConfig.language as 'it' | 'en');
+                        }
+                    }}
                     onClose={() => setSettingsOpen(false)}
                 />
             )}
@@ -314,16 +420,16 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                                 <path d="M7.646 15.854a.5.5 0 00.708 0l3-3a.5.5 0 00-.708-.708L8.5 14.293V5.5a.5.5 0 00-1 0v8.793l-2.146-2.147a.5.5 0 00-.708.708l3 3z" />
                             </svg>
                         </div>
-                        <h3 className="update-dialog-title">Aggiornamento pronto</h3>
+                        <h3 className="update-dialog-title">{t('updateReadyTitle')}</h3>
                         <p className="update-dialog-text">
                             {updateReady.releaseName
-                                ? `La versione ${updateReady.releaseName} è stata scaricata.`
-                                : 'Una nuova versione è stata scaricata.'}
+                                ? (lang === 'en' ? `Version ${updateReady.releaseName} has been downloaded.` : `La versione ${updateReady.releaseName} è stata scaricata.`)
+                                : t('updateReadyText')}
                         </p>
-                        <p className="update-dialog-subtext">Riavvia l'app per installare l'aggiornamento.</p>
+                        <p className="update-dialog-subtext">{t('updateReadySubtext')}</p>
                         <div className="update-dialog-actions">
-                            <button className="btn-update-later" onClick={() => setUpdateReady(null)}>Dopo</button>
-                            <button className="btn-update-restart" onClick={() => window.api.restartForUpdate()}>Riavvia ora</button>
+                            <button className="btn-update-later" onClick={() => setUpdateReady(null)}>{t('updateLater')}</button>
+                            <button className="btn-update-restart" onClick={() => window.api.restartForUpdate()}>{t('updateRestart')}</button>
                         </div>
                     </div>
                 </div>

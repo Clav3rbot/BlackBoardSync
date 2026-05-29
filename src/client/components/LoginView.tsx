@@ -1,22 +1,26 @@
 import React, { useState } from 'react';
+import { getT } from '../i18n';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const appIcon = require('../../../static/icons/png/128x128.png') as string;
 
 interface LoginViewProps {
+    lang: 'it' | 'en';
     onLogin: (user: any) => void;
 }
 
-const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
+const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const t = getT(lang);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!username || !password) {
-            setError('Inserisci email e password');
+            setError(t('emptyFieldsError'));
             return;
         }
 
@@ -28,10 +32,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             if (result.success) {
                 onLogin(result.user);
             } else {
-                setError(result.error || 'Errore di autenticazione');
+                setError(result.error || t('loginError'));
             }
         } catch {
-            setError('Errore di connessione');
+            setError(t('loginError'));
         } finally {
             setLoading(false);
         }
@@ -44,31 +48,31 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     <img src={appIcon} alt="BlackBoard Sync" width="64" height="64" />
                 </div>
                 <h1>BlackBoard Sync</h1>
-                <p className="login-subtitle">Università Bocconi</p>
+                <p className="login-subtitle">{t('loginSubtitle')}</p>
             </div>
 
             <form className="login-form" onSubmit={handleSubmit}>
                 <div className="form-group">
-                    <label htmlFor="username">Email / Matricola</label>
+                    <label htmlFor="username">{t('usernameLabel')}</label>
                     <input
                         id="username"
                         type="text"
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        placeholder="nome.cognome@studbocconi.it"
+                        placeholder={t('usernamePlaceholder')}
                         disabled={loading}
                         autoFocus
                     />
                 </div>
 
                 <div className="form-group">
-                    <label htmlFor="password">Password</label>
+                    <label htmlFor="password">{t('passwordLabel')}</label>
                     <input
                         id="password"
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="••••••••"
+                        placeholder={t('passwordPlaceholder')}
                         disabled={loading}
                     />
                 </div>
@@ -79,20 +83,20 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     {loading ? (
                         <>
                             <span className="spinner-small" />
-                            Accesso in corso...
+                            {t('loggingIn')}
                         </>
                     ) : (
-                        'Accedi'
+                        t('loginButton')
                     )}
                 </button>
             </form>
 
             <div className="login-footer">
-                <p>Le credenziali vengono salvate in modo sicuro sul tuo dispositivo.</p>
+                <p>{t('loginFooterCredentials')}</p>
                 <p className="login-disclaimer">
-                    Questa app non è affiliata, associata o approvata dall'Università Bocconi.<br/>
-                    È uno strumento indipendente per velocizzare il download dei documenti.<br/>
-                    Il creatore non è in alcun modo responsabile dell'uso delle credenziali inserite.
+                    {t('loginFooterDisclaimer1')}<br/>
+                    {t('loginFooterDisclaimer2')}<br/>
+                    {t('loginFooterDisclaimer3')}
                 </p>
             </div>
         </div>

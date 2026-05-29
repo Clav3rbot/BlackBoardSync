@@ -33,12 +33,14 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 
 - **Login SSO Bocconi** - autenticazione SAML2 tramite Shibboleth IDP, le credenziali vengono salvate in modo sicuro tramite il Keyring nativo di sistema (Windows Credential Manager / macOS Keychain) con azzeramento della memoria (`zeroize`)
 - **Sincronizzazione file** - scansiona tutti i corsi e scarica automaticamente gli allegati mancanti con controllo della concorrenza
-- **Nomi docenti** - mostra i professori e i direttori di corso accanto a ogni insegnamento
+- **Nomi docenti** - caricamento progressivo con skeleton loader; mostra professori e direttori di corso accanto a ogni insegnamento
+- **Matricola in header** - lo student ID viene mostrato accanto al nome utente nell'intestazione
 - **Filtro per semestre** - filtra i corsi per semestre con pill selezionabili
 - **Rinomina corsi** - assegna alias personalizzati alle cartelle dei corsi
 - **Selezione corsi** - scegli quali corsi sincronizzare
 - **Sincronizzazione automatica** - intervallo configurabile (30m, 1h, 2h) o programmata a un orario specifico (es. mezzanotte)
 - **Riepilogo sync** - modale con dettaglio dei file scaricati per ogni corso
+- **Interfaccia multilingua** - switcher IT/EN nelle impostazioni, preferenza salvata nella configurazione; al primo avvio la lingua viene rilevata automaticamente dalla lingua del sistema
 - **Pannello impostazioni** - accessibile dall'icona ⚙️ nell'header
 - **Minimizza nel tray** - l'app resta attiva nella system tray anche chiudendo la finestra
 - **Avvio con Windows/macOS** - avvia l'app automaticamente all'accesso
@@ -95,6 +97,7 @@ src/                            # Frontend (React)
 ├── tauri-api.ts                # Bridge API per chiamare Rust
 ├── client/
 │   ├── App.tsx                 # Root component
+│   ├── i18n.ts                 # Traduzioni IT/EN
 │   └── components/             # Componenti UI (Login, Sync, Settings, ecc.)
 └── styles/
     └── main.scss               # Stili (dark theme, glassmorphism)

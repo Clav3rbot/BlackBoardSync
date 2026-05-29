@@ -106,14 +106,17 @@ impl BlackboardAPI {
     }
 
     pub async fn get_courses(&self, user_id: &str) -> Result<Vec<Course>, String> {
-        self.get_courses_inner(user_id, true).await
+        self.get_courses_inner(user_id).await
     }
 
     pub async fn get_courses_for_sync(&self, user_id: &str) -> Result<Vec<Course>, String> {
-        self.get_courses_inner(user_id, false).await
+        self.get_courses_inner(user_id).await
     }
 
-    async fn get_courses_inner(&self, user_id: &str, fetch_instructors: bool) -> Result<Vec<Course>, String> {
+    // Fast: course list + term names only. Instructor names are resolved
+    // separately via `get_instructors` (many slow round-trips) so the UI can
+    // render the list immediately and fill instructors in afterwards.
+    async fn get_courses_inner(&self, user_id: &str) -> Result<Vec<Course>, String> {
         let mut courses: Vec<Course> = Vec::new();
         let mut path = format!(
             "/users/{}/courses?limit=100&fields=courseId,course.name,course.id,course.termId",
@@ -193,16 +196,20 @@ impl BlackboardAPI {
             }
         }
 
-        if !fetch_instructors {
-            return Ok(courses);
-        }
+        Ok(courses)
+    }
 
-        // Load instructors in batches of 5
-        let batch_size = 5;
-        for chunk in courses.chunks_mut(batch_size) {
+    // Resolve instructor display names for the given courses. This is the slow
+    // part of the old course fetch (a membership call + per-instructor expand
+    // call for every course), so it runs on its own and the UI merges the
+    // result in progressively. Returns courseId -> "Name, Name".
+    pub async fn get_instructors(&self, course_ids: &[String]) -> HashMap<String, String> {
+        let mut map: HashMap<String, String> = HashMap::new();
+
+        for chunk in course_ids.chunks(5) {
             let mut handles = Vec::new();
-            for course in chunk.iter() {
-                let course_id = course.id.clone();
+            for course_id in chunk {
+                let course_id = course_id.clone();
                 let client = self.client.clone();
                 let h = tokio::spawn(async move {
                     let url = format!(
@@ -266,17 +273,14 @@ impl BlackboardAPI {
                 handles.push(h);
             }
 
-            let results: Vec<_> = futures_util::future::join_all(handles).await;
-            for result in results {
-                if let Ok((course_id, instructor)) = result {
-                    if let Some(course) = chunk.iter_mut().find(|c| c.id == course_id) {
-                        course.instructor = instructor;
-                    }
+            for result in futures_util::future::join_all(handles).await {
+                if let Ok((course_id, Some(instructor))) = result {
+                    map.insert(course_id, instructor);
                 }
             }
         }
 
-        Ok(courses)
+        map
     }
 
     pub async fn get_contents(&self, course_id: &str) -> Result<Vec<ContentItem>, String> {

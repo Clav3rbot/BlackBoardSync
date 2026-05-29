@@ -20,6 +20,7 @@ const MOCK_CONFIG: AppConfig = {
     startAtLogin: false,
     notifications: true,
     syncOnStartup: false,
+    language: 'it',
 };
 
 const MOCK_COURSES = [
@@ -41,6 +42,8 @@ window.api = {
     autoLogin: async () => ({ success: true, user: { id: '1', userName: 'mario.rossi', name: { given: 'Mario', family: 'Rossi' } } }),
     logout: async () => ({ success: true }),
     getCourses: async () => ({ success: true, courses: MOCK_COURSES }),
+    getInstructors: async () => ({}),
+    getCachedInstructors: async () => ({}),
     sync: async () => ({ success: true }),
     abortSync: async () => ({ success: true }),
     getConfig: async () => ({ ...config }),

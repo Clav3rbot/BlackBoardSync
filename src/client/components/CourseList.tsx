@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { getT } from '../i18n';
 
 interface Course {
     id: string;
@@ -9,6 +10,7 @@ interface Course {
 }
 
 interface CourseListProps {
+    lang: 'it' | 'en';
     courses: Course[];
     enabledCourses: string[];
     courseAliases: Record<string, string>;
@@ -16,6 +18,8 @@ interface CourseListProps {
     hiddenCourses: string[];
     hiddenTerms: string[];
     loading: boolean;
+    loadingInstructors?: boolean;
+    cacheMisses?: Set<string>;
     onToggle: (courseId: string) => void;
     onRename: (courseId: string, newName: string) => void;
     onCollapsedTermsChange: (collapsed: string[]) => void;
@@ -32,6 +36,7 @@ interface TermGroup {
 }
 
 const CourseList: React.FC<CourseListProps> = ({
+    lang,
     courses,
     enabledCourses,
     courseAliases,
@@ -39,6 +44,8 @@ const CourseList: React.FC<CourseListProps> = ({
     hiddenCourses,
     hiddenTerms,
     loading,
+    loadingInstructors,
+    cacheMisses,
     onToggle,
     onRename,
     onCollapsedTermsChange,
@@ -47,6 +54,7 @@ const CourseList: React.FC<CourseListProps> = ({
     onHideTerm,
     onUnhideTerm,
 }) => {
+    const t = getT(lang);
     const allEnabled = enabledCourses.length === 0;
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
@@ -104,11 +112,11 @@ const CourseList: React.FC<CourseListProps> = ({
         const result = [...semesterGroups, ...otherGroups];
 
         if (noTerm.length > 0) {
-            result.push({ termId: '__none__', termName: 'Altro', courses: noTerm });
+            result.push({ termId: '__none__', termName: t('termOther'), courses: noTerm });
         }
 
         return result;
-    }, [courses]);
+    }, [courses, lang]);
 
     const visibleTermGroups = useMemo(
         () => termGroups.filter((g) => !hiddenTerms.includes(g.termId)),
@@ -157,11 +165,11 @@ const CourseList: React.FC<CourseListProps> = ({
         return (
             <div className="section course-section">
                 <div className="section-header">
-                    <span className="section-label">Corsi</span>
+                    <span className="section-label">{t('coursesHeader')}</span>
                 </div>
                 <div className="course-list-loading">
                     <div className="spinner-small" />
-                    <span>Caricamento corsi...</span>
+                    <span>{t('loadingCourses')}</span>
                 </div>
             </div>
         );
@@ -171,10 +179,10 @@ const CourseList: React.FC<CourseListProps> = ({
         return (
             <div className="section course-section">
                 <div className="section-header">
-                    <span className="section-label">Corsi</span>
+                    <span className="section-label">{t('coursesHeader')}</span>
                 </div>
                 <div className="course-list-empty">
-                    <p>Nessun corso trovato</p>
+                    <p>{t('coursesEmpty')}</p>
                 </div>
             </div>
         );
@@ -186,10 +194,10 @@ const CourseList: React.FC<CourseListProps> = ({
                 <div className="actions-backdrop" onMouseDown={() => setActionsOpenId(null)} />
             )}
             <div className="section-header">
-                <span className="section-label">Corsi ({courses.length - hiddenCourses.length})</span>
+                <span className="section-label">{t('coursesHeader')} ({courses.length - hiddenCourses.length})</span>
                 {enabledCourses.length > 0 && (
                     <span className="section-badge">
-                        {enabledCourses.length} selezionati
+                        {enabledCourses.length} {t('coursesSelected')}
                     </span>
                 )}
             </div>
@@ -200,7 +208,7 @@ const CourseList: React.FC<CourseListProps> = ({
                         className={`term-pill ${activeTerm === null ? 'active' : ''}`}
                         onClick={() => setActiveTerm(null)}
                     >
-                        Tutti
+                        {t('termFilterAll')}
                     </button>
                     {visibleTermGroups.map((group) => (
                         <span key={group.termId} className={`term-pill-wrap ${activeTerm === group.termId ? 'active' : ''}`}>
@@ -217,7 +225,7 @@ const CourseList: React.FC<CourseListProps> = ({
                             <button
                                 className="term-pill-hide-btn"
                                 onClick={(e) => { e.stopPropagation(); onHideTerm(group.termId); }}
-                                title="Nascondi categoria"
+                                title={t('hideTermTooltip')}
                             >
                                 ×
                             </button>
@@ -228,7 +236,7 @@ const CourseList: React.FC<CourseListProps> = ({
                             <button
                                 className={`term-pill term-pill-hidden-toggle ${showHiddenTermPills ? 'active' : ''}`}
                                 onClick={() => setShowHiddenTermPills((v) => !v)}
-                                title={showHiddenTermPills ? 'Nascondi categorie nascoste' : `Mostra ${hiddenTermGroups.length} categorie nascoste`}
+                                title={showHiddenTermPills ? t('hideHiddenTermsTooltip') : `${t('showHiddenTermsTooltip')} (${hiddenTermGroups.length})`}
                             >
                                 <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0 }}>
                                     <path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7.028 7.028 0 0 0-2.79.588l.77.771A5.944 5.944 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.134 13.134 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755-.165.165-.337.328-.517.486l.708.709z"/>
@@ -243,7 +251,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                     <button
                                         className="term-pill-unhide-x"
                                         onClick={(e) => { e.stopPropagation(); onUnhideTerm(group.termId); }}
-                                        title="Ripristina categoria"
+                                        title={t('restoreTermTooltip')}
                                     >
                                         <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
                                             <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
@@ -292,7 +300,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                         <button
                                             className={`term-hidden-btn ${isRevealed ? 'active' : ''}`}
                                             onClick={(e) => toggleRevealedTerm(group.termId, e)}
-                                            title={isRevealed ? 'Nascondi' : `${hiddenCount} nascosti`}
+                                            title={isRevealed ? t('actionHide') : `${hiddenCount} ${t('hiddenCoursesCount')}`}
                                         >
                                             {isRevealed ? (
                                                 <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
@@ -399,11 +407,16 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                 {displayName}
                                                             </span>
                                                         )}
-                                                        {course.instructor && !isEditing && (
-                                                            <span className="course-instructor">
+                                                        {course.instructor && !isEditing ? (
+                                                            <span className={`course-instructor${cacheMisses?.has(course.id) ? ' fade-in' : ''}`}>
                                                                 {course.instructor}
                                                             </span>
-                                                        )}
+                                                        ) : (loadingInstructors && !isEditing && cacheMisses?.has(course.id)) ? (
+                                                            <div className="course-instructor-skeleton">
+                                                                <span className="skeleton-dot" />
+                                                                <span className="skeleton-bar" />
+                                                            </div>
+                                                        ) : null}
                                                     </div>
                                                     {!isEditing && (
                                                         <div
@@ -413,7 +426,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                             <button
                                                                 className={`course-actions-trigger${actionsOpenId === course.id ? ' active' : ''}`}
                                                                 onClick={(e) => { e.stopPropagation(); setActionsOpenId(actionsOpenId === course.id ? null : course.id); }}
-                                                                title="Azioni"
+                                                                title={t('actionsTooltip')}
                                                             >
                                                                 <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
                                                                     <path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
@@ -428,7 +441,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                         <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
                                                                             <path d="M12.146.146a.5.5 0 01.708 0l3 3a.5.5 0 010 .708l-10 10a.5.5 0 01-.168.11l-5 2a.5.5 0 01-.65-.65l2-5a.5.5 0 01.11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 01.5.5v.5h.5a.5.5 0 01.5.5v.5h.293l6.5-6.5z" />
                                                                         </svg>
-                                                                        Rinomina
+                                                                        {t('actionRename')}
                                                                     </button>
                                                                     <button
                                                                         className="course-actions-popup-item danger"
@@ -439,7 +452,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                             <path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829l.822.822zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829z"/>
                                                                             <path d="M3.35 5.47c-.18.16-.353.322-.518.487A13.134 13.134 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7.029 7.029 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12-.708.708z"/>
                                                                         </svg>
-                                                                        Nascondi
+                                                                        {t('actionHide')}
                                                                     </button>
                                                                 </div>
                                                             )}
@@ -457,14 +470,19 @@ const CourseList: React.FC<CourseListProps> = ({
                                                 <div className="course-row course-hidden">
                                                     <div className="course-info">
                                                         <span className="course-name">{displayName}</span>
-                                                        {course.instructor && (
-                                                            <span className="course-instructor">{course.instructor}</span>
-                                                        )}
+                                                        {course.instructor ? (
+                                                            <span className={`course-instructor${cacheMisses?.has(course.id) ? ' fade-in' : ''}`}>{course.instructor}</span>
+                                                        ) : (loadingInstructors && cacheMisses?.has(course.id)) ? (
+                                                            <div className="course-instructor-skeleton">
+                                                                <span className="skeleton-dot" />
+                                                                <span className="skeleton-bar" />
+                                                            </div>
+                                                        ) : null}
                                                     </div>
                                                     <button
                                                         className="btn-unhide"
                                                         onClick={(e) => { e.stopPropagation(); onUnhide(course.id); }}
-                                                        title="Mostra"
+                                                        title={t('actionUnhide')}
                                                     >
                                                         <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
                                                             <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>

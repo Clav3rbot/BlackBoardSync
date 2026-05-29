@@ -37,6 +37,8 @@ fn main() {
             commands::auto_login,
             commands::logout,
             commands::get_courses,
+            commands::get_instructors,
+            commands::get_cached_instructors,
             commands::sync,
             commands::abort_sync,
             commands::get_config,

@@ -1,0 +1,24 @@
+changelog:
+  exclude:
+    labels:
+      - ignore
+    authors:
+      - dependabot[bot]
+      - github-actions[bot]
+  categories:
+    - title: "🚀 Novità & Miglioramenti"
+      labels:
+        - enhancement
+        - feature
+    - title: "🐛 Correzioni di Bug"
+      labels:
+        - bug
+        - fix
+    - title: "⚡ Performance"
+      labels:
+        - performance
+        - perf
+    - title: "🔧 Manutenzione"
+      labels:
+        - chore
+        - dependencies

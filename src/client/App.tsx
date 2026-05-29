@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import LoginView from './components/LoginView';
 import SyncView from './components/SyncView';
+import { getT } from './i18n';
 
 interface UserInfo {
     id: string;
@@ -12,8 +13,24 @@ const App: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [loggedIn, setLoggedIn] = useState(false);
     const [user, setUser] = useState<UserInfo | null>(null);
+    const [lang, setLang] = useState<'it' | 'en'>(
+        navigator.language.startsWith('it') ? 'it' : 'en'
+    );
+
+    const t = getT(lang);
 
     useEffect(() => {
+        window.api
+            .getConfig()
+            .then((cfg) => {
+                if (cfg && cfg.language) {
+                    setLang(cfg.language as 'it' | 'en');
+                }
+            })
+            .catch((err) => {
+                console.error('Failed to load config language:', err);
+            });
+
         window.api
             .autoLogin()
             .then((result) => {
@@ -80,12 +97,12 @@ const App: React.FC = () => {
                 {loading ? (
                     <div className="loading-screen">
                         <div className="spinner" />
-                        <p>Connessione in corso...</p>
+                        <p>{t('connecting')}</p>
                     </div>
                 ) : loggedIn && user ? (
-                    <SyncView user={user} onLogout={handleLogout} />
+                    <SyncView lang={lang} onLanguageChange={setLang} user={user} onLogout={handleLogout} />
                 ) : (
-                    <LoginView onLogin={handleLogin} />
+                    <LoginView lang={lang} onLogin={handleLogin} />
                 )}
             </div>
         </div>

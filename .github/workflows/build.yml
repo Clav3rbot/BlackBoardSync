@@ -49,6 +49,14 @@ jobs:
         shell: bash
         run: echo "value=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> $GITHUB_OUTPUT
 
+      - name: Get commit message
+        id: commit_info
+        shell: bash
+        run: |
+          echo "commit_msg<<EOF" >> $GITHUB_OUTPUT
+          git log -1 --pretty=%B >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Build and release (tauri-action)
         uses: tauri-apps/tauri-action@v0
         env:
@@ -59,29 +67,10 @@ jobs:
         with:
           tagName: v${{ steps.app_version.outputs.value }}
           releaseName: BlackBoard Sync v${{ steps.app_version.outputs.value }}
+          generateReleaseNotes: true
           releaseBody: |
-            ## Novità in v1.1.1
+            ${{ steps.commit_info.outputs.commit_msg }}
 
-            - **Finestra semitrasparente** — effetto blur-behind nativo: Acrylic su Windows 10, Mica su Windows 11, Vibrancy su macOS.
-            - **Ottimizzazione sincronizzazione** — la fase di scansione ora avviene in parallelo su tutti i corsi; eliminate le chiamate API agli istruttori non necessarie durante la sync (~20 chiamate risparmiate per 10 corsi).
-
-            ## v1.1.0 — Riscrittura completa in Rust + Tauri v2
-
-            Il backend è stato riscritto da zero in **Rust** con **Tauri v2**, abbandonando Electron. Footprint drasticamente ridotto, avvio più veloce, nessuna dipendenza da Node.js a runtime.
-
-            ### Funzionalità nuove
-            - **Login persistente** — credenziali e cookie di sessione salvati nel keyring nativo del sistema operativo (Windows Credential Manager / macOS Keychain). Al riavvio l'accesso avviene automaticamente senza reinserire la password.
-            - **Riavvio istantaneo** — al riavvio l'app verifica la sessione con una singola chiamata API invece di rieseguire l'intero flusso SAML, rendendo il login praticamente immediato.
-            - **Installer nativo** — setup `.exe` NSIS per Windows, `.dmg` per macOS.
-            - **Aggiornamenti firmati** — aggiornamenti automatici verificati crittograficamente con chiavi Ed25519.
-
-            ### Installazione su macOS
-            Al primo avvio potrebbe comparire un avviso di Gatekeeper. Per avviare l'app:
-            ```
-            xattr -cr /Applications/BlackBoard\ Sync.app
-            ```
-
-            ---
             _Questa app non è affiliata all'Università Bocconi._
           releaseDraft: false
           prerelease: false
