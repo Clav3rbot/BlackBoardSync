@@ -257,13 +257,15 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                 className={`btn-update ${checkingUpdate ? 'checking' : ''}`}
                                 onClick={handleCheckForUpdates}
                                 disabled={checkingUpdate}
+                                aria-label="Controlla aggiornamenti"
+                                title="Controlla aggiornamenti"
                             >
                                 {checkingUpdate ? (
                                     <span className="spinner-small" />
                                 ) : (
                                     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                        <path d="M11.534 7h3.932a.25.25 0 01.192.41l-1.966 2.36a.25.25 0 01-.384 0l-1.966-2.36a.25.25 0 01.192-.41zm-11 2h3.932a.25.25 0 00.192-.41L2.692 6.23a.25.25 0 00-.384 0L.342 8.59A.25.25 0 00.534 9z" />
-                                        <path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 11-.771-.636A5.501 5.501 0 0113.5 7.5a.5.5 0 01-1 0A4.5 4.5 0 008 3zM3.5 9.5a.5.5 0 01.5-.5 4.5 4.5 0 004.5 4.5c1.552 0 2.94-.707 3.857-1.818a.5.5 0 11.771.636A5.501 5.501 0 012.5 9.5a.5.5 0 01.5-.5z" />
+                                        <path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
+                                        <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
                                     </svg>
                                 )}
                             </button>

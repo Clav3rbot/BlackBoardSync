@@ -92,6 +92,8 @@ declare global {
             autoLogin: () => Promise<ApiResult>;
             logout: () => Promise<ApiResult>;
             getCourses: () => Promise<ApiResult>;
+            getInstructors: (courseIds: string[]) => Promise<Record<string, string>>;
+            getCachedInstructors: () => Promise<Record<string, string>>;
             sync: () => Promise<ApiResult>;
             abortSync: () => Promise<ApiResult>;
             getConfig: () => Promise<AppConfig>;

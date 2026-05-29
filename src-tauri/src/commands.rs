@@ -4,6 +4,7 @@ use crate::login::LoginManager;
 use crate::state::{AppState, Session};
 use crate::tray;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Manager, State};
 
@@ -217,6 +218,37 @@ pub async fn get_courses(state: State<'_, AppState>) -> Result<CoursesResponse, 
         },
         Err(e) => Ok(CoursesResponse { success: false, courses: None, error: Some(e) }),
     }
+}
+
+#[tauri::command]
+pub async fn get_cached_instructors(
+    state: State<'_, AppState>,
+) -> Result<HashMap<String, String>, String> {
+    Ok(state.store.lock().unwrap().load_instructors_cache())
+}
+
+#[tauri::command]
+pub async fn get_instructors(
+    state: State<'_, AppState>,
+    course_ids: Vec<String>,
+) -> Result<HashMap<String, String>, String> {
+    let session = state.session.lock().unwrap().clone();
+    let Some(session) = session else {
+        return Ok(HashMap::new());
+    };
+    let api = BlackboardAPI::new(&session.cookies);
+    let fresh = api.get_instructors(&course_ids).await;
+
+    // Update the disk cache with fresh data
+    if !fresh.is_empty() {
+        let mut cached = state.store.lock().unwrap().load_instructors_cache();
+        for (k, v) in &fresh {
+            cached.insert(k.clone(), v.clone());
+        }
+        state.store.lock().unwrap().save_instructors_cache(&cached);
+    }
+
+    Ok(fresh)
 }
 
 #[tauri::command]

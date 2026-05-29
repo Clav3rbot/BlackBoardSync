@@ -52,6 +52,7 @@ impl Default for AppConfig {
 pub struct AppStore {
     config_path: PathBuf,
     config: AppConfig,
+    data_dir: PathBuf,
 }
 
 impl AppStore {
@@ -62,7 +63,7 @@ impl AppStore {
         let config_path = data_dir.join("config.json");
 
         let config = Self::load_config_from(&config_path);
-        Self { config_path, config }
+        Self { config_path, config, data_dir }
     }
 
     fn load_config_from(path: &PathBuf) -> AppConfig {
@@ -155,5 +156,21 @@ impl AppStore {
         if let Ok(entry) = keyring::Entry::new("blackboard-sync", "session") {
             let _ = entry.delete_credential();
         }
+    }
+
+    pub fn save_instructors_cache(&self, map: &HashMap<String, String>) {
+        let path = self.data_dir.join("instructors_cache.json");
+        let _ = std::fs::create_dir_all(&self.data_dir);
+        if let Ok(json) = serde_json::to_string(map) {
+            let _ = std::fs::write(path, json);
+        }
+    }
+
+    pub fn load_instructors_cache(&self) -> HashMap<String, String> {
+        let path = self.data_dir.join("instructors_cache.json");
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
     }
 }

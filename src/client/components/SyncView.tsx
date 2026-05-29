@@ -63,6 +63,7 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [coursesError, setCoursesError] = useState(false);
     const [updateReady, setUpdateReady] = useState<{ releaseName: string } | null>(null);
+    const [progressVisible, setProgressVisible] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -97,6 +98,19 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         };
     }, []);
 
+    // Grace delay: don't flash the progress bar on the very first frame of a
+    // sync (feels abrupt, esp. on startup auto-sync). Show it after 250ms so it
+    // fades in deliberately; hide immediately when the sync ends.
+    useEffect(() => {
+        const active = syncing || progress?.phase === 'error';
+        if (!active) {
+            setProgressVisible(false);
+            return;
+        }
+        const t = window.setTimeout(() => setProgressVisible(true), 250);
+        return () => window.clearTimeout(t);
+    }, [syncing, progress]);
+
     const loadData = async () => {
         await Promise.all([loadCourses(), loadConfig()]);
     };
@@ -107,7 +121,12 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         try {
             const result = await window.api.getCourses();
             if (result.success && result.courses) {
-                setCourses(result.courses);
+                const list = result.courses;
+                // Show the list as soon as we have courses + terms (fast).
+                setCourses(list);
+                // Instructor names are the slow part — fetch them after and
+                // merge them in progressively, so the list isn't blocked on them.
+                loadInstructors(list.map((c) => c.id));
             } else {
                 setCoursesError(true);
             }
@@ -116,6 +135,34 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
             setCoursesError(true);
         } finally {
             setLoadingCourses(false);
+        }
+    };
+
+    const loadInstructors = async (courseIds: string[]) => {
+        if (courseIds.length === 0) return;
+
+        // Instant: load from disk cache (no HTTP calls)
+        try {
+            const cached = await window.api.getCachedInstructors();
+            if (cached && Object.keys(cached).length > 0) {
+                setCourses((prev) =>
+                    prev.map((c) => (cached[c.id] ? { ...c, instructor: cached[c.id] } : c))
+                );
+            }
+        } catch {
+            /* cache miss is fine */
+        }
+
+        // Background: fetch fresh data and update UI if anything changed
+        try {
+            const fresh = await window.api.getInstructors(courseIds);
+            if (fresh && Object.keys(fresh).length > 0) {
+                setCourses((prev) =>
+                    prev.map((c) => (fresh[c.id] ? { ...c, instructor: fresh[c.id] } : c))
+                );
+            }
+        } catch {
+            /* instructors are best-effort; ignore failures */
         }
     };
 
@@ -228,6 +275,25 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
         );
     }
 
+    const isSyncError = progress?.phase === 'error';
+    const showProgress = (syncing || isSyncError) && progressVisible;
+    const hasTotal = !!progress && progress.total > 0;
+    const indeterminate = (syncing || isSyncError) && !isSyncError && !hasTotal;
+    const progressPct = isSyncError ? 100 : hasTotal ? (progress!.current / progress!.total) * 100 : 0;
+
+    let phaseText = '';
+    if (isSyncError) {
+        phaseText = `Errore: ${progress?.error ?? 'sincronizzazione non riuscita'}`;
+    } else if (!progress) {
+        phaseText = 'Connessione a Blackboard';
+    } else if (progress.phase === 'scanning') {
+        phaseText = progress.total > 0
+            ? `Scansione corsi (${progress.current}/${progress.total})`
+            : 'Scansione corsi';
+    } else if (progress.phase === 'downloading') {
+        phaseText = `${progress.currentFile || 'Download in corso'} (${progress.current}/${progress.total})`;
+    }
+
     return (
         <div className="sync-view">
             <Header
@@ -243,25 +309,26 @@ const SyncView: React.FC<SyncViewProps> = ({ user, onLogout }) => {
                 onChangeFolder={handleChangeFolder}
             />
 
-            {(syncing || progress?.phase === 'error') && progress && (
-                <div className="sync-progress">
-                    <div className="progress-bar">
+            {showProgress && (
+                <div className={`sync-progress ${isSyncError ? 'error' : ''}`}>
+                    <div className={`progress-bar ${isSyncError ? 'error' : ''}`}>
+                        {/* Determinate fill: always anchored left, grows 0 -> pct.
+                            Stays at 0 while connecting, so when scanning starts it
+                            grows forward with no snap-back. */}
                         <div
                             className="progress-fill"
-                            style={{
-                                width:
-                                    progress.total > 0
-                                        ? `${(progress.current / progress.total) * 100}%`
-                                        : '0%',
-                            }}
+                            style={{ width: `${progressPct}%` }}
+                        />
+                        {/* Indeterminate overlay: a sliding segment for the
+                            "connecting" phase. Fades out (doesn't teleport) once a
+                            real total arrives, masking the hand-off. */}
+                        <div
+                            className={`progress-indeterminate ${indeterminate ? 'visible' : ''}`}
+                            aria-hidden="true"
                         />
                     </div>
-                    <p className="progress-text">
-                        {progress.phase === 'scanning' &&
-                            `Scansione corsi... (${progress.current}/${progress.total})`}
-                        {progress.phase === 'downloading' &&
-                            `Download: ${progress.currentFile} (${progress.current}/${progress.total})`}
-                        {progress.phase === 'error' && `Errore: ${progress.error}`}
+                    <p className="progress-text" aria-live="polite">
+                        <span className="progress-text-label">{phaseText}</span>
                     </p>
                 </div>
             )}
