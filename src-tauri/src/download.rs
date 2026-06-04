@@ -1,4 +1,5 @@
 use crate::blackboard::{BlackboardAPI, ContentItem, Course};
+use crate::login::LoginManager;
 use crate::state::{AppState, Session};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -128,6 +129,13 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
     let abort_flag = Arc::clone(&state.abort_flag);
     let start = std::time::Instant::now();
 
+    // The stored session cookie can expire between launch and sync. When it
+    // does, Blackboard answers API calls with an HTML SAML login page instead
+    // of JSON, and reqwest surfaces that as "error decoding response body".
+    // Validate the session first and silently re-authenticate with the stored
+    // credentials if it has lapsed, so a routine sync doesn't fail with a
+    // cryptic decode error.
+    let session = ensure_valid_session(app, session).await?;
     let api = BlackboardAPI::new(&session.cookies);
     let user = api.get_current_user().await?;
     let all_courses = api.get_courses_for_sync(&user.id).await?;
@@ -312,6 +320,46 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
         courses: course_map.into_values().collect(),
         duration: start.elapsed().as_secs(),
     })
+}
+
+/// Ensure the session cookies still authenticate. If a quick `/users/me`
+/// probe fails (expired cookie → HTML login page → JSON decode error), try a
+/// full SAML re-auth with the stored credentials, persist the refreshed
+/// session, and return it. Errors only if no credentials are stored or the
+/// re-auth itself fails, in which case the user must log in again.
+async fn ensure_valid_session(app: &AppHandle, session: &Session) -> Result<Session, String> {
+    let probe = BlackboardAPI::new(&session.cookies);
+    if probe.get_current_user().await.is_ok() {
+        return Ok(session.clone());
+    }
+
+    let state = app.state::<AppState>();
+    let creds = state.store.lock().unwrap().load_credentials();
+    let Some((username, password)) = creds else {
+        return Err("Sessione scaduta. Rieffettua il login.".to_string());
+    };
+
+    let mut manager = LoginManager::new();
+    let result = manager.login(&username, &password).await;
+    if !result.success {
+        return Err(result
+            .error
+            .unwrap_or_else(|| "Sessione scaduta. Rieffettua il login.".to_string()));
+    }
+
+    let cookies = result.cookies;
+    let refreshed = BlackboardAPI::new(&cookies);
+    if refreshed.get_current_user().await.is_err() {
+        return Err("Sessione scaduta. Rieffettua il login.".to_string());
+    }
+
+    {
+        let mut s = state.session.lock().unwrap();
+        *s = Some(Session { cookies: cookies.clone() });
+    }
+    state.store.lock().unwrap().save_session(&cookies);
+
+    Ok(Session { cookies })
 }
 
 async fn scan_course(
