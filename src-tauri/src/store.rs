@@ -10,6 +10,7 @@ pub struct AppConfig {
     pub auto_sync: bool,
     pub auto_sync_interval: i64,
     pub auto_sync_scheduled_time: String,
+    pub sync_all_courses: bool,
     pub enabled_courses: Vec<String>,
     pub course_aliases: HashMap<String, String>,
     pub collapsed_terms: Vec<String>,
@@ -36,6 +37,7 @@ impl Default for AppConfig {
             auto_sync: false,
             auto_sync_interval: 30,
             auto_sync_scheduled_time: "00:00".to_string(),
+            sync_all_courses: true,
             enabled_courses: vec![],
             course_aliases: HashMap::new(),
             collapsed_terms: vec![],
@@ -79,7 +81,15 @@ impl AppStore {
                     for (k, v) in parsed_obj {
                         merged.insert(k.clone(), v.clone());
                     }
-                    if let Ok(config) = serde_json::from_value(serde_json::Value::Object(merged)) {
+                    let had_sync_all = parsed_obj.contains_key("syncAllCourses");
+                    if let Ok(mut config) =
+                        serde_json::from_value::<AppConfig>(serde_json::Value::Object(merged))
+                    {
+                        // Migrate pre-existing configs that predate the sync_all_courses
+                        // flag: empty enabled list used to mean "sync everything".
+                        if !had_sync_all {
+                            config.sync_all_courses = config.enabled_courses.is_empty();
+                        }
                         return config;
                     }
                 }

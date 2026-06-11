@@ -17,6 +17,7 @@ interface AppConfig {
     autoSync: boolean;
     autoSyncInterval: number;
     autoSyncScheduledTime: string;
+    syncAllCourses: boolean;
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     collapsedTerms: string[];
@@ -215,13 +216,32 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
 
     const handleToggleCourse = async (courseId: string) => {
         if (!config) return;
-        let enabled = [...config.enabledCourses];
-        if (enabled.includes(courseId)) {
-            enabled = enabled.filter((id) => id !== courseId);
+        const hidden = config.hiddenCourses || [];
+        const visibleIds = courses.filter((c) => !hidden.includes(c.id)).map((c) => c.id);
+
+        let enabled: string[];
+        if (config.syncAllCourses) {
+            // Leaving "sync all" mode: materialise the explicit list as every
+            // visible course minus the one just unchecked.
+            enabled = visibleIds.filter((id) => id !== courseId);
         } else {
-            enabled.push(courseId);
+            enabled = [...config.enabledCourses];
+            if (enabled.includes(courseId)) {
+                enabled = enabled.filter((id) => id !== courseId);
+            } else {
+                enabled.push(courseId);
+            }
         }
-        const newConfig = await window.api.updateConfig({ enabledCourses: enabled });
+
+        // Re-checking every visible course collapses back to "sync all" so newly
+        // appearing courses keep syncing automatically.
+        const syncAll =
+            visibleIds.length > 0 && visibleIds.every((id) => enabled.includes(id));
+
+        const newConfig = await window.api.updateConfig({
+            syncAllCourses: syncAll,
+            enabledCourses: syncAll ? [] : enabled,
+        });
         setConfig(newConfig);
     };
 
@@ -246,7 +266,13 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
         if (!config) return;
         const hidden = [...(config.hiddenCourses || [])];
         if (!hidden.includes(courseId)) hidden.push(courseId);
-        const newConfig = await window.api.updateConfig({ hiddenCourses: hidden });
+        // Hiding a course also removes it from the sync selection so it is never
+        // synced while hidden.
+        const enabled = (config.enabledCourses || []).filter((id) => id !== courseId);
+        const newConfig = await window.api.updateConfig({
+            hiddenCourses: hidden,
+            enabledCourses: enabled,
+        });
         setConfig(newConfig);
     };
 
@@ -381,6 +407,7 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
             <CourseList
                 lang={lang}
                 courses={courses}
+                syncAll={config.syncAllCourses}
                 enabledCourses={config.enabledCourses}
                 courseAliases={config.courseAliases}
                 collapsedTerms={config.collapsedTerms || []}

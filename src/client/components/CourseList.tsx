@@ -12,6 +12,7 @@ interface Course {
 interface CourseListProps {
     lang: 'it' | 'en';
     courses: Course[];
+    syncAll: boolean;
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     collapsedTerms: string[];
@@ -38,6 +39,7 @@ interface TermGroup {
 const CourseList: React.FC<CourseListProps> = ({
     lang,
     courses,
+    syncAll,
     enabledCourses,
     courseAliases,
     collapsedTerms: savedCollapsedTerms,
@@ -55,7 +57,7 @@ const CourseList: React.FC<CourseListProps> = ({
     onUnhideTerm,
 }) => {
     const t = getT(lang);
-    const allEnabled = enabledCourses.length === 0;
+    const allEnabled = syncAll;
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editValue, setEditValue] = useState('');
     const [activeTerm, setActiveTerm] = useState<string | null>(null);
@@ -195,7 +197,7 @@ const CourseList: React.FC<CourseListProps> = ({
             )}
             <div className="section-header">
                 <span className="section-label">{t('coursesHeader')} ({courses.length - hiddenCourses.length})</span>
-                {enabledCourses.length > 0 && (
+                {!allEnabled && (
                     <span className="section-badge">
                         {enabledCourses.length} {t('coursesSelected')}
                     </span>

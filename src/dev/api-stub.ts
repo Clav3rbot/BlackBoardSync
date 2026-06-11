@@ -10,6 +10,7 @@ const MOCK_CONFIG: AppConfig = {
     autoSync: true,
     autoSyncInterval: 60,
     autoSyncScheduledTime: '00:00',
+    syncAllCourses: true,
     enabledCourses: [],
     courseAliases: { '_course3': 'Corporate Finance (Rinominato)' },
     collapsedTerms: [],

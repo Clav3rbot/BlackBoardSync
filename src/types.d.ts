@@ -39,6 +39,7 @@ export interface AppConfig {
     autoSync: boolean;
     autoSyncInterval: number;
     autoSyncScheduledTime: string;
+    syncAllCourses: boolean;
     enabledCourses: string[];
     courseAliases: Record<string, string>;
     collapsedTerms: string[];

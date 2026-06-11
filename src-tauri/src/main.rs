@@ -53,9 +53,50 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "windows")]
                 {
-                    // Mica on Win11 (smooth), Blur on Win10 (Acrylic lags during drag)
-                    if window_vibrancy::apply_mica(&window, Some(true)).is_err() {
-                        let _ = window_vibrancy::apply_blur(&window, Some((10, 14, 20, 200)));
+                    use windows_sys::Win32::Graphics::Dwm::{
+                        DwmSetWindowAttribute, DWMWA_BORDER_COLOR, DWMWA_COLOR_NONE,
+                        DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND,
+                    };
+
+                    if let Ok(hwnd) = window.hwnd() {
+                        let hwnd = hwnd.0 as windows_sys::Win32::Foundation::HWND;
+
+                        // Rounded corners (Win11+, silently ignored on Win10). Unlike
+                        // DwmExtendFrameIntoClientArea this draws no frame, so the
+                        // frameless window stays free of the gray DWM border and the
+                        // native caption buttons that the sheet-of-glass trick
+                        // surfaced under the custom titlebar.
+                        let corner = DWMWCP_ROUND;
+                        // Win11 paints a subtle gray border around every
+                        // top-level window; COLOR_NONE removes it.
+                        let border = DWMWA_COLOR_NONE;
+                        unsafe {
+                            let _ = DwmSetWindowAttribute(
+                                hwnd,
+                                DWMWA_WINDOW_CORNER_PREFERENCE as u32,
+                                &corner as *const _ as *const _,
+                                std::mem::size_of::<u32>() as u32,
+                            );
+                            let _ = DwmSetWindowAttribute(
+                                hwnd,
+                                DWMWA_BORDER_COLOR as u32,
+                                &border as *const _ as *const _,
+                                std::mem::size_of::<u32>() as u32,
+                            );
+                        }
+
+                        // Win11 broke the legacy BLURBEHIND accent — it composites as
+                        // plain transparency with no gaussian blur — and the modern DWM
+                        // backdrops (Mica / DWMSBT_*) need the frame extension above,
+                        // with its border + caption-button artifacts. The acrylic
+                        // *accent* goes through the same SetWindowCompositionAttribute
+                        // path as BLURBEHIND (paints fine on a frameless window, no
+                        // frame artifacts) and still blurs on Win11, giving the
+                        // Win10-style glass. Win10 keeps BLURBEHIND untouched.
+                        let win11 = windows_build_number() >= 22000;
+                        if !(win11 && apply_accent_acrylic(hwnd, (10, 14, 20, 160))) {
+                            let _ = window_vibrancy::apply_blur(&window, Some((10, 14, 20, 160)));
+                        }
                     }
                 }
                 #[cfg(target_os = "macos")]
@@ -65,6 +106,30 @@ fn main() {
                     None,
                     None,
                 );
+
+                // First launch only — before tauri-plugin-window-state has ever
+                // saved a state file — force the default 480x780 logical size
+                // (same as the reset_window_size command), clamped to the
+                // monitor work area so it isn't cut off on small scaled screens
+                // (a 1080p notebook at 150% has only ~690 logical px of height).
+                // On every later launch the plugin restores whatever size the
+                // user chose, until they press reset.
+                let first_run = app
+                    .path()
+                    .app_config_dir()
+                    .map(|dir| !dir.join(tauri_plugin_window_state::DEFAULT_FILENAME).exists())
+                    .unwrap_or(false);
+                if first_run {
+                    let scale = window.scale_factor().unwrap_or(1.0);
+                    let (mut width, mut height) = (480.0_f64, 780.0_f64);
+                    if let Ok(Some(monitor)) = window.current_monitor() {
+                        let work = monitor.work_area();
+                        width = width.min(work.size.width as f64 / scale - 16.0);
+                        height = height.min(work.size.height as f64 / scale - 16.0);
+                    }
+                    let _ = window.set_size(tauri::LogicalSize::new(width, height));
+                    let _ = window.center();
+                }
             }
 
             let state = app.state::<AppState>();
@@ -139,4 +204,104 @@ fn main() {
                 }
             }
         });
+}
+
+/// Windows build number via RtlGetVersion (ntdll), which reports the real OS
+/// version regardless of the application manifest — GetVersionExW lies about
+/// Win10/11 without a supportedOS manifest entry. Returns 0 on failure.
+#[cfg(target_os = "windows")]
+fn windows_build_number() -> u32 {
+    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+
+    #[repr(C)]
+    #[allow(non_snake_case)]
+    struct OSVERSIONINFOW {
+        dwOSVersionInfoSize: u32,
+        dwMajorVersion: u32,
+        dwMinorVersion: u32,
+        dwBuildNumber: u32,
+        dwPlatformId: u32,
+        szCSDVersion: [u16; 128],
+    }
+
+    unsafe {
+        let ntdll: Vec<u16> = "ntdll.dll".encode_utf16().chain(std::iter::once(0)).collect();
+        let module = GetModuleHandleW(ntdll.as_ptr());
+        if module.is_null() {
+            return 0;
+        }
+        let Some(proc) = GetProcAddress(module, b"RtlGetVersion\0".as_ptr()) else {
+            return 0;
+        };
+        let rtl_get_version: unsafe extern "system" fn(*mut OSVERSIONINFOW) -> i32 =
+            std::mem::transmute(proc);
+        let mut info: OSVERSIONINFOW = std::mem::zeroed();
+        info.dwOSVersionInfoSize = std::mem::size_of::<OSVERSIONINFOW>() as u32;
+        if rtl_get_version(&mut info) == 0 {
+            info.dwBuildNumber
+        } else {
+            0
+        }
+    }
+}
+
+/// ACCENT_ENABLE_ACRYLICBLURBEHIND via the undocumented
+/// SetWindowCompositionAttribute — the only acrylic that paints on a frameless
+/// window without DwmExtendFrameIntoClientArea (whose extended frame drags in
+/// a gray border + native caption buttons). Color is RGBA tint over the blur.
+#[cfg(target_os = "windows")]
+fn apply_accent_acrylic(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    (r, g, b, a): (u8, u8, u8, u8),
+) -> bool {
+    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+
+    #[repr(C)]
+    struct AccentPolicy {
+        accent_state: u32,
+        accent_flags: u32,
+        gradient_color: u32, // AABBGGRR
+        animation_id: u32,
+    }
+    #[repr(C)]
+    struct WindowCompositionAttribData {
+        attrib: u32,
+        pv_data: *mut core::ffi::c_void,
+        cb_data: usize,
+    }
+    const ACCENT_ENABLE_ACRYLICBLURBEHIND: u32 = 4;
+    const WCA_ACCENT_POLICY: u32 = 19;
+
+    unsafe {
+        let user32: Vec<u16> = "user32.dll".encode_utf16().chain(std::iter::once(0)).collect();
+        let module = GetModuleHandleW(user32.as_ptr());
+        if module.is_null() {
+            return false;
+        }
+        let Some(proc) = GetProcAddress(module, b"SetWindowCompositionAttribute\0".as_ptr())
+        else {
+            return false;
+        };
+        let set_window_composition_attribute: unsafe extern "system" fn(
+            windows_sys::Win32::Foundation::HWND,
+            *mut WindowCompositionAttribData,
+        )
+            -> windows_sys::Win32::Foundation::BOOL = std::mem::transmute(proc);
+
+        let mut policy = AccentPolicy {
+            accent_state: ACCENT_ENABLE_ACRYLICBLURBEHIND,
+            accent_flags: 2,
+            gradient_color: (r as u32)
+                | ((g as u32) << 8)
+                | ((b as u32) << 16)
+                | ((a as u32) << 24),
+            animation_id: 0,
+        };
+        let mut data = WindowCompositionAttribData {
+            attrib: WCA_ACCENT_POLICY,
+            pv_data: &mut policy as *mut _ as *mut _,
+            cb_data: std::mem::size_of::<AccentPolicy>(),
+        };
+        set_window_composition_attribute(hwnd, &mut data) != 0
+    }
 }

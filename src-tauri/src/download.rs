@@ -141,12 +141,12 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
     let all_courses = api.get_courses_for_sync(&user.id).await?;
 
     // Filter courses
-    let mut courses: Vec<Course> = if !config.enabled_courses.is_empty() {
+    let mut courses: Vec<Course> = if config.sync_all_courses {
+        all_courses
+    } else {
         all_courses.into_iter()
             .filter(|c| config.enabled_courses.contains(&c.id))
             .collect()
-    } else {
-        all_courses
     };
     if !config.hidden_courses.is_empty() {
         courses.retain(|c| !config.hidden_courses.contains(&c.id));
