@@ -49,6 +49,10 @@ pub struct ContentItem {
     pub title: String,
     pub has_children: Option<bool>,
     pub content_handler: Option<serde_json::Value>,
+    // Ultra courses keep a document's files as links inside this HTML body
+    // instead of as REST attachments. Present in the /contents and /children
+    // listings, so reading it costs no extra request.
+    pub body: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -337,6 +341,24 @@ impl BlackboardAPI {
             .map_err(|e| e.to_string())?;
 
         Ok(serde_json::from_value(data["results"].take()).unwrap_or_default())
+    }
+
+    /// Download from an absolute URL. Ultra document bodies carry signed
+    /// bbcswebdav links that the attachment endpoint knows nothing about;
+    /// the session cookies on this client are what authorises them.
+    pub async fn download_url(&self, url: &str) -> Result<Vec<u8>, String> {
+        let response = self.client
+            .get(url)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let status = response.status();
+        if !status.is_success() {
+            return Err(format!("HTTP {}", status));
+        }
+
+        Ok(response.bytes().await.map_err(|e| e.to_string())?.to_vec())
     }
 
     pub async fn download_file(

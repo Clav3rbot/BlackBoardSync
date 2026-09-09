@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Icon from './components/Icon';
 import LoginView from './components/LoginView';
 import SyncView from './components/SyncView';
 import { getT } from './i18n';
@@ -73,22 +74,14 @@ const App: React.FC = () => {
                         onClick={() => window.api.minimize()}
                         aria-label="Minimize"
                     >
-                        <svg width="10" height="1" viewBox="0 0 10 1">
-                            <rect width="10" height="1" fill="currentColor" />
-                        </svg>
+                        <Icon name="minimize" size={13} weight="regular" />
                     </button>
                     <button
                         className="titlebar-btn close"
                         onClick={() => window.api.close()}
                         aria-label="Close"
                     >
-                        <svg width="10" height="10" viewBox="0 0 10 10">
-                            <path
-                                d="M1 1L9 9M9 1L1 9"
-                                stroke="currentColor"
-                                strokeWidth="1.2"
-                            />
-                        </svg>
+                        <Icon name="close" size={13} weight="regular" />
                     </button>
                 </div>
             </div>

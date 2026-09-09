@@ -51,7 +51,7 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 ## Screenshot
 
 <p align="center">
-  <img src="https://i.imgur.com/Kr3nEac.png" alt="BlackBoard Sync" width="600" />
+  <img src="static/screenshot.png" alt="BlackBoard Sync" width="420" />
 </p>
 
 ## Installazione

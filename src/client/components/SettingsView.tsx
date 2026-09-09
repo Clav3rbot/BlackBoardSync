@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import Icon from './Icon';
 import { getT } from '../i18n';
 
 interface AppConfig {
@@ -34,6 +35,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
     const [updateStatus, setUpdateStatus] = useState<string>('');
     const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
     const [localTime, setLocalTime] = useState(config.autoSyncScheduledTime);
+    const [closing, setClosing] = useState(false);
 
     useEffect(() => {
         window.api.getAppVersion().then(setAppVersion).catch(() => {});
@@ -102,14 +104,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
     };
 
     return (
-        <div className="settings-overlay" onClick={onClose}>
-            <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+        <div className={`settings-overlay ${closing ? 'closing' : ''}`} onClick={() => setClosing(true)}>
+            <div
+                className="settings-panel"
+                onClick={(e) => e.stopPropagation()}
+                onAnimationEnd={(e) => {
+                    if (closing && e.target === e.currentTarget) onClose();
+                }}
+            >
                 <div className="settings-header">
                     <h2 className="settings-title">{t('settingsTitle')}</h2>
-                    <button className="settings-close-btn" onClick={onClose}>
-                        <svg width="14" height="14" viewBox="0 0 10 10">
-                            <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                        </svg>
+                    <button className="settings-close-btn" onClick={() => setClosing(true)}>
+                        <Icon name="close" size={15} weight="regular" />
                     </button>
                 </div>
 
@@ -123,14 +129,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                             </span>
                             <div className="folder-actions">
                                 <button className="btn-icon" onClick={handleOpenFolder} title={t('openFolder')}>
-                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                        <path d="M1.5 2A1.5 1.5 0 000 3.5v9A1.5 1.5 0 001.5 14h13a1.5 1.5 0 001.5-1.5V5a1.5 1.5 0 00-1.5-1.5H7.707l-1.854-1.854A.5.5 0 005.5 1.5H1.5z" />
-                                    </svg>
+                                    <Icon name="folderOpen" size={15} />
                                 </button>
                                 <button className="btn-icon" onClick={handleSelectFolder} title={t('changeFolder')}>
-                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                        <path d="M12.146.146a.5.5 0 01.708 0l3 3a.5.5 0 010 .708l-10 10a.5.5 0 01-.168.11l-5 2a.5.5 0 01-.65-.65l2-5a.5.5 0 01.11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 01.5.5v.5h.5a.5.5 0 01.5.5v.5h.293l6.5-6.5z" />
-                                    </svg>
+                                    <Icon name="pencil" size={14} />
                                 </button>
                             </div>
                         </div>
@@ -270,9 +272,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                 <span className="setting-desc">{t('windowSizeDesc')}</span>
                             </div>
                             <button className="btn-settings-action" onClick={handleResetWindowSize}>
-                                <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-                                    <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 1 0V2.5h3.5a.5.5 0 0 0 0-1h-4zm9 0a.5.5 0 0 0 0 1H14.5v3.5a.5.5 0 0 0 1 0v-4a.5.5 0 0 0-.5-.5h-4zM.5 10a.5.5 0 0 0-.5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 0 0-1H1.5v-3.5A.5.5 0 0 0 .5 10zm13 0a.5.5 0 0 0-.5.5V14h-3.5a.5.5 0 0 0 0 1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 0-.5-.5z"/>
-                                </svg>
+                                <Icon name="resize" size={12} />
                                 {t('reset')}
                             </button>
                         </div>
@@ -300,10 +300,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                 {checkingUpdate ? (
                                     <span className="spinner-small" />
                                 ) : (
-                                    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                                        <path fillRule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z" />
-                                        <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z" />
-                                    </svg>
+                                    <Icon name="download" size={15} />
                                 )}
                             </button>
                         </div>

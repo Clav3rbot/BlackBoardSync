@@ -9,5 +9,11 @@
         "shadow": false
       }
     ]
+  },
+  "bundle": {
+    "targets": [
+      "app",
+      "dmg"
+    ]
   }
 }

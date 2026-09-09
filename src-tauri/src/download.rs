@@ -17,6 +17,9 @@ struct FileToDownload {
     attachment_id: String,
     file_name: String,
     relative_path: String,
+    // Set for Ultra document files, which are signed bbcswebdav links in the
+    // item body rather than REST attachments. None means the attachment path.
+    url: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -196,6 +199,9 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
         }
     }
 
+    let mut seen_paths: HashSet<String> = HashSet::new();
+    all_files.retain(|f| seen_paths.insert(f.relative_path.clone()));
+
     let sync_dir = PathBuf::from(&config.sync_dir);
     // Resolve the base once; re-canonicalizing per file is a wasted syscall.
     let canon_base = sync_dir.canonicalize().ok();
@@ -258,8 +264,16 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
                 };
                 let file = match file { Some(f) => f, None => break };
 
-                match api.download_file(&file.course_id, &file.content_id, &file.attachment_id).await {
-                    Ok((data, _)) => {
+                let fetched = match &file.url {
+                    Some(url) => api.download_url(url).await,
+                    None => api
+                        .download_file(&file.course_id, &file.content_id, &file.attachment_id)
+                        .await
+                        .map(|(data, _)| data),
+                };
+
+                match fetched {
+                    Ok(data) => {
                         if abort.load(Ordering::SeqCst) { break; }
 
                         let full_path = sync_dir.join(&file.relative_path);
@@ -410,6 +424,25 @@ async fn scan_course(
                             attachment_id: att.id.clone(),
                             file_name: att.file_name.clone(),
                             relative_path: rel.to_string_lossy().into_owned(),
+                            url: None,
+                        });
+                    }
+                }
+
+                // Ultra courses answer /attachments with 400 and put the files
+                // in the document body instead, so the same item can yield
+                // files through either route.
+                if let Some(body) = item.body.as_deref() {
+                    for (name, url) in extract_ultra_files(body) {
+                        let rel = PathBuf::from(&path).join(sanitize_path(&name));
+                        item_files.push(FileToDownload {
+                            course_id: course_id.clone(),
+                            course_name: course_name.clone(),
+                            content_id: item.id.clone(),
+                            attachment_id: String::new(),
+                            file_name: name,
+                            relative_path: rel.to_string_lossy().into_owned(),
+                            url: Some(url),
                         });
                     }
                 }
@@ -438,6 +471,95 @@ async fn scan_course(
                 stack.push((children, folder, depth + 1));
             }
         }
+    }
+
+    files
+}
+
+const HTML_ENTITIES: &[(&str, char)] = &[
+    ("&quot;", '"'),
+    ("&amp;", '&'),
+    ("&lt;", '<'),
+    ("&gt;", '>'),
+    ("&#39;", '\''),
+    ("&apos;", '\''),
+    ("&#x27;", '\''),
+    ("&nbsp;", ' '),
+];
+
+/// Single left-to-right pass, so a decoded `&amp;` is never re-read as the
+/// start of another entity.
+fn html_unescape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    loop {
+        match rest.find('&') {
+            None => {
+                out.push_str(rest);
+                return out;
+            }
+            Some(i) => {
+                out.push_str(&rest[..i]);
+                let tail = &rest[i..];
+                match HTML_ENTITIES.iter().find(|(e, _)| tail.starts_with(e)) {
+                    Some((e, c)) => {
+                        out.push(*c);
+                        rest = &tail[e.len()..];
+                    }
+                    None => {
+                        out.push('&');
+                        rest = &tail[1..];
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn attr_value<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let pattern = format!("{}=\"", name);
+    let start = tag.find(&pattern)? + pattern.len();
+    let len = tag[start..].find('"')?;
+    Some(&tag[start..start + len])
+}
+
+/// Pull downloadable files out of an Ultra document body. Each file is an
+/// anchor or image carrying a `data-bbfile` attribute whose value is
+/// HTML-escaped JSON, so URLs inside it come out clean once the attribute is
+/// unescaped; the tag's own href is still raw HTML and needs its own pass.
+/// `resourceUrl` is missing on some items, and then href is the download URL.
+/// Returns (file name, absolute URL).
+fn extract_ultra_files(body: &str) -> Vec<(String, String)> {
+    let mut files = Vec::new();
+
+    for chunk in body.split("data-bbfile=\"").skip(1) {
+        let Some(value_end) = chunk.find('"') else { continue };
+        let meta: serde_json::Value = match serde_json::from_str(&html_unescape(&chunk[..value_end])) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let name = meta["linkName"]
+            .as_str()
+            .or_else(|| meta["displayName"].as_str())
+            .unwrap_or_default();
+        if name.is_empty() {
+            continue;
+        }
+
+        let tag_rest = &chunk[value_end..];
+        let tag_rest = &tag_rest[..tag_rest.find('>').unwrap_or(tag_rest.len())];
+
+        let url = meta["resourceUrl"]
+            .as_str()
+            .map(str::to_string)
+            .or_else(|| attr_value(tag_rest, "href").map(html_unescape))
+            .unwrap_or_default();
+        if !url.starts_with("http") {
+            continue;
+        }
+
+        files.push((name.to_string(), url));
     }
 
     files
@@ -555,4 +677,54 @@ fn next_scheduled_delay(time_str: &str) -> std::time::Duration {
 
     let diff = (target - now).to_std().unwrap_or(std::time::Duration::from_secs(3600));
     diff
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Shapes taken from a real Ultra course body (course _97806_1).
+    const WITH_RESOURCE_URL: &str = r#"<div data-layout-row="a"><div data-layout-column="b"><a data-bbid="bbml-editor-id_1" data-bbfile="{&quot;linkName&quot;:&quot;20563_Session02_Risk Mgm &amp; Assess.pdf&quot;,&quot;displayName&quot;:&quot;20563_Session02_Risk Mgm &amp; Assess.pdf&quot;,&quot;mimeType&quot;:&quot;application/pdf&quot;,&quot;resourceUrl&quot;:&quot;https://bb.example/bbcswebdav/pid-1/xid-1?u=x&amp;exp=1&quot;}" href="https://bb.example/bbcswebdav/pid-1/xid-1?u=x&amp;exp=1"></a></div></div>"#;
+
+    // Some items carry only viewerUrl, so the href is the download URL.
+    const HREF_ONLY: &str = r#"<a data-bbfile="{&quot;linkName&quot;:&quot;An Incredible History.pdf&quot;,&quot;viewerUrl&quot;:&quot;https://bb.example/x?render=inline&quot;}" href="https://bb.example/bbcswebdav/pid-2/xid-2?u=x&amp;exp=1"></a>"#;
+
+    #[test]
+    fn extracts_name_and_url_from_resource_url() {
+        let files = extract_ultra_files(WITH_RESOURCE_URL);
+        assert_eq!(files.len(), 1);
+        // The ampersand must survive both the entity decode and the JSON parse.
+        assert_eq!(files[0].0, "20563_Session02_Risk Mgm & Assess.pdf");
+        assert_eq!(files[0].1, "https://bb.example/bbcswebdav/pid-1/xid-1?u=x&exp=1");
+    }
+
+    #[test]
+    fn falls_back_to_href_when_resource_url_missing() {
+        let files = extract_ultra_files(HREF_ONLY);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].0, "An Incredible History.pdf");
+        assert_eq!(files[0].1, "https://bb.example/bbcswebdav/pid-2/xid-2?u=x&exp=1");
+    }
+
+    #[test]
+    fn ignores_bodies_without_bbfile_links() {
+        // Original-course bodies have plain links and must keep yielding
+        // nothing here, so those courses stay on the attachment path.
+        let body = r#"<p>See <a href="https://bb.example/webapps/blackboard/thing">the notes</a>.</p>"#;
+        assert!(extract_ultra_files(body).is_empty());
+    }
+
+    #[test]
+    fn skips_malformed_payloads_without_dropping_valid_ones() {
+        let body = format!(r#"<a data-bbfile="not json"></a>{}"#, HREF_ONLY);
+        let files = extract_ultra_files(&body);
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].0, "An Incredible History.pdf");
+    }
+
+    #[test]
+    fn unescape_is_single_pass() {
+        assert_eq!(html_unescape("a&amp;quot;b"), "a&quot;b");
+        assert_eq!(html_unescape("&lt;p&gt;x&#39;y&lt;/p&gt;"), "<p>x'y</p>");
+    }
 }

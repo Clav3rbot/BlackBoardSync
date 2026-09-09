@@ -1,54 +1,58 @@
-$bg-primary: #0a0e14;
-$bg-secondary: #12161e;
-$bg-tertiary: #181d27;
-$bg-hover: #1e2430;
-$bg-active: #252c38;
-$bg-elevated: #151a24;
-$bg-card: #13171f;
-$bg-glass: rgba(18, 22, 30, 0.85);
+@font-face {
+    font-family: 'Geist';
+    src: url('../../static/fonts/Geist-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: block;
+}
 
-$accent: #3b82f6;
-$accent-hover: #60a5fa;
-$accent-subtle: rgba(59, 130, 246, 0.1);
-$accent-glow: rgba(59, 130, 246, 0.2);
-$accent-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-$accent-gradient-hover: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('../../static/fonts/GeistMono-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: block;
+}
 
-$success: #34d399;
-$success-subtle: rgba(52, 211, 153, 0.1);
-$error: #f87171;
-$error-subtle: rgba(248, 113, 113, 0.1);
-$warning: #fbbf24;
-$warning-subtle: rgba(251, 191, 36, 0.1);
+$bg-secondary: #0f1013;
+$bg-elevated: #16171b;
+$bg-glass: rgba(15, 16, 19, 0.85);
 
-$text-primary: #f1f5f9;
-$text-secondary: #94a3b8;
-$text-tertiary: #64748b;
-$text-link: #60a5fa;
+$accent: #3e63dd;
+$accent-soft: #9eb1ff;
+$accent-subtle: rgba(62, 99, 221, 0.12);
+$accent-gradient: linear-gradient(180deg, #4a6de5 0%, #3252c9 100%);
 
-$border: rgba(255, 255, 255, 0.06);
-$border-subtle: rgba(255, 255, 255, 0.04);
-$border-muted: rgba(255, 255, 255, 0.03);
-$border-accent: rgba(59, 130, 246, 0.2);
+$success: #3ecf8e;
+$success-subtle: rgba(62, 207, 142, 0.1);
+$error: #e5565b;
+$error-subtle: rgba(229, 86, 91, 0.1);
+$error-strong: #cf3a40;
+$warning: #e3b04b;
+
+$text-primary: #f2f2f4;
+$text-secondary: #a1a2aa;
+$text-tertiary: #6e6f78;
+
+$border: rgba(255, 255, 255, 0.07);
+
+$bevel: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+$bevel-strong: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
 $radius-sm: 8px;
 $radius-md: 10px;
 $radius-lg: 14px;
-$radius-xl: 18px;
 $radius-full: 9999px;
 
-$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-$shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
-$shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
-$shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
-$shadow-glow: 0 0 20px rgba(59, 130, 246, 0.15);
+$shadow-lg: 0 12px 40px rgba(8, 8, 11, 0.55), 0 2px 8px rgba(8, 8, 11, 0.4);
 
-$font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, sans-serif;
-$font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+$font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text',
+    'Segoe UI', system-ui, sans-serif;
+$font-mono: 'Geist Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
 
-$transition: 150ms ease;
-$transition-smooth: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+$transition: 140ms cubic-bezier(0.32, 0.72, 0, 1);
+$transition-smooth: 220ms cubic-bezier(0.32, 0.72, 0, 1);
+$transition-spring: 320ms cubic-bezier(0.34, 1.4, 0.5, 1);
 $transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 
 *,
@@ -68,9 +72,27 @@ body {
     font-family: $font-family;
     font-size: 13px;
     line-height: 1.5;
+    letter-spacing: -0.006em;
+    font-optical-sizing: auto;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+}
+
+.last-sync,
+.progress-text,
+.term-count,
+.term-hidden-count,
+.section-badge,
+.modal-course-count,
+.modal-file-badge,
+.update-progress-text,
+.app-version,
+.time-input,
+.folder-path,
+.course-id,
+.sync-dir-path {
+    font-variant-numeric: tabular-nums;
 }
 
 #root {
@@ -78,7 +100,7 @@ body {
 }
 
 ::-webkit-scrollbar {
-    width: 6px;
+    width: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -86,11 +108,15 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.07);
+    border-radius: $radius-full;
+    border: 3px solid transparent;
+    background-clip: content-box;
+    transition: background-color $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.14);
+        background: rgba(255, 255, 255, 0.16);
+        background-clip: content-box;
     }
 }
 
@@ -103,7 +129,7 @@ body {
 // mouse/touch, so the pointer-driven look is unchanged. Inputs keep their own
 // richer :focus glow above; this covers buttons, toggles and clickable rows.
 :focus-visible {
-    outline: 2px solid rgba($accent, 0.7);
+    outline: 2px solid rgba($accent-soft, 0.85);
     outline-offset: 2px;
     border-radius: $radius-sm;
 }
@@ -125,9 +151,20 @@ button:focus:not(:focus-visible),
         position: absolute;
         inset: 0;
         background: radial-gradient(ellipse at 20% 0%, rgba($accent, 0.03) 0%, transparent 50%),
-                    radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.02) 0%, transparent 50%);
+                    radial-gradient(ellipse at 80% 100%, rgba(64, 118, 214, 0.025) 0%, transparent 50%);
         pointer-events: none;
         z-index: 0;
+    }
+
+    &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        opacity: 0.032;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        mix-blend-mode: overlay;
     }
 
     .platform-macos & {
@@ -151,8 +188,9 @@ button:focus:not(:focus-visible),
     justify-content: space-between;
     height: 36px;
     background: $bg-glass;
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px) saturate(140%);
     border-bottom: 1px solid $border;
+    box-shadow: $bevel;
     flex-shrink: 0;
     user-select: none;
     position: relative;
@@ -199,8 +237,12 @@ button:focus:not(:focus-visible),
     }
 
     &.close:hover {
-        background: $error;
+        background: $error-strong;
         color: white;
+    }
+
+    &:active {
+        transform: scale(0.92);
     }
 }
 
@@ -219,10 +261,10 @@ button:focus:not(:focus-visible),
 }
 
 .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid $border;
-    border-top-color: $accent;
+    width: 28px;
+    height: 28px;
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-top-color: $accent-soft;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
 }
@@ -251,34 +293,41 @@ button:focus:not(:focus-visible),
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 32px 40px;
+    padding: 32px 40px 40px;
     background: radial-gradient(ellipse at 50% 20%, rgba($accent, 0.06) 0%, transparent 60%),
-                radial-gradient(ellipse at 50% 80%, rgba(139, 92, 246, 0.04) 0%, transparent 60%);
+                radial-gradient(ellipse at 50% 80%, rgba(64, 118, 214, 0.035) 0%, transparent 60%);
 }
 
 .login-header {
     text-align: center;
-    margin-bottom: 40px;
+    margin-bottom: 44px;
 
     .login-logo {
-        color: $accent;
-        margin-bottom: 20px;
-        filter: drop-shadow(0 0 20px rgba($accent, 0.3));
+        color: $accent-soft;
+        margin-bottom: 22px;
+        filter: drop-shadow(0 6px 18px rgba($accent, 0.35))
+                drop-shadow(0 1px 2px rgba(8, 8, 11, 0.5));
     }
 
     h1 {
-        font-size: 26px;
-        font-weight: 700;
+        font-size: 27px;
+        font-weight: 600;
         color: $text-primary;
-        margin-bottom: 6px;
-        letter-spacing: -0.5px;
+        margin-bottom: 7px;
+        letter-spacing: -0.032em;
+        line-height: 1.1;
+        text-wrap: balance;
     }
 }
 
 .login-subtitle {
     font-size: 13px;
     color: $text-secondary;
-    opacity: 0.8;
+    opacity: 0.85;
+    max-width: 34ch;
+    margin: 0 auto;
+    line-height: 1.5;
+    text-wrap: pretty;
 }
 
 .login-form {
@@ -291,24 +340,24 @@ button:focus:not(:focus-visible),
 
     label {
         display: block;
-        font-size: 11px;
-        font-weight: 600;
-        color: $text-tertiary;
-        margin-bottom: 6px;
-        text-transform: uppercase;
-        letter-spacing: 0.6px;
+        font-size: 11.5px;
+        font-weight: 500;
+        color: $text-secondary;
+        margin-bottom: 7px;
+        letter-spacing: -0.005em;
     }
 
     input {
         width: 100%;
         padding: 11px 14px;
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(0, 0, 0, 0.22);
         border: 1px solid $border;
         border-radius: $radius-md;
         color: $text-primary;
         font-size: 14px;
         font-family: $font-family;
         outline: none;
+        box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.45);
         transition: border-color $transition-smooth, box-shadow $transition-smooth, background $transition-smooth;
 
         &::placeholder {
@@ -316,9 +365,9 @@ button:focus:not(:focus-visible),
         }
 
         &:focus {
-            border-color: rgba($accent, 0.5);
-            background: rgba($accent, 0.03);
-            box-shadow: 0 0 0 3px rgba($accent, 0.08), 0 0 20px rgba($accent, 0.06);
+            border-color: rgba($accent-soft, 0.45);
+            background: rgba(0, 0, 0, 0.28);
+            box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.45), 0 0 0 3px rgba($accent, 0.14);
         }
 
         &:disabled {
@@ -372,8 +421,8 @@ button:focus:not(:focus-visible),
     }
 
     &:active:not(:disabled) {
-        transform: translateY(0);
-        box-shadow: 0 1px 6px rgba($accent, 0.25);
+        transform: translateY(0) scale(0.985);
+        box-shadow: 0 1px 6px rgba($accent, 0.25), inset 0 1px 3px rgba(8, 8, 11, 0.3);
     }
 
     &:disabled {
@@ -414,8 +463,9 @@ button:focus:not(:focus-visible),
 .header {
     padding: 18px 20px;
     background: $bg-glass;
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px) saturate(140%);
     border-bottom: 1px solid $border;
+    box-shadow: $bevel, 0 8px 24px -12px rgba(8, 8, 11, 0.7);
     flex-shrink: 0;
 }
 
@@ -444,8 +494,9 @@ button:focus:not(:focus-visible),
     font-size: 15px;
     font-weight: 700;
     flex-shrink: 0;
-    box-shadow: 0 2px 10px rgba($accent, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-    letter-spacing: 0.5px;
+    box-shadow: 0 3px 12px -2px rgba($accent, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(8, 8, 11, 0.25);
+    letter-spacing: 0.2px;
 }
 
 .user-info {
@@ -516,6 +567,7 @@ button:focus:not(:focus-visible),
         background: rgba(255, 255, 255, 0.06);
         border-color: rgba(255, 255, 255, 0.12);
         color: $text-primary;
+        box-shadow: $bevel;
     }
 
     &.btn-logout-icon:hover {
@@ -563,7 +615,7 @@ button:focus:not(:focus-visible),
     }
 
     &:active {
-        transform: translateY(0);
+        transform: translateY(0) scale(0.985);
     }
 
     &.syncing {
@@ -592,7 +644,8 @@ button:focus:not(:focus-visible),
     margin-top: 8px;
     border: 1px solid $border;
     border-radius: $radius-sm;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(0, 0, 0, 0.18);
+    box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.35);
     overflow: hidden;
     transition: border-color $transition-smooth;
 
@@ -707,7 +760,7 @@ button:focus:not(:focus-visible),
     background: $accent-gradient;
     border-radius: $radius-full;
     transition: width 400ms cubic-bezier(0.22, 1, 0.36, 1);
-    box-shadow: 0 0 12px rgba($accent, 0.45);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
     position: relative;
 
     // Travelling sheen over the filled part.
@@ -732,8 +785,7 @@ button:focus:not(:focus-visible),
     left: 0;
     width: 35%;
     border-radius: $radius-full;
-    background: linear-gradient(90deg, transparent, $accent 35%, #8b5cf6 65%, transparent);
-    box-shadow: 0 0 12px rgba($accent, 0.4);
+    background: linear-gradient(90deg, transparent, $accent-soft 35%, $accent 65%, transparent);
     opacity: 0;
     transform: translateX(-110%);
     transition: opacity 300ms ease;
@@ -783,10 +835,11 @@ button:focus:not(:focus-visible),
     .progress-fill::after,
     .sync-progress::before { animation: none; }
     .progress-indeterminate.visible { animation-duration: 2.4s; }
+    .app::after { display: none; }
 }
 
 .section {
-    padding: 14px 18px;
+    padding: 14px 18px 16px;
     border-bottom: 1px solid $border;
 }
 
@@ -798,16 +851,16 @@ button:focus:not(:focus-visible),
 }
 
 .section-label {
-    font-size: 10px;
-    font-weight: 700;
+    font-size: 9.5px;
+    font-weight: 600;
     color: $text-tertiary;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.11em;
 }
 
 .section-badge {
     font-size: 10px;
-    color: $accent;
+    color: $accent-soft;
     background: $accent-subtle;
     padding: 2px 10px;
     border-radius: $radius-full;
@@ -832,10 +885,11 @@ button:focus:not(:focus-visible),
     flex: 1;
     font-size: 12px;
     color: $text-secondary;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(0, 0, 0, 0.2);
     padding: 8px 12px;
     border-radius: $radius-sm;
     border: 1px solid $border;
+    box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.4);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -866,6 +920,7 @@ button:focus:not(:focus-visible),
         background: rgba(255, 255, 255, 0.06);
         color: $text-primary;
         border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: $bevel;
     }
 
     &:active {
@@ -889,17 +944,18 @@ button:focus:not(:focus-visible),
 .toggle {
     width: 42px;
     height: 24px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.28);
     border: 1px solid $border;
     border-radius: $radius-full;
     position: relative;
-    transition: all $transition-smooth;
+    box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.5);
+    transition: background $transition-smooth, border-color $transition-smooth, box-shadow $transition-smooth;
     cursor: pointer;
 
     &.active {
-        background: $accent;
+        background: $accent-gradient;
         border-color: transparent;
-        box-shadow: 0 0 12px rgba($accent, 0.3);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 3px rgba(8, 8, 11, 0.45);
     }
 }
 
@@ -912,7 +968,7 @@ button:focus:not(:focus-visible),
     top: 2px;
     left: 3px;
     transition: transform $transition-spring;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 1px 3px rgba(8, 8, 11, 0.55), 0 0 0 0.5px rgba(8, 8, 11, 0.25);
 
     .toggle.active & {
         transform: translateX(18px);
@@ -957,9 +1013,9 @@ button:focus:not(:focus-visible),
 
     &.active {
         background: $accent-subtle;
-        color: $accent;
+        color: $accent-soft;
         border-color: rgba($accent, 0.3);
-        box-shadow: 0 0 8px rgba($accent, 0.1);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
     }
 }
 
@@ -978,7 +1034,9 @@ button:focus:not(:focus-visible),
 .setting-desc {
     font-size: 11px;
     color: $text-tertiary;
-    line-height: 1.4;
+    line-height: 1.45;
+    max-width: 42ch;
+    text-wrap: pretty;
 }
 
 .setting-divider {
@@ -989,10 +1047,12 @@ button:focus:not(:focus-visible),
 
 .app-version {
     text-align: center;
-    padding: 12px 18px 16px;
-    font-size: 11px;
+    padding: 12px 18px 18px;
+    font-size: 10.5px;
+    font-family: $font-mono;
     color: $text-tertiary;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.02em;
+    opacity: 0.75;
 }
 
 // Settings panel overlay
@@ -1023,13 +1083,43 @@ button:focus:not(:focus-visible),
     border-left: 1px solid $border;
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
-    animation: settingsPanelIn 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -16px 0 48px -12px rgba(8, 8, 11, 0.7), $bevel;
+    animation: settingsPanelIn 320ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 @keyframes settingsPanelIn {
     from { transform: translateX(100%); }
     to { transform: translateX(0); }
+}
+
+.settings-overlay.closing {
+    animation: settingsOverlayOut 200ms ease-in forwards;
+
+    .settings-panel {
+        animation: settingsPanelOut 220ms cubic-bezier(0.5, 0, 0.75, 0) forwards;
+    }
+}
+
+@keyframes settingsOverlayOut {
+    from { opacity: 1; }
+    to { opacity: 0; }
+}
+
+@keyframes settingsPanelOut {
+    from { transform: translateX(0); }
+    to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-overlay,
+    .settings-panel {
+        animation-duration: 1ms;
+    }
+
+    .settings-overlay.closing,
+    .settings-overlay.closing .settings-panel {
+        animation-duration: 1ms;
+    }
 }
 
 .settings-header {
@@ -1043,9 +1133,9 @@ button:focus:not(:focus-visible),
 
 .settings-title {
     font-size: 16px;
-    font-weight: 700;
+    font-weight: 600;
     color: $text-primary;
-    letter-spacing: -0.3px;
+    letter-spacing: -0.024em;
 }
 
 .settings-close-btn {
@@ -1074,18 +1164,18 @@ button:focus:not(:focus-visible),
 }
 
 .settings-group {
-    padding: 14px 20px;
+    padding: 15px 20px 17px;
     border-bottom: 1px solid $border;
 }
 
 .settings-group-label {
     display: block;
-    font-size: 10px;
-    font-weight: 700;
+    font-size: 9.5px;
+    font-weight: 600;
     color: $text-tertiary;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
-    margin-bottom: 10px;
+    letter-spacing: 0.11em;
+    margin-bottom: 11px;
 }
 
 .schedule-time-row {
@@ -1097,13 +1187,14 @@ button:focus:not(:focus-visible),
 
 .time-input {
     padding: 5px 10px;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(0, 0, 0, 0.22);
     border: 1px solid $border;
     border-radius: $radius-sm;
     color: $text-primary;
     font-size: 13px;
     font-family: $font-mono;
     outline: none;
+    box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.4);
     transition: border-color $transition-smooth, box-shadow $transition-smooth;
     width: 100px;
     text-align: center;
@@ -1171,19 +1262,19 @@ button:focus:not(:focus-visible),
     &.update-downloaded {
         background: rgba($accent, 0.08);
         border-color: rgba($accent, 0.25);
-        color: $accent;
+        color: $accent-soft;
     }
 
     &.update-error {
-        background: rgba(#ef4444, 0.08);
-        border-color: rgba(#ef4444, 0.25);
-        color: #ef4444;
+        background: rgba($error, 0.08);
+        border-color: rgba($error, 0.25);
+        color: $error;
     }
 
     &.update-not-available {
-        background: rgba(#22c55e, 0.08);
-        border-color: rgba(#22c55e, 0.25);
-        color: #22c55e;
+        background: rgba($success, 0.08);
+        border-color: rgba($success, 0.25);
+        color: $success;
     }
 }
 
@@ -1275,8 +1366,8 @@ button:focus:not(:focus-visible),
     width: 320px;
     max-width: 90%;
     text-align: center;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
-    animation: slideUp 250ms ease-out;
+    box-shadow: $shadow-lg, $bevel-strong;
+    animation: slideUp 280ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 .update-dialog-icon {
@@ -1288,7 +1379,7 @@ button:focus:not(:focus-visible),
     justify-content: center;
     background: rgba($accent, 0.1);
     border-radius: $radius-full;
-    color: $accent;
+    color: $accent-soft;
 }
 
 .update-dialog-title {
@@ -1382,8 +1473,7 @@ button:focus:not(:focus-visible),
     padding: 0 18px 18px;
 }
 
-.course-list-loading,
-.course-list-empty {
+.course-list-loading {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1391,6 +1481,118 @@ button:focus:not(:focus-visible),
     padding: 32px;
     color: $text-tertiary;
     font-size: 13px;
+}
+
+.course-list-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 44px 32px;
+    text-align: center;
+
+    .empty-icon {
+        width: 52px;
+        height: 52px;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: $text-tertiary;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid $border;
+        border-radius: $radius-lg;
+        box-shadow: $bevel, inset 0 -12px 24px -16px rgba(8, 8, 11, 0.8);
+        opacity: 0.75;
+    }
+
+    .empty-title {
+        font-size: 13.5px;
+        font-weight: 500;
+        color: $text-secondary;
+        letter-spacing: -0.012em;
+    }
+
+    .empty-hint {
+        font-size: 11.5px;
+        color: $text-tertiary;
+        max-width: 26ch;
+        line-height: 1.5;
+        text-wrap: pretty;
+    }
+}
+
+.course-list-skeleton {
+    padding: 2px 0 18px;
+}
+
+.skeleton-group {
+    margin-bottom: 10px;
+}
+
+.skeleton-term {
+    width: 84px;
+    height: 7px;
+    margin: 8px 12px 8px;
+    border-radius: $radius-full;
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.skeleton-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+}
+
+.skeleton-box {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+
+.skeleton-lines {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.skeleton-line {
+    height: 8px;
+    width: 62%;
+    border-radius: $radius-full;
+    background: rgba(255, 255, 255, 0.06);
+
+    &.short {
+        width: 34%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.04);
+    }
+}
+
+.course-list-skeleton {
+    .skeleton-term,
+    .skeleton-box,
+    .skeleton-line {
+        animation: skeletonSweep 1.5s ease-in-out infinite;
+    }
+
+    .skeleton-group:nth-child(2) * { animation-delay: 90ms; }
+    .skeleton-group:nth-child(3) * { animation-delay: 180ms; }
+}
+
+@keyframes skeletonSweep {
+    0%, 100% { opacity: 0.55; }
+    50%      { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .course-list-skeleton * { animation: none; }
 }
 
 .course-item {
@@ -1425,8 +1627,9 @@ button:focus:not(:focus-visible),
     border: 1px solid transparent;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(255, 255, 255, 0.035);
         border-color: $border;
+        box-shadow: $bevel;
 
         .course-actions {
             opacity: 1;
@@ -1488,14 +1691,15 @@ button:focus:not(:focus-visible),
     position: absolute;
     right: 0;
     top: calc(100% + 6px); /* Verso il basso per evitare tagli con lo scroll */
-    background: #111820; 
+    background: $bg-elevated;
     border: 1px solid rgba(255, 255, 255, 0.1); 
     border-radius: $radius-md;
     padding: 4px;
-    width: max-content; /* Si adatta perfettamente al testo senza spazi in più */
+    width: max-content;
+    --inner-radius: 6px; /* Si adatta perfettamente al testo senza spazi in più */
     z-index: 30;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
-    animation: fadeInScale 150ms ease-out both;
+    box-shadow: 0 12px 32px -8px rgba(8, 8, 11, 0.75), 0 2px 8px rgba(8, 8, 11, 0.4), $bevel;
+    animation: fadeInScale 160ms cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 .course-actions-popup-item {
@@ -1508,7 +1712,7 @@ button:focus:not(:focus-visible),
     background: transparent;
     color: $text-secondary;
     cursor: pointer;
-    border-radius: $radius-sm;
+    border-radius: 6px;
     font-size: 12px;
     font-family: $font-family;
     text-align: left;
@@ -1531,11 +1735,11 @@ button:focus:not(:focus-visible),
     }
 
     &.danger:hover {
-        background: rgba(255, 80, 80, 0.08);
-        color: #ff7070;
+        background: $error-subtle;
+        color: $error;
 
         svg {
-            color: #ff7070;
+            color: $error;
         }
     }
 }
@@ -1561,8 +1765,7 @@ button:focus:not(:focus-visible),
         background: $accent-gradient;
         border-color: transparent;
         color: white;
-        box-shadow: 0 0 8px rgba($accent, 0.25);
-        transform: scale(1);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 1px 6px rgba($accent, 0.4);
     }
 }
 
@@ -1689,13 +1892,12 @@ button:focus:not(:focus-visible),
     box-shadow: 0 0 0 3px rgba($accent, 0.08);
 }
 
-
 .btn-unhide {
     width: 28px;
     height: 28px;
     border: none;
     background: transparent;
-    color: $accent;
+    color: $accent-soft;
     cursor: pointer;
     border-radius: $radius-sm;
     display: flex;
@@ -1747,9 +1949,9 @@ button:focus:not(:focus-visible),
 
     &.active {
         background: $accent-subtle;
-        color: $accent;
+        color: $accent-soft;
         border-color: rgba($accent, 0.3);
-        box-shadow: 0 0 12px rgba($accent, 0.1);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
     }
 }
 
@@ -1799,7 +2001,7 @@ button:focus:not(:focus-visible),
     height: 16px;
     border: none;
     background: transparent;
-    color: $accent;
+    color: $accent-soft;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -1854,11 +2056,11 @@ button:focus:not(:focus-visible),
 }
 
 .term-name {
-    font-size: 10px;
-    font-weight: 700;
+    font-size: 9.5px;
+    font-weight: 600;
     color: $text-tertiary;
     text-transform: uppercase;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.11em;
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
@@ -1910,9 +2112,9 @@ button:focus:not(:focus-visible),
         border-style: solid;
         border-color: rgba($accent, 0.35);
         background: rgba($accent, 0.1);
-        color: $accent;
+        color: $accent-soft;
         opacity: 1;
-        box-shadow: 0 0 10px rgba($accent, 0.12);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
         padding: 0 7px;
 
         svg {
@@ -1936,10 +2138,10 @@ button:focus:not(:focus-visible),
     &.active {
         background: $accent-subtle;
         border-color: rgba($accent, 0.3);
-        box-shadow: 0 0 12px rgba($accent, 0.1);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 
         .term-pill-label {
-            color: $accent;
+            color: $accent-soft;
         }
     }
 
@@ -2018,7 +2220,24 @@ button:focus:not(:focus-visible),
 }
 
 .course-row {
-    animation: fadeInScale 200ms ease-out both;
+    animation: courseRowIn 320ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes courseRowIn {
+    from { opacity: 0; transform: translateY(5px) scale(0.985); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@for $i from 1 through 12 {
+    .course-item:nth-child(#{$i}) .course-row {
+        animation-delay: #{($i - 1) * 22}ms;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .course-row {
+        animation: none;
+    }
 }
 
 .modal-overlay {
@@ -2046,7 +2265,7 @@ button:focus:not(:focus-visible),
     background: $bg-secondary;
     border: 1px solid $border;
     border-radius: $radius-lg;
-    box-shadow: $shadow-lg, 0 0 40px rgba(0, 0, 0, 0.4);
+    box-shadow: $shadow-lg, $bevel-strong;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -2079,16 +2298,20 @@ button:focus:not(:focus-visible),
 
 .modal-title {
     font-size: 17px;
-    font-weight: 700;
+    font-weight: 600;
     color: $text-primary;
     margin-bottom: 6px;
-    letter-spacing: -0.3px;
+    letter-spacing: -0.024em;
+    text-wrap: balance;
 }
 
 .modal-subtitle {
     font-size: 12px;
     color: $text-secondary;
     line-height: 1.5;
+    max-width: 40ch;
+    margin: 0 auto;
+    text-wrap: pretty;
 }
 
 .modal-body {
@@ -2134,7 +2357,7 @@ button:focus:not(:focus-visible),
 .modal-course-count {
     font-size: 10px;
     font-weight: 700;
-    color: $accent;
+    color: $accent-soft;
     background: $accent-subtle;
     padding: 1px 7px;
     border-radius: $radius-full;
@@ -2212,7 +2435,7 @@ button:focus:not(:focus-visible),
     }
 
     &:active {
-        transform: translateY(0);
+        transform: translateY(0) scale(0.985);
     }
 }
 
@@ -2235,7 +2458,7 @@ button:focus:not(:focus-visible),
     left: 2px;
     width: 32px;
     background: rgba(255, 255, 255, 0.08);
-    border-radius: 4px;
+    border-radius: 6px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 0;
@@ -2259,7 +2482,7 @@ button:focus:not(:focus-visible),
     padding: 4px 0;
     width: 32px;
     text-align: center;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     transition: color 220ms ease;
     z-index: 2;

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import Icon from './Icon';
 import { getT } from '../i18n';
 
 interface Course {
@@ -169,9 +170,21 @@ const CourseList: React.FC<CourseListProps> = ({
                 <div className="section-header">
                     <span className="section-label">{t('coursesHeader')}</span>
                 </div>
-                <div className="course-list-loading">
-                    <div className="spinner-small" />
-                    <span>{t('loadingCourses')}</span>
+                <div className="course-list-skeleton" aria-busy="true" aria-label={t('loadingCourses')}>
+                    {[0, 1, 2].map((g) => (
+                        <div className="skeleton-group" key={g}>
+                            <div className="skeleton-term" />
+                            {Array.from({ length: 3 - (g % 2) }).map((_, r) => (
+                                <div className="skeleton-row" key={r}>
+                                    <div className="skeleton-box" />
+                                    <div className="skeleton-lines">
+                                        <div className="skeleton-line" />
+                                        <div className="skeleton-line short" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ))}
                 </div>
             </div>
         );
@@ -184,7 +197,11 @@ const CourseList: React.FC<CourseListProps> = ({
                     <span className="section-label">{t('coursesHeader')}</span>
                 </div>
                 <div className="course-list-empty">
-                    <p>{t('coursesEmpty')}</p>
+                    <div className="empty-icon">
+                        <Icon name="folder" size={26} weight="light" />
+                    </div>
+                    <p className="empty-title">{t('coursesEmpty')}</p>
+                    <p className="empty-hint">{t('coursesEmptyHint')}</p>
                 </div>
             </div>
         );
@@ -240,11 +257,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                 onClick={() => setShowHiddenTermPills((v) => !v)}
                                 title={showHiddenTermPills ? t('hideHiddenTermsTooltip') : `${t('showHiddenTermsTooltip')} (${hiddenTermGroups.length})`}
                             >
-                                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" style={{ flexShrink: 0 }}>
-                                    <path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7.028 7.028 0 0 0-2.79.588l.77.771A5.944 5.944 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.134 13.134 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755-.165.165-.337.328-.517.486l.708.709z"/>
-                                    <path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829l.822.822zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829z"/>
-                                    <path d="M3.35 5.47c-.18.16-.353.322-.518.487A13.134 13.134 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7.029 7.029 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12-.708.708z"/>
-                                </svg>
+                                <Icon name="hide" size={12} />
                                 <span>{hiddenTermGroups.length}</span>
                             </button>
                             {showHiddenTermPills && hiddenTermGroups.map((group) => (
@@ -255,10 +268,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                         onClick={(e) => { e.stopPropagation(); onUnhideTerm(group.termId); }}
                                         title={t('restoreTermTooltip')}
                                     >
-                                        <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
-                                            <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
-                                            <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/>
-                                        </svg>
+                                        <Icon name="close" size={11} />
                                     </button>
                                 </span>
                             ))}
@@ -285,14 +295,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                     <span
                                         className={`term-chevron ${isCollapsed ? '' : 'expanded'}`}
                                     >
-                                        <svg
-                                            width="10"
-                                            height="10"
-                                            viewBox="0 0 10 10"
-                                            fill="currentColor"
-                                        >
-                                            <path d="M3 2l4 3-4 3V2z" />
-                                        </svg>
+                                        <Icon name="caretRight" size={11} />
                                     </span>
                                     <span className="term-name">{group.termName}</span>
                                     <span className="term-count">
@@ -305,9 +308,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                             title={isRevealed ? t('actionHide') : `${hiddenCount} ${t('hiddenCoursesCount')}`}
                                         >
                                             {isRevealed ? (
-                                                <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor">
-                                                    <path d="M2 2l12 12M14 2L2 14" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
-                                                </svg>
+                                                <Icon name="show" size={11} />
                                             ) : (
                                                 <span className="term-hidden-count">{hiddenCount}</span>
                                             )}
@@ -368,14 +369,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                         }
                                                     >
                                                         {isEnabled && (
-                                                            <svg
-                                                                width="12"
-                                                                height="12"
-                                                                viewBox="0 0 12 12"
-                                                                fill="currentColor"
-                                                            >
-                                                                <path d="M10.28 2.28a.75.75 0 010 1.06l-5.5 5.5a.75.75 0 01-1.06 0l-2.5-2.5a.75.75 0 011.06-1.06L4.25 7.22l4.97-4.94a.75.75 0 011.06 0z" />
-                                                            </svg>
+                                                            <Icon name="check" size={12} />
                                                         )}
                                                     </div>
                                                     <div
@@ -430,9 +424,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                 onClick={(e) => { e.stopPropagation(); setActionsOpenId(actionsOpenId === course.id ? null : course.id); }}
                                                                 title={t('actionsTooltip')}
                                                             >
-                                                                <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-                                                                    <path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
-                                                                </svg>
+                                                                <Icon name="dots" size={15} />
                                                             </button>
                                                             {actionsOpenId === course.id && (
                                                                 <div className="course-actions-popup">
@@ -440,20 +432,14 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                         className="course-actions-popup-item"
                                                                         onClick={(e) => { e.stopPropagation(); setActionsOpenId(null); setEditingId(course.id); setEditValue(displayName); }}
                                                                     >
-                                                                        <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-                                                                            <path d="M12.146.146a.5.5 0 01.708 0l3 3a.5.5 0 010 .708l-10 10a.5.5 0 01-.168.11l-5 2a.5.5 0 01-.65-.65l2-5a.5.5 0 01.11-.168l10-10zM11.207 2.5L13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 01.5.5v.5h.5a.5.5 0 01.5.5v.5h.293l6.5-6.5z" />
-                                                                        </svg>
+                                                                        <Icon name="pencil" size={13} />
                                                                         {t('actionRename')}
                                                                     </button>
                                                                     <button
                                                                         className="course-actions-popup-item danger"
                                                                         onClick={(e) => { e.stopPropagation(); setActionsOpenId(null); onHide(course.id); }}
                                                                     >
-                                                                        <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
-                                                                            <path d="M13.359 11.238C15.06 9.72 16 8 16 8s-3-5.5-8-5.5a7.028 7.028 0 0 0-2.79.588l.77.771A5.944 5.944 0 0 1 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.134 13.134 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755-.165.165-.337.328-.517.486l.708.709z"/>
-                                                                            <path d="M11.297 9.176a3.5 3.5 0 0 0-4.474-4.474l.823.823a2.5 2.5 0 0 1 2.829 2.829l.822.822zm-2.943 1.299.822.822a3.5 3.5 0 0 1-4.474-4.474l.823.823a2.5 2.5 0 0 0 2.829 2.829z"/>
-                                                                            <path d="M3.35 5.47c-.18.16-.353.322-.518.487A13.134 13.134 0 0 0 1.172 8l.195.288c.335.48.83 1.12 1.465 1.755C4.121 11.332 5.881 12.5 8 12.5c.716 0 1.39-.133 2.02-.36l.77.772A7.029 7.029 0 0 1 8 13.5C3 13.5 0 8 0 8s.939-1.721 2.641-3.238l.708.709zm10.296 8.884-12-12 .708-.708 12 12-.708.708z"/>
-                                                                        </svg>
+                                                                        <Icon name="hide" size={13} />
                                                                         {t('actionHide')}
                                                                     </button>
                                                                 </div>
@@ -486,10 +472,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                         onClick={(e) => { e.stopPropagation(); onUnhide(course.id); }}
                                                         title={t('actionUnhide')}
                                                     >
-                                                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                                                            <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
-                                                            <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/>
-                                                        </svg>
+                                                            <Icon name="show" size={13} />
                                                     </button>
                                                 </div>
                                             </div>

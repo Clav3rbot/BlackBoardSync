@@ -76,6 +76,7 @@ export interface TranslationKeys {
     coursesHeader: string;
     coursesSelected: string;
     coursesEmpty: string;
+    coursesEmptyHint: string;
     loadingCourses: string;
     termFilterAll: string;
     hideTermTooltip: string;
@@ -172,6 +173,7 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         coursesHeader: "Corsi",
         coursesSelected: "selezionati",
         coursesEmpty: "Nessun corso trovato",
+        coursesEmptyHint: "Controlla la connessione o riesegui la sincronizzazione.",
         loadingCourses: "Caricamento corsi...",
         termFilterAll: "Tutti",
         hideTermTooltip: "Nascondi categoria",
@@ -265,6 +267,7 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         coursesHeader: "Courses",
         coursesSelected: "selected",
         coursesEmpty: "No courses found",
+        coursesEmptyHint: "Check your connection or run the sync again.",
         loadingCourses: "Loading courses...",
         termFilterAll: "All",
         hideTermTooltip: "Hide category",

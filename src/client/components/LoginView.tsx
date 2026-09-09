@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
+import appIcon from '../../../static/icons/png/128x128.png';
 import { getT } from '../i18n';
-
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const appIcon = require('../../../static/icons/png/128x128.png') as string;
 
 interface LoginViewProps {
     lang: 'it' | 'en';

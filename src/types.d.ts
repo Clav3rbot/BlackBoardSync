@@ -1,11 +1,5 @@
 export {};
 
-declare module '*.png' {
-    const src: string;
-    export default src;
-}
-
-
 export interface UserInfo {
     id: string;
     userName: string;
