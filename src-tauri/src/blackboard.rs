@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 const API_BASE: &str = "https://blackboard.unibocconi.it/learn/api/public/v1";
+const HOST: &str = "blackboard.unibocconi.it";
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BlackBoardSync/1.0";
 const EXCLUDED_ROLES: &[&str] = &[
     "Student", "Guest", "CourseBuilder", "BbSpectator", "TeachingAssistant", "Grader",
@@ -61,6 +62,14 @@ pub struct Attachment {
     pub id: String,
     pub file_name: String,
     pub mime_type: Option<String>,
+}
+
+/// True only for `https` URLs on the Blackboard host itself.
+fn is_blackboard_url(url: &str) -> bool {
+    match url::Url::parse(url) {
+        Ok(parsed) => parsed.scheme() == "https" && parsed.host_str() == Some(HOST),
+        Err(_) => false,
+    }
 }
 
 #[derive(Clone)]
@@ -346,7 +355,21 @@ impl BlackboardAPI {
     /// Download from an absolute URL. Ultra document bodies carry signed
     /// bbcswebdav links that the attachment endpoint knows nothing about;
     /// the session cookies on this client are what authorises them.
+    /// Fetches an Ultra document file by its link.
+    ///
+    /// The link comes out of a course's HTML body, which is content authored
+    /// inside Blackboard rather than something this app produced, so the host is
+    /// checked before the request goes out: this client carries the session
+    /// cookie as a default header, and would otherwise hand it to whatever host
+    /// a crafted `data-bbfile` or `href` pointed at.
+    ///
+    /// Cross-host redirects are already safe — reqwest drops the Cookie header
+    /// when a redirect changes host — so only the initial URL needs the check.
     pub async fn download_url(&self, url: &str) -> Result<Vec<u8>, String> {
+        if !is_blackboard_url(url) {
+            return Err(format!("URL non attendibile: {}", url));
+        }
+
         let response = self.client
             .get(url)
             .send()
@@ -399,4 +422,28 @@ fn extract_filename(content_disposition: &str) -> Option<String> {
     let filename = rest.trim().trim_matches('"').trim_matches('\'');
     let filename = filename.split(';').next()?.trim().trim_matches('"');
     if filename.is_empty() { None } else { Some(filename.to_string()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn accepts_only_blackboard_https_urls() {
+        assert!(is_blackboard_url(
+            "https://blackboard.unibocconi.it/bbcswebdav/pid-1/file.pdf"
+        ));
+        // A crafted link in a course body must not receive the session cookie.
+        assert!(!is_blackboard_url("https://evil.example/steal"));
+        // Userinfo must not be mistaken for the host.
+        assert!(!is_blackboard_url(
+            "https://blackboard.unibocconi.it@evil.example/steal"
+        ));
+        // A lookalike host must not pass on a prefix match.
+        assert!(!is_blackboard_url(
+            "https://blackboard.unibocconi.it.evil.example/steal"
+        ));
+        assert!(!is_blackboard_url("http://blackboard.unibocconi.it/plain"));
+        assert!(!is_blackboard_url("not a url"));
+    }
 }
