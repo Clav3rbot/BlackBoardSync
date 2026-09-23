@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import HeatmapBackground from './HeatmapBackground';
 import Icon from './Icon';
 import { getT } from '../i18n';
 
@@ -22,6 +23,7 @@ interface CourseListProps {
     loading: boolean;
     loadingInstructors?: boolean;
     cacheMisses?: Set<string>;
+    heatmap?: boolean;
     onToggle: (courseId: string) => void;
     onRename: (courseId: string, newName: string) => void;
     onCollapsedTermsChange: (collapsed: string[]) => void;
@@ -49,6 +51,7 @@ const CourseList: React.FC<CourseListProps> = ({
     loading,
     loadingInstructors,
     cacheMisses,
+    heatmap,
     onToggle,
     onRename,
     onCollapsedTermsChange,
@@ -209,6 +212,7 @@ const CourseList: React.FC<CourseListProps> = ({
 
     return (
         <div className="section course-section">
+            {heatmap && <HeatmapBackground />}
             {actionsOpenId && (
                 <div className="actions-backdrop" onMouseDown={() => setActionsOpenId(null)} />
             )}

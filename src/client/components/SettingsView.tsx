@@ -18,6 +18,7 @@ interface AppConfig {
     startAtLogin: boolean;
     notifications: boolean;
     syncOnStartup: boolean;
+    heatmap: boolean;
     language: string;
 }
 
@@ -236,6 +237,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                 <span className="setting-desc">{t('notificationsDesc')}</span>
                             </div>
                             <div className={`toggle ${config.notifications ? 'active' : ''}`}>
+                                <div className="toggle-thumb" />
+                            </div>
+                        </div>
+
+                        <div className="setting-divider" />
+
+                        <div className="toggle-row" onClick={() => updateSetting({ heatmap: !config.heatmap })}>
+                            <div className="setting-info">
+                                <span className="toggle-label">{t('heatmapLabel')}</span>
+                                <span className="setting-desc">{t('heatmapDesc')}</span>
+                            </div>
+                            <div className={`toggle ${config.heatmap ? 'active' : ''}`}>
                                 <div className="toggle-thumb" />
                             </div>
                         </div>

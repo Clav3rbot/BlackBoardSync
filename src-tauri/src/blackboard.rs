@@ -93,6 +93,8 @@ impl BlackboardAPI {
         let client = Client::builder()
             .default_headers(headers)
             .timeout(std::time::Duration::from_secs(30))
+            // Catches stalls in downloads, which override the total timeout.
+            .read_timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("Failed to build blackboard client");
 
@@ -365,13 +367,31 @@ impl BlackboardAPI {
     ///
     /// Cross-host redirects are already safe — reqwest drops the Cookie header
     /// when a redirect changes host — so only the initial URL needs the check.
-    pub async fn download_url(&self, url: &str) -> Result<Vec<u8>, String> {
+    pub async fn download_url(&self, url: &str) -> Result<reqwest::Response, String> {
         if !is_blackboard_url(url) {
             return Err(format!("URL non attendibile: {}", url));
         }
+        self.fetch(url).await
+    }
 
+    pub async fn download_file(
+        &self,
+        course_id: &str,
+        content_id: &str,
+        attachment_id: &str,
+    ) -> Result<reqwest::Response, String> {
+        let url = self.url(&format!(
+            "/courses/{}/contents/{}/attachments/{}/download",
+            course_id, content_id, attachment_id
+        ));
+        self.fetch(&url).await
+    }
+
+    /// Non-2xx is an error: a saved error page would count as synced forever.
+    async fn fetch(&self, url: &str) -> Result<reqwest::Response, String> {
         let response = self.client
             .get(url)
+            .timeout(crate::download::DOWNLOAD_TIMEOUT)
             .send()
             .await
             .map_err(|e| e.to_string())?;
@@ -380,48 +400,8 @@ impl BlackboardAPI {
         if !status.is_success() {
             return Err(format!("HTTP {}", status));
         }
-
-        Ok(response.bytes().await.map_err(|e| e.to_string())?.to_vec())
+        Ok(response)
     }
-
-    pub async fn download_file(
-        &self,
-        course_id: &str,
-        content_id: &str,
-        attachment_id: &str,
-    ) -> Result<(Vec<u8>, String), String> {
-        let url = self.url(&format!(
-            "/courses/{}/contents/{}/attachments/{}/download",
-            course_id, content_id, attachment_id
-        ));
-
-        let response = self.client
-            .get(url)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let content_disp = response
-            .headers()
-            .get("content-disposition")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("")
-            .to_string();
-
-        let file_name = extract_filename(&content_disp).unwrap_or_else(|| "unknown".to_string());
-        let data = response.bytes().await.map_err(|e| e.to_string())?.to_vec();
-
-        Ok((data, file_name))
-    }
-}
-
-fn extract_filename(content_disposition: &str) -> Option<String> {
-    let pos = content_disposition.find("filename")?;
-    let rest = &content_disposition[pos + 8..];
-    let rest = rest.trim_start_matches(|c: char| c != '=').trim_start_matches('=');
-    let filename = rest.trim().trim_matches('"').trim_matches('\'');
-    let filename = filename.split(';').next()?.trim().trim_matches('"');
-    if filename.is_empty() { None } else { Some(filename.to_string()) }
 }
 
 #[cfg(test)]

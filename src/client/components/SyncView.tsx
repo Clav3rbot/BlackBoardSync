@@ -29,6 +29,7 @@ interface AppConfig {
     startAtLogin: boolean;
     notifications: boolean;
     syncOnStartup: boolean;
+    heatmap: boolean;
     language: string;
 }
 
@@ -424,6 +425,7 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
                 onUnhideTerm={handleUnhideTerm}
                 loadingInstructors={loadingInstructors}
                 cacheMisses={cacheMisses}
+                heatmap={config.heatmap}
             />
 
             {settingsOpen && (

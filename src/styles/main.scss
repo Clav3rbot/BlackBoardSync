@@ -1464,6 +1464,58 @@ button:focus:not(:focus-visible),
     flex-direction: column;
     min-height: 0;
     padding-bottom: 0;
+    // Own stacking context so the heatmap's negative z-index lands above the
+    // window backdrop but below every course row.
+    position: relative;
+    isolation: isolate;
+    // No tint, so the window's acrylic glass shows through untouched; a soft
+    // dark halo under the text keeps the dim labels readable over a bright
+    // wallpaper or the heatmap instead.
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+
+    // The mid-grey tertiary tone vanishes on a bright wallpaper (grey on
+    // grey), so the small labels here use the secondary tone, and the chips
+    // get a faint dark fill that is barely visible over dark glass.
+    .section-label,
+    .term-chevron,
+    .term-name,
+    .term-count,
+    .term-pill,
+    .term-pill-label,
+    .course-source {
+        color: $text-secondary;
+    }
+
+    .term-count,
+    .term-pill,
+    .term-pill-wrap,
+    .course-source {
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+    // Hover darkens the fill instead of the base rule's white wash, which
+    // would drop the chips back to grey-on-grey over a bright wallpaper.
+    .term-pill:not(.active):hover,
+    .term-pill-wrap:not(.active):hover {
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .term-pill:not(.active):hover,
+    .term-pill-wrap:not(.active) .term-pill-label:hover {
+        color: $text-primary;
+    }
+}
+
+.heatmap-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    pointer-events: none;
+    filter: blur(6px);
+    // clip-path applies after the filter, so the blur can't bleed past the section.
+    clip-path: inset(0);
 }
 
 .course-list {
@@ -2149,9 +2201,13 @@ button:focus:not(:focus-visible),
         border-color: rgba(255, 255, 255, 0.1);
         background: rgba(255, 255, 255, 0.05);
 
+        .term-pill-label {
+            padding-right: 4px;
+        }
+
         .term-pill-hide-btn {
-            width: 22px;
-            margin-right: 3px;
+            width: 16px;
+            margin-right: 4px;
             opacity: 1;
             pointer-events: auto;
         }
@@ -2168,7 +2224,7 @@ button:focus:not(:focus-visible),
     border: none;
     cursor: pointer;
     white-space: nowrap;
-    transition: color $transition-smooth;
+    transition: color $transition-smooth, padding $transition-smooth;
 
     &:hover {
         color: $text-secondary;
@@ -2177,7 +2233,7 @@ button:focus:not(:focus-visible),
 
 .term-pill-hide-btn {
     width: 0;
-    height: 22px;
+    height: 16px;
     overflow: hidden;
     opacity: 0;
     pointer-events: none;
@@ -2190,10 +2246,10 @@ button:focus:not(:focus-visible),
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1;
     margin-right: 0;
-    transition: opacity $transition-smooth, color $transition-smooth, background $transition-smooth;
+    transition: width $transition-smooth, margin $transition-smooth, opacity $transition-smooth, color $transition-smooth, background $transition-smooth;
 
     &:hover {
         color: $text-primary;

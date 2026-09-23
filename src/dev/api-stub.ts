@@ -21,6 +21,7 @@ const MOCK_CONFIG: AppConfig = {
     startAtLogin: false,
     notifications: true,
     syncOnStartup: false,
+    heatmap: false,
     language: 'it',
 };
 

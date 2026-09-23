@@ -1,4 +1,4 @@
-use crate::blackboard::{BlackboardAPI, ContentItem, Course};
+use crate::blackboard::{BlackboardAPI, ContentItem, Course, UserInfo};
 use crate::login::LoginManager;
 use crate::state::{AppState, Session};
 use serde::Serialize;
@@ -138,9 +138,7 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
     // Validate the session first and silently re-authenticate with the stored
     // credentials if it has lapsed, so a routine sync doesn't fail with a
     // cryptic decode error.
-    let session = ensure_valid_session(app, session).await?;
-    let api = BlackboardAPI::new(&session.cookies);
-    let user = api.get_current_user().await?;
+    let (api, user) = ensure_valid_session(app, session).await?;
     let all_courses = api.get_courses_for_sync(&user.id).await?;
 
     // Filter courses
@@ -268,12 +266,11 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
                     Some(url) => api.download_url(url).await,
                     None => api
                         .download_file(&file.course_id, &file.content_id, &file.attachment_id)
-                        .await
-                        .map(|(data, _)| data),
+                        .await,
                 };
 
                 match fetched {
-                    Ok(data) => {
+                    Ok(response) => {
                         if abort.load(Ordering::SeqCst) { break; }
 
                         let full_path = sync_dir.join(&file.relative_path);
@@ -282,7 +279,9 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
                         if let Some(dir) = full_path.parent() {
                             let _ = tokio::fs::create_dir_all(dir).await;
                         }
-                        if tokio::fs::write(&full_path, &data).await.is_ok() {
+                        if let Err(e) = save_response(response, &full_path, &abort).await {
+                            eprintln!("Download failed for {}: {}", file.file_name, e);
+                        } else {
                             let count = dl_count.fetch_add(1, Ordering::SeqCst) + 1;
                             dl_files.lock().await.push(file.clone());
                             app_h.emit("sync-progress", SyncProgressPayload {
@@ -341,10 +340,13 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
 /// full SAML re-auth with the stored credentials, persist the refreshed
 /// session, and return it. Errors only if no credentials are stored or the
 /// re-auth itself fails, in which case the user must log in again.
-async fn ensure_valid_session(app: &AppHandle, session: &Session) -> Result<Session, String> {
+async fn ensure_valid_session(
+    app: &AppHandle,
+    session: &Session,
+) -> Result<(BlackboardAPI, UserInfo), String> {
     let probe = BlackboardAPI::new(&session.cookies);
-    if probe.get_current_user().await.is_ok() {
-        return Ok(session.clone());
+    if let Ok(user) = probe.get_current_user().await {
+        return Ok((probe, user));
     }
 
     let state = app.state::<AppState>();
@@ -363,9 +365,10 @@ async fn ensure_valid_session(app: &AppHandle, session: &Session) -> Result<Sess
 
     let cookies = result.cookies;
     let refreshed = BlackboardAPI::new(&cookies);
-    if refreshed.get_current_user().await.is_err() {
-        return Err("Sessione scaduta. Rieffettua il login.".to_string());
-    }
+    let user = refreshed
+        .get_current_user()
+        .await
+        .map_err(|_| "Sessione scaduta. Rieffettua il login.".to_string())?;
 
     {
         let mut s = state.session.lock().unwrap();
@@ -373,7 +376,46 @@ async fn ensure_valid_session(app: &AppHandle, session: &Session) -> Result<Sess
     }
     state.store.lock().unwrap().save_session(&cookies);
 
-    Ok(Session { cookies })
+    Ok((refreshed, user))
+}
+
+/// Overrides the client's 30 s total timeout, which would cut off large videos.
+pub const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+
+/// Writes to `<path>.part`, renamed only when complete: sync skips existing
+/// files, so a truncated one would never be fetched again.
+async fn save_response(
+    response: reqwest::Response,
+    path: &Path,
+    abort: &std::sync::atomic::AtomicBool,
+) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt;
+
+    let mut part = path.as_os_str().to_owned();
+    part.push(".part");
+    let part = PathBuf::from(part);
+
+    let result = async {
+        let mut out = tokio::fs::File::create(&part).await.map_err(|e| e.to_string())?;
+        let mut body = response.bytes_stream();
+        while let Some(chunk) = body.next().await {
+            if abort.load(Ordering::SeqCst) {
+                return Err("interrotto".to_string());
+            }
+            out.write_all(&chunk.map_err(|e| e.to_string())?)
+                .await
+                .map_err(|e| e.to_string())?;
+        }
+        out.flush().await.map_err(|e| e.to_string())?;
+        drop(out);
+        tokio::fs::rename(&part, path).await.map_err(|e| e.to_string())
+    }
+    .await;
+
+    if result.is_err() {
+        let _ = tokio::fs::remove_file(&part).await;
+    }
+    result
 }
 
 async fn scan_course(
@@ -568,7 +610,7 @@ fn extract_ultra_files(body: &str) -> Vec<(String, String)> {
 pub fn sanitize_path(name: &str) -> String {
     let sanitized: String = name
         .chars()
-        .map(|c| if "<>:\"/\\|?*".contains(c) { '_' } else { c })
+        .map(|c| if "<>:\"/\\|?*".contains(c) || (c.is_control() && !c.is_whitespace()) { '_' } else { c })
         .collect();
     let sanitized = sanitized.split_whitespace().collect::<Vec<_>>().join(" ");
     let sanitized = sanitized.trim().to_string();
@@ -578,7 +620,17 @@ pub fn sanitize_path(name: &str) -> String {
     let sanitized = sanitized.trim().to_string();
 
     if sanitized.is_empty() || sanitized.chars().all(|c| c == '.') {
-        "_".to_string()
+        return "_".to_string();
+    }
+
+    // Windows refuses device names as a stem, whatever the extension.
+    let stem = sanitized.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
+    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && stem.as_bytes()[3].is_ascii_digit());
+    if reserved {
+        format!("_{}", sanitized)
     } else {
         sanitized
     }
@@ -720,6 +772,34 @@ mod tests {
         let files = extract_ultra_files(&body);
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].0, "An Incredible History.pdf");
+    }
+
+    #[test]
+    fn sanitize_handles_windows_invalid_names() {
+        assert_eq!(sanitize_path("con.pdf"), "_con.pdf");
+        assert_eq!(sanitize_path("LPT1"), "_LPT1");
+        assert_eq!(sanitize_path("Console.pdf"), "Console.pdf");
+        assert_eq!(sanitize_path("a\u{7}b\nc"), "a_b c");
+    }
+
+    #[tokio::test]
+    async fn save_response_is_all_or_nothing() {
+        let dir = std::env::temp_dir().join(format!("bbsync-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("notes.pdf");
+        let part = dir.join("notes.pdf.part");
+        let response = || reqwest::Response::from(tauri::http::Response::new("hello".to_string()));
+
+        let abort = std::sync::atomic::AtomicBool::new(true);
+        assert!(save_response(response(), &path, &abort).await.is_err());
+        assert!(!path.exists() && !part.exists());
+
+        abort.store(false, Ordering::SeqCst);
+        save_response(response(), &path, &abort).await.unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
+        assert!(!part.exists());
+
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

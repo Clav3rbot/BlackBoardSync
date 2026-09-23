@@ -44,6 +44,7 @@ export interface AppConfig {
     startAtLogin: boolean;
     notifications: boolean;
     syncOnStartup: boolean;
+    heatmap: boolean;
     language: string;
 }
 

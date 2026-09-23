@@ -53,6 +53,8 @@ export interface TranslationKeys {
     startAtLoginLabelMac: string;
     startAtLoginLabelWin: string;
     startAtLoginDesc: string;
+    heatmapLabel: string;
+    heatmapDesc: string;
     syncOnStartupLabel: string;
     syncOnStartupDesc: string;
     notificationsLabel: string;
@@ -151,6 +153,8 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         startAtLoginLabelMac: "Avvia con Mac",
         startAtLoginLabelWin: "Avvia con Windows",
         startAtLoginDesc: "Avvia l'app all'accesso del sistema",
+        heatmapLabel: "Effetto termico",
+        heatmapDesc: "Scia a mappa di calore dietro l'elenco dei corsi",
         syncOnStartupLabel: "Sincronizza all'avvio",
         syncOnStartupDesc: "Sincronizza all'apertura dell'app",
         notificationsLabel: "Notifiche",
@@ -245,6 +249,8 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         startAtLoginLabelMac: "Start with Mac",
         startAtLoginLabelWin: "Start with Windows",
         startAtLoginDesc: "Start the app automatically at login",
+        heatmapLabel: "Heat effect",
+        heatmapDesc: "Heatmap trail behind the course list",
         syncOnStartupLabel: "Sync on startup",
         syncOnStartupDesc: "Sync automatically on startup",
         notificationsLabel: "Notifications",

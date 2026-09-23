@@ -21,6 +21,7 @@ pub struct AppConfig {
     pub start_at_login: bool,
     pub notifications: bool,
     pub sync_on_startup: bool,
+    pub heatmap: bool,
     pub language: String,
 }
 
@@ -48,6 +49,7 @@ impl Default for AppConfig {
             start_at_login: false,
             notifications: true,
             sync_on_startup: false,
+            heatmap: false,
             language: String::new(),
         }
     }
