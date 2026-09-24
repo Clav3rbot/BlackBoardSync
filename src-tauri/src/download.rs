@@ -581,10 +581,14 @@ fn extract_ultra_files(body: &str) -> Vec<(String, String)> {
             Err(_) => continue,
         };
 
-        let name = meta["linkName"]
+        let mut name = meta["linkName"]
             .as_str()
             .or_else(|| meta["displayName"].as_str())
             .unwrap_or_default();
+        // A renamed link can drop the extension; fileName still has it.
+        if !name.contains('.') {
+            name = meta["fileName"].as_str().unwrap_or(name);
+        }
         if name.is_empty() {
             continue;
         }
@@ -592,14 +596,19 @@ fn extract_ultra_files(body: &str) -> Vec<(String, String)> {
         let tag_rest = &chunk[value_end..];
         let tag_rest = &tag_rest[..tag_rest.find('>').unwrap_or(tag_rest.len())];
 
-        let url = meta["resourceUrl"]
-            .as_str()
-            .map(str::to_string)
-            .or_else(|| attr_value(tag_rest, "href").map(html_unescape))
-            .unwrap_or_default();
-        if !url.starts_with("http") {
+        // Files pasted into the editor can keep the upload's temporary
+        // /sessions/ URL as resourceUrl (and href), which 404s once that
+        // session ends; viewerUrl then holds the stored bbcswebdav copy.
+        let Some(url) = [
+            meta["resourceUrl"].as_str().map(str::to_string),
+            attr_value(tag_rest, "href").map(html_unescape),
+            meta["viewerUrl"].as_str().map(str::to_string),
+        ]
+        .into_iter()
+        .flatten()
+        .find(|u| u.starts_with("http") && !u.contains("/sessions/")) else {
             continue;
-        }
+        };
 
         files.push((name.to_string(), url));
     }
@@ -756,6 +765,19 @@ mod tests {
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].0, "An Incredible History.pdf");
         assert_eq!(files[0].1, "https://bb.example/bbcswebdav/pid-2/xid-2?u=x&exp=1");
+    }
+
+    const STALE_SESSION_URL: &str = r#"<a data-bbfile="{&quot;linkName&quot;:&quot;LOS NÚMEROS&quot;,&quot;fileName&quot;:&quot;LOS NÚMEROS.pdf&quot;,&quot;resourceUrl&quot;:&quot;https://bb.example/sessions/88/abc/LOS.pdf&quot;,&quot;viewerUrl&quot;:&quot;https://bb.example/bbcswebdav/pid-3/xid-3&quot;}" href="https://bb.example/sessions/88/abc/LOS.pdf"></a>"#;
+
+    #[test]
+    fn skips_expired_upload_session_urls() {
+        assert_eq!(
+            extract_ultra_files(STALE_SESSION_URL),
+            vec![(
+                "LOS NÚMEROS.pdf".to_string(),
+                "https://bb.example/bbcswebdav/pid-3/xid-3".to_string()
+            )]
+        );
     }
 
     #[test]
