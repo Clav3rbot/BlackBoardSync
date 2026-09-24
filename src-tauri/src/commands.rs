@@ -92,11 +92,34 @@ pub async fn login(
     }
 }
 
+/// Waits up to ~90 s for the network. Any HTTP answer counts as online; after
+/// the deadline restore runs anyway and reports its own errors.
+async fn wait_for_network() {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    else {
+        return;
+    };
+    for _ in 0..18 {
+        if client.head("https://blackboard.unibocconi.it").send().await.is_ok() {
+            return;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    }
+}
+
 #[tauri::command]
 pub async fn auto_login(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<LoginResponse, String> {
+    // Autostart runs right after logon, often before Wi-Fi is up: restoring
+    // then fails and drops the user on the login screen.
+    if state.store.lock().unwrap().load_credentials().is_some() {
+        wait_for_network().await;
+    }
+
     // Fast path: try stored session cookies (no SAML round-trip)
     let stored_session = state.store.lock().unwrap().load_session();
     if let Some(cookies) = stored_session {

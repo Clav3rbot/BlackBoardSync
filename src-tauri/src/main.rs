@@ -161,7 +161,9 @@ fn main() {
 
             // Sync start-at-login setting
             use tauri_plugin_autostart::ManagerExt;
-            if config.start_at_login {
+            // Debug builds skip this: enable() registers the current exe, so a
+            // `tauri dev` run would point autostart at target\debug.
+            if config.start_at_login && !cfg!(debug_assertions) {
                 let _ = app.autolaunch().enable();
             }
 
