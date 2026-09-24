@@ -101,9 +101,13 @@ fn main() {
                         // path as BLURBEHIND (paints fine on a frameless window, no
                         // frame artifacts) and still blurs on Win11, giving the
                         // Win10-style glass. Win10 keeps BLURBEHIND untouched.
+                        //
+                        // Tint alpha 205 (~80%): the course list has no tint of its
+                        // own, and at 160 a white wallpaper lifted it to rgb(101,105,109),
+                        // where grey labels fell to ~2:1 contrast.
                         let win11 = windows_build_number() >= 22000;
-                        if !(win11 && apply_accent_acrylic(hwnd, (10, 14, 20, 160))) {
-                            let _ = window_vibrancy::apply_blur(&window, Some((10, 14, 20, 160)));
+                        if !(win11 && apply_accent_acrylic(hwnd, (10, 14, 20, 205))) {
+                            let _ = window_vibrancy::apply_blur(&window, Some((10, 14, 20, 205)));
                         }
                     }
                 }

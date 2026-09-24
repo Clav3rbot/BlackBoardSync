@@ -33,6 +33,9 @@ $warning: #e3b04b;
 $text-primary: #f2f2f4;
 $text-secondary: #a1a2aa;
 $text-tertiary: #6e6f78;
+// Small text straight on the window glass, which a bright wallpaper can lift
+// to mid-grey: secondary would drop below 4.5:1 there.
+$text-on-glass: #bcbdc4;
 
 $border: rgba(255, 255, 255, 0.07);
 
@@ -1480,10 +1483,34 @@ button:focus:not(:focus-visible),
     .term-chevron,
     .term-name,
     .term-count,
+    .term-hidden-btn,
     .term-pill,
     .term-pill-label,
-    .course-source {
-        color: $text-secondary;
+    .course-source,
+    .course-instructor,
+    .course-actions-trigger,
+    .term-pill-hide-btn {
+        color: $text-on-glass;
+    }
+
+    .term-hidden-btn:hover,
+    .term-pill-hide-btn:hover,
+    .course-actions-trigger:hover,
+    .course-actions-trigger.active {
+        color: $text-primary;
+    }
+
+    .course-instructor::before {
+        background: $text-on-glass;
+    }
+
+    .term-hidden-btn {
+        opacity: 1;
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .checkbox:not(.checked) {
+        border-color: rgba(255, 255, 255, 0.4);
     }
 
     .term-count,
