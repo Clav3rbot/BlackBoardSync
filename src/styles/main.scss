@@ -2224,17 +2224,25 @@ button:focus:not(:focus-visible),
         }
     }
 
+    // The × overlays the pill instead of widening it: a wider pill at the
+    // end of a row wrapped to the next line, left the cursor, shrank back
+    // and wrapped up again, flickering for as long as the cursor stayed.
+    // Clips the shifted label at the rounded edge.
+    position: relative;
+    overflow: hidden;
+
     &:hover {
         border-color: rgba(255, 255, 255, 0.1);
         background: rgba(255, 255, 255, 0.05);
 
+        // Shift a little and fade the last letters under the ×, so the pill
+        // keeps its resting width.
         .term-pill-label {
-            padding-right: 4px;
+            transform: translateX(-6px);
+            mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent calc(100% - 11px));
         }
 
         .term-pill-hide-btn {
-            width: 16px;
-            margin-right: 4px;
             opacity: 1;
             pointer-events: auto;
         }
@@ -2251,7 +2259,7 @@ button:focus:not(:focus-visible),
     border: none;
     cursor: pointer;
     white-space: nowrap;
-    transition: color $transition-smooth, padding $transition-smooth;
+    transition: color $transition-smooth, transform $transition-smooth;
 
     &:hover {
         color: $text-secondary;
@@ -2259,9 +2267,12 @@ button:focus:not(:focus-visible),
 }
 
 .term-pill-hide-btn {
-    width: 0;
-    height: 16px;
-    overflow: hidden;
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    margin-top: -7px;
+    width: 14px;
+    height: 14px;
     opacity: 0;
     pointer-events: none;
     border: none;
@@ -2275,8 +2286,7 @@ button:focus:not(:focus-visible),
     flex-shrink: 0;
     font-size: 12px;
     line-height: 1;
-    margin-right: 0;
-    transition: width $transition-smooth, margin $transition-smooth, opacity $transition-smooth, color $transition-smooth, background $transition-smooth;
+    transition: opacity $transition-smooth, color $transition-smooth, background $transition-smooth;
 
     &:hover {
         color: $text-primary;
