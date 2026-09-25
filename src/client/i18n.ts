@@ -3,6 +3,8 @@ export interface TranslationKeys {
     appName: string;
     loading: string;
     connecting: string;
+    offline: string;
+    offlineHint: string;
     logout: string;
     settings: string;
     openFolder: string;
@@ -106,6 +108,8 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         appName: "BlackBoard Sync",
         loading: "Caricamento...",
         connecting: "Connessione in corso...",
+        offline: "Nessuna connessione a Internet",
+        offlineHint: "Riprovo appena torni online…",
         logout: "Disconnetti",
         settings: "Impostazioni",
         openFolder: "Apri cartella",
@@ -202,6 +206,8 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         appName: "BlackBoard Sync",
         loading: "Loading...",
         connecting: "Connecting...",
+        offline: "No internet connection",
+        offlineHint: "Retrying as soon as you are back online…",
         logout: "Logout",
         settings: "Settings",
         openFolder: "Open folder",
