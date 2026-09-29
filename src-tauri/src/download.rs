@@ -231,14 +231,16 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
         });
     }
 
-    // Download phase — 3 concurrent workers
+    // Download phase. Measured on a live 83-file / 119 MB sync: 3 workers took
+    // 6.1 s, 8 took 2.7 s, 12 took 2.1 s — past 8 the gain no longer justifies
+    // the extra load on the university servers.
     let total_dl = to_download.len() as u64;
     let queue = Arc::new(tokio::sync::Mutex::new(VecDeque::from(to_download)));
     let downloaded_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let downloaded_files: Arc<tokio::sync::Mutex<Vec<FileToDownload>>> =
         Arc::new(tokio::sync::Mutex::new(Vec::new()));
 
-    let concurrency = 3usize.min(total_dl as usize);
+    let concurrency = 8usize.min(total_dl as usize);
     let mut handles = Vec::new();
 
     for _ in 0..concurrency {
@@ -418,104 +420,131 @@ async fn save_response(
     result
 }
 
+/// Handlers whose items can hold attachments that only `/attachments` reveals.
+/// Folders and links never do, and a file item names its one attachment in
+/// its own `contentHandler`, so asking for any of those would be a round-trip
+/// for nothing.
+fn may_have_attachments(handler: &str) -> bool {
+    !(handler == "resource/x-bb-folder"
+        || handler == "resource/x-bb-file"
+        || ["link", "blti", "scorm", "asmt"].iter().any(|k| handler.contains(k)))
+}
+
 async fn scan_course(
     api: &BlackboardAPI,
     course: &Course,
     base_path: &str,
     abort_flag: &Arc<std::sync::atomic::AtomicBool>,
 ) -> Vec<FileToDownload> {
-    let mut files = Vec::new();
-    let top_level = match api.get_contents(&course.id).await {
-        Ok(c) => c,
-        Err(_) => return files,
+    let Ok(items) = api.get_all_contents(&course.id).await else {
+        return Vec::new();
+    };
+    let lookups = files_from_contents(&items, course, base_path);
+
+    // Only the items that may hide REST attachments cost a request now.
+    const CONCURRENCY: usize = 6;
+    let fetched: Vec<Vec<FileToDownload>> = futures_util::stream::iter(lookups.pending)
+        .map(|(item_id, dir)| async move {
+            if abort_flag.load(Ordering::SeqCst) {
+                return Vec::new();
+            }
+            let attachments = api.get_attachments(&course.id, &item_id).await.unwrap_or_default();
+            attachments
+                .into_iter()
+                .map(|att| FileToDownload {
+                    course_id: course.id.clone(),
+                    course_name: course.name.clone(),
+                    content_id: item_id.clone(),
+                    attachment_id: att.id,
+                    relative_path: PathBuf::from(&dir)
+                        .join(sanitize_path(&att.file_name))
+                        .to_string_lossy()
+                        .into_owned(),
+                    file_name: att.file_name,
+                    url: None,
+                })
+                .collect()
+        })
+        .buffer_unordered(CONCURRENCY)
+        .collect()
+        .await;
+
+    let mut files = lookups.files;
+    files.extend(fetched.into_iter().flatten());
+    files
+}
+
+struct ContentScan {
+    /// Files known from the listing alone.
+    files: Vec<FileToDownload>,
+    /// (item id, folder) for items whose attachments still need asking for.
+    pending: Vec<(String, String)>,
+}
+
+/// Lays out a course's files from its flat, recursive content listing. Split
+/// from the network call so the tree rebuild can be tested against fixtures.
+fn files_from_contents(items: &[ContentItem], course: &Course, base_path: &str) -> ContentScan {
+    let by_id: HashMap<&str, &ContentItem> = items.iter().map(|i| (i.id.as_str(), i)).collect();
+
+    // An item's folder is the chain of its ancestors' titles. The course root
+    // is not part of the listing, so the walk stops at the first unknown
+    // parent; the depth cap guards against a malformed parent cycle.
+    let folder_of = |item: &ContentItem| -> String {
+        let mut titles = Vec::new();
+        let mut parent = item.parent_id.as_deref();
+        while let Some(p) = parent.and_then(|id| by_id.get(id)) {
+            if titles.len() > 20 {
+                break;
+            }
+            titles.push(sanitize_path(&p.title));
+            parent = p.parent_id.as_deref();
+        }
+        let mut dir = PathBuf::from(base_path);
+        for t in titles.iter().rev() {
+            dir.push(t);
+        }
+        dir.to_string_lossy().into_owned()
     };
 
-    // Iterative DFS, one tree level at a time. Items within a level are
-    // independent, so their attachment + children fetches are issued
-    // concurrently (bounded) instead of one network round-trip at a time —
-    // this is the dominant cost of scanning a course.
-    const LEVEL_CONCURRENCY: usize = 6;
-    let mut stack: Vec<(Vec<ContentItem>, String, usize)> = vec![(top_level, base_path.to_string(), 0)];
-    let mut visited: HashSet<String> = HashSet::new();
+    let mut scan = ContentScan { files: Vec::new(), pending: Vec::new() };
+    for item in items {
+        let dir = folder_of(item);
+        let handler = item
+            .content_handler
+            .as_ref()
+            .and_then(|h| h["id"].as_str())
+            .unwrap_or_default();
+        let file = |name: String, attachment_id: String, url: Option<String>| FileToDownload {
+            course_id: course.id.clone(),
+            course_name: course.name.clone(),
+            content_id: item.id.clone(),
+            attachment_id,
+            relative_path: PathBuf::from(&dir).join(sanitize_path(&name)).to_string_lossy().into_owned(),
+            file_name: name,
+            url,
+        };
 
-    while let Some((items, path, depth)) = stack.pop() {
-        if depth > 20 { continue; }
-        if abort_flag.load(Ordering::SeqCst) { return files; }
+        // Ultra keeps a document's files as links in its body, never as REST
+        // attachments (checked live: every such document answers with an
+        // empty list), so a body carrying them spares the lookup.
+        let body_files = item.body.as_deref().map(extract_ultra_files).unwrap_or_default();
 
-        // Per-item fetch task: attachments always, children only when present
-        // and not already visited. Dedup of `visited` happens here (serial)
-        // before fan-out so concurrent items can't re-enqueue the same folder.
-        let tasks = items.into_iter().map(|item| {
-            let fetch_children = item.has_children.unwrap_or(false) && !visited.contains(&item.id);
-            if fetch_children {
-                visited.insert(item.id.clone());
+        if handler == "resource/x-bb-file" {
+            let name = item.content_handler.as_ref().and_then(|h| h["file"]["fileName"].as_str());
+            match name {
+                // The attachment id is resolved at download time.
+                Some(name) => scan.files.push(file(name.to_string(), String::new(), None)),
+                None => scan.pending.push((item.id.clone(), dir.clone())),
             }
-            let api = api.clone();
-            let course_id = course.id.clone();
-            let course_name = course.name.clone();
-            let path = path.clone();
-            async move {
-                let mut item_files = Vec::new();
-                if let Ok(attachments) = api.get_attachments(&course_id, &item.id).await {
-                    for att in attachments {
-                        let rel = PathBuf::from(&path).join(sanitize_path(&att.file_name));
-                        item_files.push(FileToDownload {
-                            course_id: course_id.clone(),
-                            course_name: course_name.clone(),
-                            content_id: item.id.clone(),
-                            attachment_id: att.id.clone(),
-                            file_name: att.file_name.clone(),
-                            relative_path: rel.to_string_lossy().into_owned(),
-                            url: None,
-                        });
-                    }
-                }
+        } else if body_files.is_empty() && may_have_attachments(handler) {
+            scan.pending.push((item.id.clone(), dir.clone()));
+        }
 
-                // Ultra courses answer /attachments with 400 and put the files
-                // in the document body instead, so the same item can yield
-                // files through either route.
-                if let Some(body) = item.body.as_deref() {
-                    for (name, url) in extract_ultra_files(body) {
-                        let rel = PathBuf::from(&path).join(sanitize_path(&name));
-                        item_files.push(FileToDownload {
-                            course_id: course_id.clone(),
-                            course_name: course_name.clone(),
-                            content_id: item.id.clone(),
-                            attachment_id: String::new(),
-                            file_name: name,
-                            relative_path: rel.to_string_lossy().into_owned(),
-                            url: Some(url),
-                        });
-                    }
-                }
-
-                let child_level = if fetch_children {
-                    let folder = PathBuf::from(&path).join(sanitize_path(&item.title));
-                    api.get_children(&course_id, &item.id).await.ok()
-                        .map(|children| (children, folder.to_string_lossy().into_owned()))
-                } else {
-                    None
-                };
-
-                (item_files, child_level)
-            }
-        });
-
-        let level: Vec<(Vec<FileToDownload>, Option<(Vec<ContentItem>, String)>)> =
-            futures_util::stream::iter(tasks)
-                .buffer_unordered(LEVEL_CONCURRENCY)
-                .collect()
-                .await;
-
-        for (item_files, child_level) in level {
-            files.extend(item_files);
-            if let Some((children, folder)) = child_level {
-                stack.push((children, folder, depth + 1));
-            }
+        for (name, url) in body_files {
+            scan.files.push(file(name, String::new(), Some(url)));
         }
     }
-
-    files
+    scan
 }
 
 const HTML_ENTITIES: &[(&str, char)] = &[
@@ -822,6 +851,79 @@ mod tests {
         assert!(!part.exists());
 
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Live timing of the scan phase against the real accounts stored in the
+    /// keyring. Run with `cargo test --release bench_scan -- --ignored --nocapture`.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore]
+    async fn bench_scan() {
+        let store = crate::store::AppStore::new();
+        let config = store.get_config();
+        let t = std::time::Instant::now();
+
+        let mut api = BlackboardAPI::new(&store.load_session().expect("sessione"));
+        let user = match api.get_current_user().await {
+            Ok(u) => u,
+            Err(_) => {
+                let (u, p) = store.load_credentials().expect("credenziali");
+                let r = LoginManager::new().login(&u, &p).await;
+                api = BlackboardAPI::new(&r.cookies);
+                api.get_current_user().await.expect("login")
+            }
+        };
+        let mut courses = api.get_courses_for_sync(&user.id).await.unwrap();
+        courses.retain(|c| config.sync_all_courses || config.enabled_courses.contains(&c.id));
+        courses.retain(|c| !config.hidden_courses.contains(&c.id));
+        courses.retain(|c| c.term.as_ref().map(|t| !config.hidden_terms.contains(&t.id)).unwrap_or(true));
+        println!("login + corsi: {:?} ({} corsi)", t.elapsed(), courses.len());
+
+        let abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let t = std::time::Instant::now();
+        let scans = courses.iter().map(|c| {
+            let (api, abort) = (&api, &abort);
+            async move {
+                let t = std::time::Instant::now();
+                let files = scan_course(api, c, &c.name, abort).await;
+                (c.name.clone(), files.len(), t.elapsed())
+            }
+        });
+        let results = futures_util::future::join_all(scans).await;
+        for (name, n, d) in &results {
+            println!("  {:>7.2?}  {:>4} file  {}", d, n, name);
+        }
+        let total: usize = results.iter().map(|r| r.1).sum();
+        println!("scansione: {:?} ({} file)", t.elapsed(), total);
+    }
+
+    /// Shapes taken from a live `?recursive=true` listing: top-level items
+    /// point at the course root, which the listing itself does not contain.
+    #[test]
+    fn rebuilds_folders_from_a_flat_listing() {
+        let items: Vec<ContentItem> = serde_json::from_str(r#"[
+            {"id":"f1","title":"Week 1","parentId":"root","contentHandler":{"id":"resource/x-bb-folder"}},
+            {"id":"f2","title":"Slides","parentId":"f1","contentHandler":{"id":"resource/x-bb-folder"}},
+            {"id":"a","title":"Syllabus -pdf","parentId":"root","contentHandler":{"id":"resource/x-bb-file","file":{"fileName":"syllabus.pdf"}}},
+            {"id":"b","title":"Lecture","parentId":"f2","contentHandler":{"id":"resource/x-bb-file","file":{"fileName":"l1.pdf"}}},
+            {"id":"d","title":"Notes","parentId":"f1","contentHandler":{"id":"resource/x-bb-document"},
+             "body":"<a data-bbfile=\"{&quot;linkName&quot;:&quot;n.pdf&quot;,&quot;resourceUrl&quot;:&quot;https://bb.example/bbcswebdav/n&quot;}\"></a>"},
+            {"id":"l","title":"Quiz","parentId":"f1","contentHandler":{"id":"resource/x-bb-asmt-test-link"}},
+            {"id":"o","title":"Readme","parentId":"root","contentHandler":{"id":"resource/x-bb-document"},"body":"<p>text</p>"}
+        ]"#).unwrap();
+        let course = Course {
+            id: "c".into(), course_id: "C".into(), name: "C".into(), term: None, instructor: None,
+        };
+
+        let scan = files_from_contents(&items, &course, "Corso");
+        let mut paths: Vec<String> =
+            scan.files.iter().map(|f| f.relative_path.replace('\\', "/")).collect();
+        paths.sort();
+        // A document's body files sit beside the document, not inside it.
+        assert_eq!(paths, ["Corso/Week 1/Slides/l1.pdf", "Corso/Week 1/n.pdf", "Corso/syllabus.pdf"]);
+        // Only a document without body files can hide REST attachments;
+        // folders, files, links and Ultra bodies must not cost a request each.
+        let pending: Vec<&str> = scan.pending.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(pending, ["o"]);
     }
 
     #[test]

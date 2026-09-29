@@ -48,11 +48,11 @@ pub struct Course {
 pub struct ContentItem {
     pub id: String,
     pub title: String,
-    pub has_children: Option<bool>,
+    pub parent_id: Option<String>,
     pub content_handler: Option<serde_json::Value>,
     // Ultra courses keep a document's files as links inside this HTML body
-    // instead of as REST attachments. Present in the /contents and /children
-    // listings, so reading it costs no extra request.
+    // instead of as REST attachments. Present in the recursive /contents
+    // listing, so reading it costs no extra request.
     pub body: Option<String>,
 }
 
@@ -104,6 +104,9 @@ impl BlackboardAPI {
     fn url(&self, path: &str) -> String {
         if path.starts_with("http") {
             path.to_string()
+        } else if path.starts_with("/learn/") {
+            // `paging.nextPage` comes back rooted at the host, not at API_BASE.
+            format!("https://{}{}", HOST, path)
         } else {
             format!("{}{}", API_BASE, path)
         }
@@ -121,17 +124,20 @@ impl BlackboardAPI {
     }
 
     pub async fn get_courses(&self, user_id: &str) -> Result<Vec<Course>, String> {
-        self.get_courses_inner(user_id).await
+        self.get_courses_inner(user_id, true).await
     }
 
+    /// Sync filters on term ids only, so it skips the per-term name lookups:
+    /// the server throttles bursts of requests, and every one saved here
+    /// leaves room for the scan.
     pub async fn get_courses_for_sync(&self, user_id: &str) -> Result<Vec<Course>, String> {
-        self.get_courses_inner(user_id).await
+        self.get_courses_inner(user_id, false).await
     }
 
     // Fast: course list + term names only. Instructor names are resolved
     // separately via `get_instructors` (many slow round-trips) so the UI can
     // render the list immediately and fill instructors in afterwards.
-    async fn get_courses_inner(&self, user_id: &str) -> Result<Vec<Course>, String> {
+    async fn get_courses_inner(&self, user_id: &str, term_names: bool) -> Result<Vec<Course>, String> {
         let mut courses: Vec<Course> = Vec::new();
         let mut path = format!(
             "/users/{}/courses?limit=100&fields=courseId,course.name,course.id,course.termId",
@@ -174,6 +180,10 @@ impl BlackboardAPI {
                 Some(next) => path = next.to_string(),
                 None => break,
             }
+        }
+
+        if !term_names {
+            return Ok(courses);
         }
 
         // Resolve term names
@@ -298,40 +308,33 @@ impl BlackboardAPI {
         map
     }
 
-    pub async fn get_contents(&self, course_id: &str) -> Result<Vec<ContentItem>, String> {
-        let mut data: serde_json::Value = self.client
-            .get(self.url(&format!("/courses/{}/contents", course_id)))
-            .send()
-            .await
-            .map_err(|e| e.to_string())?
-            .json()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        let items: Vec<ContentItem> = serde_json::from_value(
-            data["results"].take(),
-        ).unwrap_or_default();
-        Ok(items)
-    }
-
-    pub async fn get_children(
-        &self,
-        course_id: &str,
-        content_id: &str,
-    ) -> Result<Vec<ContentItem>, String> {
-        let mut data: serde_json::Value = self.client
-            .get(self.url(&format!(
-                "/courses/{}/contents/{}/children",
-                course_id, content_id
-            )))
-            .send()
-            .await
-            .map_err(|e| e.to_string())?
-            .json()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        Ok(serde_json::from_value(data["results"].take()).unwrap_or_default())
+    /// Every content item of a course in one paged listing. Each item carries
+    /// its `parentId`, so the tree is rebuilt locally instead of being walked
+    /// one `/children` request per folder — which on a real course is the
+    /// difference between one round-trip and a hundred.
+    pub async fn get_all_contents(&self, course_id: &str) -> Result<Vec<ContentItem>, String> {
+        let mut items = Vec::new();
+        let mut path = format!("/courses/{}/contents?recursive=true&limit=200", course_id);
+        loop {
+            let response = self.client
+                .get(self.url(&path))
+                .send()
+                .await
+                .map_err(|e| e.to_string())?;
+            // An error body has no `results`; decoding it as an empty page
+            // would pass a course off as having no files.
+            if !response.status().is_success() {
+                return Err(format!("HTTP {}", response.status()));
+            }
+            let mut data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+            let page: Vec<ContentItem> =
+                serde_json::from_value(data["results"].take()).map_err(|e| e.to_string())?;
+            items.extend(page);
+            match data["paging"]["nextPage"].as_str() {
+                Some(next) => path = next.to_string(),
+                None => return Ok(items),
+            }
+        }
     }
 
     pub async fn get_attachments(
@@ -380,6 +383,21 @@ impl BlackboardAPI {
         content_id: &str,
         attachment_id: &str,
     ) -> Result<reqwest::Response, String> {
+        // File items are scanned without their attachment id, which costs a
+        // request per item; it is looked up here, only for files not on disk.
+        let looked_up;
+        let attachment_id = if attachment_id.is_empty() {
+            looked_up = self
+                .get_attachments(course_id, content_id)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or("nessun allegato")?
+                .id;
+            looked_up.as_str()
+        } else {
+            attachment_id
+        };
         let url = self.url(&format!(
             "/courses/{}/contents/{}/attachments/{}/download",
             course_id, content_id, attachment_id
