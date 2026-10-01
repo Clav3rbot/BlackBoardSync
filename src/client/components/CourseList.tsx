@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import HeatmapBackground from './HeatmapBackground';
 import Icon from './Icon';
+import Marquee from './Marquee';
 import { getT } from '../i18n';
 
 interface Course {
@@ -404,12 +405,12 @@ const CourseList: React.FC<CourseListProps> = ({
                                                             />
                                                         ) : (
                                                             <span className="course-name">
-                                                                {displayName}
+                                                                <Marquee text={displayName} />
                                                             </span>
                                                         )}
                                                         {course.instructor && !isEditing ? (
                                                             <span className={`course-instructor${cacheMisses?.has(course.id) ? ' fade-in' : ''}`}>
-                                                                {course.instructor}
+                                                                <Marquee text={course.instructor} />
                                                             </span>
                                                         ) : (loadingInstructors && !isEditing && cacheMisses?.has(course.id)) ? (
                                                             <div className="course-instructor-skeleton">
@@ -438,6 +439,13 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                     >
                                                                         <Icon name="pencil" size={13} />
                                                                         {t('actionRename')}
+                                                                    </button>
+                                                                    <button
+                                                                        className="course-actions-popup-item"
+                                                                        onClick={(e) => { e.stopPropagation(); setActionsOpenId(null); window.api.openCourseFolder(displayName); }}
+                                                                    >
+                                                                        <Icon name="folder" size={13} />
+                                                                        {t('openFolder')}
                                                                     </button>
                                                                     <button
                                                                         className="course-actions-popup-item danger"

@@ -26,6 +26,7 @@ const api: Window['api'] = {
     updateConfig: (partial) => invoke('update_config', { partial }),
     selectFolder: () => invoke('select_folder'),
     openFolder: (folderPath) => invoke('open_folder', { folderPath }),
+    openCourseFolder: (name) => invoke('open_course_folder', { name }),
     minimize: () => getCurrentWindow().minimize(),
     maximize: async () => {
         const win = getCurrentWindow();

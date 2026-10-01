@@ -53,6 +53,7 @@ fn main() {
             commands::update_config,
             commands::select_folder,
             commands::open_folder,
+            commands::open_course_folder,
             commands::reset_window_size,
             commands::check_for_updates,
             commands::restart_for_update,

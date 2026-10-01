@@ -97,6 +97,7 @@ declare global {
             updateConfig: (partial: Partial<AppConfig>) => Promise<AppConfig>;
             selectFolder: () => Promise<string | null>;
             openFolder: (folderPath: string) => Promise<void>;
+            openCourseFolder: (name: string) => Promise<void>;
             minimize: () => Promise<void>;
             maximize: () => Promise<void>;
             close: () => Promise<void>;

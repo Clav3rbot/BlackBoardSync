@@ -1865,6 +1865,38 @@ button:focus:not(:focus-visible),
     text-overflow: ellipsis;
 }
 
+// See Marquee.tsx. The inner span stays inline at rest so the ellipsis works,
+// and only becomes an inline-block while scrolling, because a transform needs
+// one. Animating text-indent instead moved the layout but WebView2 never
+// repainted it, so the text sat still.
+.marquee {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    &.scrolling {
+        text-overflow: clip;
+
+        > span {
+            display: inline-block;
+            animation: marquee var(--marquee-duration) ease-in-out infinite alternate;
+        }
+    }
+}
+
+@keyframes marquee {
+    0%, 4% { transform: translateX(0); }
+    85%, 100% { transform: translateX(calc(-1 * var(--marquee-shift))); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .marquee.scrolling > span {
+        animation: none;
+    }
+}
+
 .course-original-name {
     font-size: 10px;
     color: $text-tertiary;

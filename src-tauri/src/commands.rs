@@ -386,6 +386,26 @@ pub async fn open_folder(
         .map_err(|e| e.to_string())
 }
 
+/// Opens a course's folder, named the way `trigger_sync` names it. Falls back
+/// to the sync root when the course was never synced.
+#[tauri::command]
+pub async fn open_course_folder(
+    name: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    use crate::download::sanitize_path;
+    use tauri_plugin_opener::OpenerExt;
+
+    let sync_dir = std::path::PathBuf::from(state.store.lock().unwrap().get_config().sync_dir);
+    let dir = sync_dir.join(sanitize_path(&name));
+    let target = if dir.is_dir() { dir } else { sync_dir };
+
+    app.opener()
+        .open_path(target.to_string_lossy(), None::<String>)
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn reset_window_size(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {

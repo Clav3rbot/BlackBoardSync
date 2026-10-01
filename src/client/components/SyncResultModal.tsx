@@ -1,5 +1,6 @@
 import React from 'react';
 import Icon from './Icon';
+import Marquee from './Marquee';
 import { getT } from '../i18n';
 
 interface SyncResultCourse {
@@ -70,7 +71,7 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose
                             <div key={idx} className="modal-course">
                                 <div className="modal-course-header">
                                 <Icon name="warning" size={14} className="modal-course-icon" />
-                                    <span className="modal-course-name">{course.courseName}</span>
+                                    <Marquee className="modal-course-name" text={course.courseName} />
                                     <span className="modal-course-count">
                                         {course.files.length}
                                     </span>
@@ -79,7 +80,7 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose
                                     {course.files.map((file, fIdx) => (
                                         <li key={fIdx} className="modal-file-item">
                                             <Icon name="file" size={12} className="modal-file-icon" />
-                                            <span className="modal-file-name">{file}</span>
+                                            <Marquee className="modal-file-name" text={file} />
                                             <span className="modal-file-badge">{lang === 'en' ? 'NEW' : 'NUOVO'}</span>
                                         </li>
                                     ))}

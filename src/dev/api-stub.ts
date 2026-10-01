@@ -52,6 +52,7 @@ window.api = {
     updateConfig: async (partial) => { config = { ...config, ...partial }; return { ...config }; },
     selectFolder: async () => 'C:\\Utenti\\Studente\\Documenti\\Blackboard',
     openFolder: async () => {},
+    openCourseFolder: async () => {},
     minimize: async () => {},
     maximize: async () => {},
     close: async () => {},
