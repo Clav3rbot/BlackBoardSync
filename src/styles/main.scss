@@ -14,40 +14,40 @@
     font-display: block;
 }
 
-$bg-secondary: #0f1013;
-$bg-elevated: #16171b;
-$bg-glass: rgba(15, 16, 19, 0.85);
+$bg-secondary: var(--bg-secondary);
+$bg-elevated: var(--bg-elevated);
+$bg-glass: var(--bg-glass);
 
 $accent: #3e63dd;
-$accent-soft: #9eb1ff;
+$accent-soft: var(--accent-soft);
 $accent-subtle: rgba(62, 99, 221, 0.12);
 $accent-gradient: linear-gradient(180deg, #4a6de5 0%, #3252c9 100%);
 
-$success: #3ecf8e;
+$success: var(--success);
 $success-subtle: rgba(62, 207, 142, 0.1);
-$error: #e5565b;
+$error: var(--error);
 $error-subtle: rgba(229, 86, 91, 0.1);
 $error-strong: #cf3a40;
-$warning: #e3b04b;
+$warning: var(--warning);
 
-$text-primary: #f2f2f4;
-$text-secondary: #a1a2aa;
-$text-tertiary: #6e6f78;
+$text-primary: var(--text-primary);
+$text-secondary: var(--text-secondary);
+$text-tertiary: var(--text-tertiary);
 // Small text straight on the window glass, which a bright wallpaper can lift
 // to mid-grey: secondary would drop below 4.5:1 there.
-$text-on-glass: #bcbdc4;
+$text-on-glass: var(--text-on-glass);
 
-$border: rgba(255, 255, 255, 0.07);
+$border: var(--border);
 
-$bevel: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-$bevel-strong: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+$bevel: inset 0 1px 0 var(--bevel);
+$bevel-strong: inset 0 1px 0 var(--bevel-strong);
 
 $radius-sm: 8px;
 $radius-md: 10px;
 $radius-lg: 14px;
 $radius-full: 9999px;
 
-$shadow-lg: 0 12px 40px rgba(8, 8, 11, 0.55), 0 2px 8px rgba(8, 8, 11, 0.4);
+$shadow-lg: 0 12px 40px rgba(var(--shadow), calc(0.55 * var(--shadow-k))), 0 2px 8px rgba(var(--shadow), calc(0.4 * var(--shadow-k)));
 
 $font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI Variable Text',
     'Segoe UI', system-ui, sans-serif;
@@ -57,6 +57,69 @@ $transition: 140ms cubic-bezier(0.32, 0.72, 0, 1);
 $transition-smooth: 220ms cubic-bezier(0.32, 0.72, 0, 1);
 $transition-spring: 320ms cubic-bezier(0.34, 1.4, 0.5, 1);
 $transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+// Theme tokens: dark by default, swapped by [data-theme='light'] on <html>.
+// The overlay colours are RGB triplets so each rule keeps its own alpha:
+// --fg for washes and outlines, --sink for recessed wells and scrims (scaled
+// by --sink-k), --shadow for drop shadows (scaled by --shadow-k).
+:root {
+    color-scheme: dark;
+    // The window's tint over the native blur (see main.rs): painted here
+    // rather than natively so it switches with the theme inside the reveal.
+    --bg-veil: rgba(10, 14, 20, 0.8);
+    --bg-secondary: #0f1013;
+    --bg-elevated: #16171b;
+    --bg-glass: rgba(15, 16, 19, 0.85);
+    --bg-macos: rgba(10, 14, 20, 0.72);
+    --accent-soft: #9eb1ff;
+    --success: #3ecf8e;
+    --error: #e5565b;
+    --warning: #e3b04b;
+    --text-primary: #f2f2f4;
+    --text-secondary: #a1a2aa;
+    --text-tertiary: #6e6f78;
+    --text-on-glass: #bcbdc4;
+    --glass-text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    --fg: 255, 255, 255;
+    --sink: 0, 0, 0;
+    --sink-k: 1;
+    --shadow: 8, 8, 11;
+    --shadow-k: 1;
+    --border: rgba(255, 255, 255, 0.07);
+    --bevel: rgba(255, 255, 255, 0.05);
+    --bevel-strong: rgba(255, 255, 255, 0.08);
+    --tour-scrim: rgba(4, 6, 10, 0.62);
+}
+
+// Cool neutrals tinted toward the accent, never pure white or black. Every
+// text tone keeps 4.5:1 on the veil; accent-soft darkens so blue labels stay
+// readable on light chips.
+[data-theme='light'] {
+    color-scheme: light;
+    --bg-veil: rgba(242, 243, 247, 0.8);
+    --bg-secondary: #f7f8fa;
+    --bg-elevated: #fcfcfd;
+    --bg-glass: rgba(250, 250, 252, 0.72);
+    --bg-macos: rgba(241, 242, 246, 0.9);
+    --accent-soft: #2f4fc4;
+    --success: #0f7653;
+    --error: #bf3036;
+    --warning: #8a5a05;
+    --text-primary: #14161c;
+    --text-secondary: #4f5361;
+    --text-tertiary: #646875;
+    --text-on-glass: #464a57;
+    --glass-text-shadow: none;
+    --fg: 22, 26, 40;
+    --sink: 22, 26, 40;
+    --sink-k: 0.3;
+    --shadow: 28, 34, 58;
+    --shadow-k: 0.3;
+    --border: rgba(22, 26, 40, 0.1);
+    --bevel: rgba(255, 255, 255, 0.7);
+    --bevel-strong: rgba(255, 255, 255, 0.9);
+    --tour-scrim: rgba(22, 26, 40, 0.34);
+}
 
 *,
 *::before,
@@ -111,14 +174,14 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(var(--fg), 0.07);
     border-radius: $radius-full;
     border: 3px solid transparent;
     background-clip: content-box;
     transition: background-color $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.16);
+        background: rgba(var(--fg), 0.16);
         background-clip: content-box;
     }
 }
@@ -132,7 +195,7 @@ body {
 // mouse/touch, so the pointer-driven look is unchanged. Inputs keep their own
 // richer :focus glow above; this covers buttons, toggles and clickable rows.
 :focus-visible {
-    outline: 2px solid rgba($accent-soft, 0.85);
+    outline: 2px solid color-mix(in srgb, $accent-soft 85%, transparent);
     outline-offset: 2px;
     border-radius: $radius-sm;
 }
@@ -146,7 +209,7 @@ button:focus:not(:focus-visible),
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: transparent;
+    background: var(--bg-veil);
     position: relative;
 
     &::before {
@@ -171,7 +234,7 @@ button:focus:not(:focus-visible),
     }
 
     .platform-macos & {
-        background: rgba(10, 14, 20, 0.72);
+        background: var(--bg-macos);
         backdrop-filter: blur(20px);
     }
 }
@@ -235,7 +298,7 @@ button:focus:not(:focus-visible),
     transition: background $transition-smooth, color $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-primary;
     }
 
@@ -266,7 +329,7 @@ button:focus:not(:focus-visible),
 .spinner {
     width: 28px;
     height: 28px;
-    border: 2px solid rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(var(--fg), 0.08);
     border-top-color: $accent-soft;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
@@ -276,7 +339,7 @@ button:focus:not(:focus-visible),
     display: inline-block;
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
+    border: 2px solid rgba(var(--fg), 0.3);
     border-top-color: currentColor;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
@@ -303,13 +366,13 @@ button:focus:not(:focus-visible),
 
 .login-header {
     text-align: center;
-    margin-bottom: 44px;
+    margin-bottom: 32px;
 
     .login-logo {
         color: $accent-soft;
         margin-bottom: 22px;
         filter: drop-shadow(0 6px 18px rgba($accent, 0.35))
-                drop-shadow(0 1px 2px rgba(8, 8, 11, 0.5));
+                drop-shadow(0 1px 2px rgba(var(--shadow), calc(0.5 * var(--shadow-k))));
     }
 
     h1 {
@@ -335,7 +398,6 @@ button:focus:not(:focus-visible),
 
 .login-form {
     width: 100%;
-    max-width: 320px;
 }
 
 .form-group {
@@ -353,14 +415,14 @@ button:focus:not(:focus-visible),
     input {
         width: 100%;
         padding: 11px 14px;
-        background: rgba(0, 0, 0, 0.22);
+        background: rgba(var(--sink), calc(0.22 * var(--sink-k)));
         border: 1px solid $border;
         border-radius: $radius-md;
         color: $text-primary;
         font-size: 14px;
         font-family: $font-family;
         outline: none;
-        box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.45);
+        box-shadow: inset 0 1px 2px rgba(var(--shadow), calc(0.45 * var(--shadow-k)));
         transition: border-color $transition-smooth, box-shadow $transition-smooth, background $transition-smooth;
 
         &::placeholder {
@@ -368,9 +430,9 @@ button:focus:not(:focus-visible),
         }
 
         &:focus {
-            border-color: rgba($accent-soft, 0.45);
-            background: rgba(0, 0, 0, 0.28);
-            box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.45), 0 0 0 3px rgba($accent, 0.14);
+            border-color: color-mix(in srgb, $accent-soft 45%, transparent);
+            background: rgba(var(--sink), calc(0.28 * var(--sink-k)));
+            box-shadow: inset 0 1px 2px rgba(var(--shadow), calc(0.45 * var(--shadow-k))), 0 0 0 3px rgba($accent, 0.14);
         }
 
         &:disabled {
@@ -382,7 +444,7 @@ button:focus:not(:focus-visible),
 
 .error-message {
     background: $error-subtle;
-    border: 1px solid rgba($error, 0.15);
+    border: 1px solid color-mix(in srgb, $error 15%, transparent);
     color: $error;
     padding: 10px 14px;
     border-radius: $radius-sm;
@@ -425,7 +487,7 @@ button:focus:not(:focus-visible),
 
     &:active:not(:disabled) {
         transform: translateY(0) scale(0.985);
-        box-shadow: 0 1px 6px rgba($accent, 0.25), inset 0 1px 3px rgba(8, 8, 11, 0.3);
+        box-shadow: 0 1px 6px rgba($accent, 0.25), inset 0 1px 3px rgba(var(--shadow), calc(0.3 * var(--shadow-k)));
     }
 
     &:disabled {
@@ -436,7 +498,7 @@ button:focus:not(:focus-visible),
 }
 
 .login-footer {
-    margin-top: 28px;
+    margin-top: 20px;
     font-size: 11px;
     color: $text-on-glass;
     text-align: center;
@@ -467,7 +529,7 @@ button:focus:not(:focus-visible),
     background: $bg-glass;
     backdrop-filter: blur(12px) saturate(140%);
     border-bottom: 1px solid $border;
-    box-shadow: $bevel, 0 8px 24px -12px rgba(8, 8, 11, 0.7);
+    box-shadow: $bevel, 0 8px 24px -12px rgba(var(--shadow), calc(0.7 * var(--shadow-k)));
     flex-shrink: 0;
 }
 
@@ -497,7 +559,7 @@ button:focus:not(:focus-visible),
     font-weight: 700;
     flex-shrink: 0;
     box-shadow: 0 3px 12px -2px rgba($accent, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2),
-        inset 0 -1px 0 rgba(8, 8, 11, 0.25);
+        inset 0 -1px 0 rgba(var(--shadow), calc(0.25 * var(--shadow-k)));
     letter-spacing: 0.2px;
 }
 
@@ -542,7 +604,7 @@ button:focus:not(:focus-visible),
 
     &:hover {
         background: $error-subtle;
-        border-color: rgba($error, 0.2);
+        border-color: color-mix(in srgb, $error 20%, transparent);
         color: $error;
     }
 }
@@ -566,15 +628,15 @@ button:focus:not(:focus-visible),
     transition: all $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(var(--fg), 0.06);
+        border-color: rgba(var(--fg), 0.12);
         color: $text-primary;
         box-shadow: $bevel;
     }
 
     &.btn-logout-icon:hover {
         background: $error-subtle;
-        border-color: rgba($error, 0.2);
+        border-color: color-mix(in srgb, $error 20%, transparent);
         color: $error;
     }
 
@@ -621,7 +683,7 @@ button:focus:not(:focus-visible),
     }
 
     &.syncing {
-        background: rgba(255, 255, 255, 0.04);
+        background: rgba(var(--fg), 0.04);
         border: 1px solid $border;
         box-shadow: none;
         transform: none;
@@ -629,7 +691,7 @@ button:focus:not(:focus-visible),
         &::after { display: none; }
 
         &:hover {
-            background: rgba(255, 255, 255, 0.06);
+            background: rgba(var(--fg), 0.06);
             box-shadow: none;
         }
     }
@@ -646,13 +708,13 @@ button:focus:not(:focus-visible),
     margin-top: 8px;
     border: 1px solid $border;
     border-radius: $radius-sm;
-    background: rgba(0, 0, 0, 0.18);
-    box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.35);
+    background: rgba(var(--sink), calc(0.18 * var(--sink-k)));
+    box-shadow: inset 0 1px 2px rgba(var(--shadow), calc(0.35 * var(--shadow-k)));
     overflow: hidden;
     transition: border-color $transition-smooth;
 
     &:hover {
-        border-color: rgba(255, 255, 255, 0.15);
+        border-color: rgba(var(--fg), 0.15);
     }
 }
 
@@ -699,7 +761,7 @@ button:focus:not(:focus-visible),
     transition: all $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-primary;
     }
 }
@@ -750,7 +812,7 @@ button:focus:not(:focus-visible),
     position: relative;
     width: 100%;
     height: 4px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--fg), 0.06);
     border-radius: $radius-full;
     overflow: hidden;
     margin-bottom: 8px;
@@ -802,7 +864,7 @@ button:focus:not(:focus-visible),
 
 .progress-bar.error .progress-fill {
     background: $error;
-    box-shadow: 0 0 12px rgba($error, 0.4);
+    box-shadow: 0 0 12px color-mix(in srgb, $error 40%, transparent);
 
     &::after { display: none; }
 }
@@ -872,8 +934,8 @@ button:focus:not(:focus-visible),
 
 .section-badge-hidden {
     color: $text-tertiary;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(var(--fg), 0.04);
+    border: 1px solid rgba(var(--fg), 0.06);
 }
 
 .folder-row {
@@ -887,11 +949,11 @@ button:focus:not(:focus-visible),
     flex: 1;
     font-size: 12px;
     color: $text-secondary;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(var(--sink), calc(0.2 * var(--sink-k)));
     padding: 8px 12px;
     border-radius: $radius-sm;
     border: 1px solid $border;
-    box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.4);
+    box-shadow: inset 0 1px 2px rgba(var(--shadow), calc(0.4 * var(--shadow-k)));
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -909,7 +971,7 @@ button:focus:not(:focus-visible),
     width: 32px;
     height: 32px;
     border: 1px solid $border;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(var(--fg), 0.02);
     color: $text-secondary;
     cursor: pointer;
     border-radius: $radius-sm;
@@ -919,9 +981,9 @@ button:focus:not(:focus-visible),
     transition: all $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-primary;
-        border-color: rgba(255, 255, 255, 0.12);
+        border-color: rgba(var(--fg), 0.12);
         box-shadow: $bevel;
     }
 
@@ -946,18 +1008,18 @@ button:focus:not(:focus-visible),
 .toggle {
     width: 42px;
     height: 24px;
-    background: rgba(0, 0, 0, 0.28);
+    background: rgba(var(--sink), calc(0.28 * var(--sink-k)));
     border: 1px solid $border;
     border-radius: $radius-full;
     position: relative;
-    box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.5);
+    box-shadow: inset 0 1px 2px rgba(var(--shadow), calc(0.5 * var(--shadow-k)));
     transition: background $transition-smooth, border-color $transition-smooth, box-shadow $transition-smooth;
     cursor: pointer;
 
     &.active {
         background: $accent-gradient;
         border-color: transparent;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 3px rgba(8, 8, 11, 0.45);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 3px rgba(var(--shadow), calc(0.45 * var(--shadow-k)));
     }
 }
 
@@ -970,7 +1032,7 @@ button:focus:not(:focus-visible),
     top: 2px;
     left: 3px;
     transition: transform $transition-spring;
-    box-shadow: 0 1px 3px rgba(8, 8, 11, 0.55), 0 0 0 0.5px rgba(8, 8, 11, 0.25);
+    box-shadow: 0 1px 3px rgba(var(--shadow), calc(0.55 * var(--shadow-k))), 0 0 0 0.5px rgba(var(--shadow), calc(0.25 * var(--shadow-k)));
 
     .toggle.active & {
         transform: translateX(18px);
@@ -997,7 +1059,7 @@ button:focus:not(:focus-visible),
 .interval-btn {
     flex: 1;
     padding: 6px 10px;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(var(--fg), 0.03);
     border: 1px solid $border;
     border-radius: $radius-sm;
     color: $text-secondary;
@@ -1008,9 +1070,9 @@ button:focus:not(:focus-visible),
     transition: all $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-primary;
-        border-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(var(--fg), 0.1);
     }
 
     &.active {
@@ -1064,7 +1126,7 @@ button:focus:not(:focus-visible),
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(var(--sink), calc(0.5 * var(--sink-k)));
     backdrop-filter: blur(4px);
     z-index: 50;
     display: flex;
@@ -1085,7 +1147,7 @@ button:focus:not(:focus-visible),
     border-left: 1px solid $border;
     display: flex;
     flex-direction: column;
-    box-shadow: -16px 0 48px -12px rgba(8, 8, 11, 0.7), $bevel;
+    box-shadow: -16px 0 48px -12px rgba(var(--shadow), calc(0.7 * var(--shadow-k))), $bevel;
     animation: settingsPanelIn 320ms cubic-bezier(0.32, 0.72, 0, 1);
 }
 
@@ -1154,7 +1216,7 @@ button:focus:not(:focus-visible),
     transition: all $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-primary;
     }
 }
@@ -1189,14 +1251,14 @@ button:focus:not(:focus-visible),
 
 .time-input {
     padding: 5px 10px;
-    background: rgba(0, 0, 0, 0.22);
+    background: rgba(var(--sink), calc(0.22 * var(--sink-k)));
     border: 1px solid $border;
     border-radius: $radius-sm;
     color: $text-primary;
     font-size: 13px;
     font-family: $font-mono;
     outline: none;
-    box-shadow: inset 0 1px 2px rgba(8, 8, 11, 0.4);
+    box-shadow: inset 0 1px 2px rgba(var(--shadow), calc(0.4 * var(--shadow-k)));
     transition: border-color $transition-smooth, box-shadow $transition-smooth;
     width: 100px;
     text-align: center;
@@ -1233,7 +1295,7 @@ button:focus:not(:focus-visible),
     gap: 5px;
     padding: 5px 12px;
     border: 1px solid $border;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(var(--fg), 0.03);
     color: $text-tertiary;
     border-radius: $radius-sm;
     font-size: 11px;
@@ -1244,9 +1306,9 @@ button:focus:not(:focus-visible),
     flex-shrink: 0;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-secondary;
-        border-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(var(--fg), 0.1);
     }
 }
 
@@ -1256,7 +1318,7 @@ button:focus:not(:focus-visible),
     border-radius: $radius-sm;
     font-size: 12px;
     line-height: 1.4;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(var(--fg), 0.04);
     border: 1px solid $border;
     color: $text-secondary;
 
@@ -1268,14 +1330,14 @@ button:focus:not(:focus-visible),
     }
 
     &.update-error {
-        background: rgba($error, 0.08);
-        border-color: rgba($error, 0.25);
+        background: color-mix(in srgb, $error 8%, transparent);
+        border-color: color-mix(in srgb, $error 25%, transparent);
         color: $error;
     }
 
     &.update-not-available {
-        background: rgba($success, 0.08);
-        border-color: rgba($success, 0.25);
+        background: color-mix(in srgb, $success 8%, transparent);
+        border-color: color-mix(in srgb, $success 25%, transparent);
         color: $success;
     }
 }
@@ -1291,7 +1353,7 @@ button:focus:not(:focus-visible),
 .update-progress-bar {
     flex: 1;
     height: 6px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--fg), 0.08);
     border-radius: 3px;
     overflow: hidden;
 }
@@ -1325,8 +1387,8 @@ button:focus:not(:focus-visible),
     transition: all $transition-smooth;
 
     &:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.06);
-        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(var(--fg), 0.06);
+        border-color: rgba(var(--fg), 0.12);
         color: $text-primary;
     }
 
@@ -1351,7 +1413,7 @@ button:focus:not(:focus-visible),
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(var(--sink), calc(0.6 * var(--sink-k)));
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -1423,8 +1485,8 @@ button:focus:not(:focus-visible),
     transition: all $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(255, 255, 255, 0.15);
+        background: rgba(var(--fg), 0.04);
+        border-color: rgba(var(--fg), 0.15);
         color: $text-primary;
     }
 }
@@ -1473,7 +1535,7 @@ button:focus:not(:focus-visible),
     // No tint, so the window's acrylic glass shows through untouched; a soft
     // dark halo under the text keeps the dim labels readable over a bright
     // wallpaper or the heatmap instead.
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+    text-shadow: var(--glass-text-shadow);
 
     // The mid-grey tertiary tone vanishes on a bright wallpaper (grey on
     // grey), so the small labels here use the secondary tone, and the chips
@@ -1505,25 +1567,25 @@ button:focus:not(:focus-visible),
 
     .term-hidden-btn {
         opacity: 1;
-        border-color: rgba(255, 255, 255, 0.3);
+        border-color: rgba(var(--fg), 0.3);
     }
 
     .checkbox:not(.checked) {
-        border-color: rgba(255, 255, 255, 0.4);
+        border-color: rgba(var(--fg), 0.4);
     }
 
     .term-count,
     .term-pill,
     .term-pill-wrap,
     .course-source {
-        background: rgba(0, 0, 0, 0.2);
+        background: rgba(var(--sink), calc(0.2 * var(--sink-k)));
     }
 
     // Hover darkens the fill instead of the base rule's white wash, which
     // would drop the chips back to grey-on-grey over a bright wallpaper.
     .term-pill:not(.active):hover,
     .term-pill-wrap:not(.active):hover {
-        background: rgba(0, 0, 0, 0.3);
+        background: rgba(var(--sink), calc(0.3 * var(--sink-k)));
     }
 
     .term-pill:not(.active):hover,
@@ -1578,10 +1640,10 @@ button:focus:not(:focus-visible),
         align-items: center;
         justify-content: center;
         color: $text-tertiary;
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(var(--fg), 0.03);
         border: 1px solid $border;
         border-radius: $radius-lg;
-        box-shadow: $bevel, inset 0 -12px 24px -16px rgba(8, 8, 11, 0.8);
+        box-shadow: $bevel, inset 0 -12px 24px -16px rgba(var(--shadow), calc(0.8 * var(--shadow-k)));
         opacity: 0.75;
     }
 
@@ -1614,7 +1676,7 @@ button:focus:not(:focus-visible),
     height: 7px;
     margin: 8px 12px 8px;
     border-radius: $radius-full;
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(var(--fg), 0.07);
 }
 
 .skeleton-row {
@@ -1628,7 +1690,7 @@ button:focus:not(:focus-visible),
     width: 18px;
     height: 18px;
     border-radius: 5px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--fg), 0.06);
     flex-shrink: 0;
 }
 
@@ -1644,12 +1706,12 @@ button:focus:not(:focus-visible),
     height: 8px;
     width: 62%;
     border-radius: $radius-full;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(var(--fg), 0.06);
 
     &.short {
         width: 34%;
         height: 6px;
-        background: rgba(255, 255, 255, 0.04);
+        background: rgba(var(--fg), 0.04);
     }
 }
 
@@ -1685,7 +1747,7 @@ button:focus:not(:focus-visible),
     opacity: 0.4;
     cursor: default;
     font-style: italic;
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(var(--fg), 0.02);
     border-radius: $radius-sm;
 
     .course-info {
@@ -1704,8 +1766,11 @@ button:focus:not(:focus-visible),
     user-select: none;
     border: 1px solid transparent;
 
-    &:hover {
-        background: rgba(255, 255, 255, 0.035);
+    // Keyboard focus counts as hover, so the hidden ⋯ button shows up when
+    // reached with Tab instead of taking focus while invisible.
+    &:hover,
+    &:has(:focus-visible) {
+        background: rgba(var(--fg), 0.035);
         border-color: $border;
         box-shadow: $bevel;
 
@@ -1752,7 +1817,7 @@ button:focus:not(:focus-visible),
 
     &:hover,
     &.active {
-        background: rgba(255, 255, 255, 0.07);
+        background: rgba(var(--fg), 0.07);
         color: $text-secondary;
     }
 }
@@ -1770,14 +1835,19 @@ button:focus:not(:focus-visible),
     right: 0;
     top: calc(100% + 6px); /* Verso il basso per evitare tagli con lo scroll */
     background: $bg-elevated;
-    border: 1px solid rgba(255, 255, 255, 0.1); 
+    border: 1px solid rgba(var(--fg), 0.1); 
     border-radius: $radius-md;
     padding: 4px;
     width: max-content;
     --inner-radius: 6px; /* Si adatta perfettamente al testo senza spazi in più */
     z-index: 30;
-    box-shadow: 0 12px 32px -8px rgba(8, 8, 11, 0.75), 0 2px 8px rgba(8, 8, 11, 0.4), $bevel;
+    box-shadow: 0 12px 32px -8px rgba(var(--shadow), calc(0.75 * var(--shadow-k))), 0 2px 8px rgba(var(--shadow), calc(0.4 * var(--shadow-k))), $bevel;
     animation: fadeInScale 160ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+.course-actions-popup.up {
+    top: auto;
+    bottom: calc(100% + 6px);
 }
 
 .course-actions-popup-item {
@@ -1804,7 +1874,7 @@ button:focus:not(:focus-visible),
     }
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-primary;
 
         svg {
@@ -1825,7 +1895,7 @@ button:focus:not(:focus-visible),
 .checkbox {
     width: 18px;
     height: 18px;
-    border: 1.5px solid rgba(255, 255, 255, 0.15);
+    border: 1.5px solid rgba(var(--fg), 0.15);
     border-radius: 5px;
     display: flex;
     align-items: center;
@@ -1835,8 +1905,8 @@ button:focus:not(:focus-visible),
     cursor: pointer;
 
     &:hover:not(.checked) {
-        border-color: rgba(255, 255, 255, 0.25);
-        background: rgba(255, 255, 255, 0.03);
+        border-color: rgba(var(--fg), 0.25);
+        background: rgba(var(--fg), 0.03);
     }
 
     &.checked {
@@ -1863,6 +1933,10 @@ button:focus:not(:focus-visible),
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
 }
 
 // See Marquee.tsx. The inner span stays inline at rest so the ellipsis works,
@@ -1895,6 +1969,55 @@ button:focus:not(:focus-visible),
     .marquee.scrolling > span {
         animation: none;
     }
+}
+
+// Which university a course belongs to. Both are listed together, so the row
+// has to say where it came from.
+.course-source {
+    flex: 0 0 auto;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: $text-tertiary;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    padding: 1px 5px;
+    opacity: 0.75;
+}
+
+// A sync can partly fail now that two universities are involved: the modal says
+// which one, without hiding the files that did arrive.
+.modal-warnings {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 0 20px 12px;
+}
+
+.modal-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    color: $warning;
+    background: color-mix(in srgb, $warning 8%, transparent);
+    border: 1px solid color-mix(in srgb, $warning 20%, transparent);
+    border-radius: $radius-sm;
+    padding: 7px 10px;
+
+    svg {
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+}
+
+// The sign-in form keeps a fixed column under the centred header.
+.login-provider {
+    width: 100%;
+    max-width: 320px;
+    margin-bottom: 22px;
 }
 
 .course-original-name {
@@ -1992,7 +2115,7 @@ button:focus:not(:focus-visible),
 .course-rename-input {
     width: 100%;
     padding: 4px 8px;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(var(--fg), 0.04);
     border: 1px solid rgba($accent, 0.5);
     border-radius: $radius-sm;
     color: $text-primary;
@@ -2018,7 +2141,7 @@ button:focus:not(:focus-visible),
     opacity: 0.7;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         opacity: 1;
     }
 }
@@ -2041,7 +2164,7 @@ button:focus:not(:focus-visible),
     font-weight: 600;
     font-family: $font-family;
     color: $text-tertiary;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(var(--fg), 0.03);
     border: 1px solid $border;
     border-radius: $radius-full;
     cursor: pointer;
@@ -2052,9 +2175,9 @@ button:focus:not(:focus-visible),
     text-overflow: ellipsis;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-secondary;
-        border-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(var(--fg), 0.1);
     }
 
     &.active {
@@ -2071,8 +2194,8 @@ button:focus:not(:focus-visible),
     font-weight: 600;
     font-family: $font-family;
     color: $text-tertiary;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(var(--fg), 0.02);
+    border: 1px solid rgba(var(--fg), 0.05);
     border-radius: $radius-full;
     cursor: pointer;
     transition: all $transition-smooth;
@@ -2083,18 +2206,18 @@ button:focus:not(:focus-visible),
 
     &:hover,
     &.active {
-        background: rgba(255, 255, 255, 0.06);
+        background: rgba(var(--fg), 0.06);
         color: $text-secondary;
         opacity: 1;
-        border-color: rgba(255, 255, 255, 0.1);
+        border-color: rgba(var(--fg), 0.1);
     }
 }
 
 .term-pill.hidden-term {
     opacity: 0.5;
     font-style: italic;
-    background: rgba(255, 255, 255, 0.03);
-    border-color: rgba(255, 255, 255, 0.05);
+    background: rgba(var(--fg), 0.03);
+    border-color: rgba(var(--fg), 0.05);
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -2148,7 +2271,7 @@ button:focus:not(:focus-visible),
     transition: all $transition-smooth;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.03);
+        background: rgba(var(--fg), 0.03);
     }
 }
 
@@ -2180,7 +2303,7 @@ button:focus:not(:focus-visible),
 .term-count {
     font-size: 10px;
     color: $text-tertiary;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(var(--fg), 0.04);
     padding: 1px 7px;
     border-radius: $radius-full;
     flex-shrink: 0;
@@ -2194,7 +2317,7 @@ button:focus:not(:focus-visible),
     min-width: 20px;
     height: 18px;
     padding: 0 6px;
-    border: 1px dashed rgba(255, 255, 255, 0.12);
+    border: 1px dashed rgba(var(--fg), 0.12);
     background: transparent;
     color: $text-tertiary;
     border-radius: $radius-full;
@@ -2212,8 +2335,8 @@ button:focus:not(:focus-visible),
     }
 
     &:hover {
-        border-color: rgba(255, 255, 255, 0.22);
-        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(var(--fg), 0.22);
+        background: rgba(var(--fg), 0.04);
         color: $text-secondary;
         opacity: 0.9;
     }
@@ -2242,7 +2365,7 @@ button:focus:not(:focus-visible),
     align-items: center;
     border: 1px solid $border;
     border-radius: $radius-full;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(var(--fg), 0.03);
     transition: border-color $transition-smooth, background $transition-smooth, box-shadow $transition-smooth;
 
     &.active {
@@ -2262,9 +2385,10 @@ button:focus:not(:focus-visible),
     position: relative;
     overflow: hidden;
 
-    &:hover {
-        border-color: rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.05);
+    &:hover,
+    &:has(:focus-visible) {
+        border-color: rgba(var(--fg), 0.1);
+        background: rgba(var(--fg), 0.05);
 
         // Shift a little and fade the last letters under the ×, so the pill
         // keeps its resting width.
@@ -2321,7 +2445,7 @@ button:focus:not(:focus-visible),
 
     &:hover {
         color: $text-primary;
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(var(--fg), 0.08);
     }
 }
 
@@ -2367,7 +2491,7 @@ button:focus:not(:focus-visible),
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(var(--sink), calc(0.6 * var(--sink-k)));
     backdrop-filter: blur(6px);
     display: flex;
     align-items: center;
@@ -2417,7 +2541,7 @@ button:focus:not(:focus-visible),
     margin: 0 auto 14px;
     background: $success-subtle;
     color: $success;
-    box-shadow: 0 0 20px rgba($success, 0.15);
+    box-shadow: 0 0 20px color-mix(in srgb, $success 15%, transparent);
 }
 
 .modal-title {
@@ -2458,7 +2582,7 @@ button:focus:not(:focus-visible),
     gap: 8px;
     padding: 8px 10px;
     border-radius: $radius-sm;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(var(--fg), 0.03);
     border: 1px solid $border;
     margin-bottom: 4px;
 }
@@ -2505,7 +2629,7 @@ button:focus:not(:focus-visible),
     border-radius: 4px;
 
     &:hover {
-        background: rgba(255, 255, 255, 0.02);
+        background: rgba(var(--fg), 0.02);
     }
 }
 
@@ -2566,12 +2690,12 @@ button:focus:not(:focus-visible),
 .language-selector {
     position: relative;
     display: flex;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(var(--sink), calc(0.25 * var(--sink-k)));
+    border: 1px solid rgba(var(--fg), 0.08);
     border-radius: $radius-sm;
     padding: 2px;
     gap: 2px;
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    box-shadow: inset 0 1px 2px rgba(var(--sink), calc(0.2 * var(--sink-k)));
     z-index: 1;
 }
 
@@ -2581,9 +2705,9 @@ button:focus:not(:focus-visible),
     bottom: 2px;
     left: 2px;
     width: 32px;
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(var(--fg), 0.08);
     border-radius: 6px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow: 0 1px 3px rgba(var(--sink), calc(0.2 * var(--sink-k))), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 0;
 
@@ -2597,6 +2721,9 @@ button:focus:not(:focus-visible),
 
 .lang-btn {
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     border: none;
     background: transparent;
     color: $text-tertiary;
@@ -2617,5 +2744,420 @@ button:focus:not(:focus-visible),
 
     &.active {
         color: $text-primary;
+    }
+}
+
+.selector-highlight.light {
+    transform: translateX(34px);
+}
+
+// Light-only fixes where a white wash or an inverted glyph assumed dark.
+[data-theme='light'] {
+    .selector-highlight {
+        background: var(--bg-elevated);
+        box-shadow: 0 1px 3px rgba(var(--shadow), 0.14), 0 0 0 0.5px rgba(var(--shadow), 0.1);
+    }
+
+    .time-input::-webkit-calendar-picker-indicator {
+        filter: none;
+        opacity: 0.6;
+    }
+}
+
+// Theme change, revealed as Spotifast does it (fastframe's Reveal::Band, after
+// Omarchy): the new colours open from a band through the middle that leans
+// right by 18% of the height, out past both edges in 420ms, InOutCubic. The
+// old picture keeps everything outside the band through an even-odd hole,
+// because the dark page is see-through and would show the light one under it.
+$band-top: calc(50% + 9vh);
+$band-bottom: calc(50% - 9vh);
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation: 420ms cubic-bezier(0.65, 0, 0.35, 1) both;
+    mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+    animation-name: themeBandIn;
+}
+
+::view-transition-old(root) {
+    animation-name: themeBandOut;
+}
+
+@keyframes themeBandIn {
+    from { clip-path: polygon(#{$band-top} 0, #{$band-top} 0, #{$band-bottom} 100%, #{$band-bottom} 100%); }
+    to   { clip-path: polygon(-4px 0, calc(100% + 18vh + 4px) 0, calc(100% + 4px) 100%, calc(-18vh - 4px) 100%); }
+}
+
+@keyframes themeBandOut {
+    from { clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, #{$band-top} -1px, #{$band-top} -1px, #{$band-bottom} calc(100% + 1px), #{$band-bottom} calc(100% + 1px), #{$band-top} -1px); }
+    to   { clip-path: polygon(evenodd, 0 0, 100% 0, 100% 100%, 0 100%, 0 0, -4px -1px, calc(100% + 18vh + 4px) -1px, calc(100% + 4px) calc(100% + 1px), calc(-18vh - 4px) calc(100% + 1px), -4px -1px); }
+}
+
+// Icon motion: each glyph acts out what it does when whatever holds it is
+// hovered, and the result-type glyphs land with a small spring when they
+// appear. Transforms only, so it all stays on the compositor.
+$icon-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+// Turns and slides settle without overshoot, which reads as cheap on a
+// rotation; only the pops and lifts keep the spring.
+$icon-ease: cubic-bezier(0.22, 1, 0.36, 1);
+// Hover intent: the pointer has to rest this long before a glyph moves, so
+// sweeping across the window does not set every icon off.
+$icon-intent: 140ms;
+
+.icon {
+    transition: transform 520ms $icon-ease;
+}
+
+:hover > :is(.icon-settings, .icon-sync, .icon-close, .icon-minimize, .icon-resize, .icon-signOut, .icon-sun, .icon-moon) {
+    transition: transform 640ms $icon-ease $icon-intent;
+}
+
+// The gear has six teeth, so a sixth of a turn lands on the same silhouette.
+:hover > .icon-settings { transform: rotate(60deg); }
+:hover > .icon-sync { transform: rotate(180deg); }
+:hover > .icon-close { transform: rotate(90deg); }
+:hover > .icon-minimize { transform: scaleX(0.6); }
+:hover > .icon-resize { transform: scale(1.15); }
+:hover > .icon-signOut { transform: translateX(2px); }
+:hover > .icon-sun { transform: rotate(45deg) scale(1.06); }
+:hover > .icon-moon { transform: rotate(-18deg) scale(1.06); }
+:hover > .icon-pencil { animation: iconScribble 560ms ease-in-out $icon-intent both; }
+:hover > .icon-download { animation: iconDrop 600ms $icon-spring $icon-intent both; }
+:hover > .icon-dots { animation: iconDots 520ms $icon-ease $icon-intent both; }
+:hover > :is(.icon-hide, .icon-show) { animation: iconBlink 380ms ease-in-out $icon-intent both; }
+:hover > :is(.icon-folder, .icon-folderOpen) { animation: iconLift 560ms $icon-spring $icon-intent both; }
+
+.checkbox.checked > .icon-check,
+.modal-status-icon > .icon {
+    animation: iconPop 520ms $icon-spring both;
+}
+
+.modal-status-icon > .icon {
+    animation-delay: 120ms;
+}
+
+.modal-warning > .icon-warning {
+    animation: iconShake 480ms ease-in-out 300ms both;
+}
+
+@keyframes iconScribble {
+    0%, 100% { transform: rotate(0); }
+    25%      { transform: rotate(-14deg) translateY(-1px); }
+    50%      { transform: rotate(8deg); }
+    75%      { transform: rotate(-6deg); }
+}
+
+@keyframes iconDrop {
+    0%   { transform: translateY(0); }
+    35%  { transform: translateY(3px); }
+    100% { transform: translateY(0); }
+}
+
+@keyframes iconDots {
+    0%, 100% { transform: scaleX(1); }
+    40%      { transform: scaleX(1.3); }
+}
+
+@keyframes iconBlink {
+    0%, 100% { transform: scaleY(1); }
+    45%      { transform: scaleY(0.1); }
+}
+
+@keyframes iconLift {
+    0%, 100% { transform: translateY(0) rotate(0); }
+    40%      { transform: translateY(-2px) rotate(-6deg); }
+}
+
+@keyframes iconPop {
+    from { transform: scale(0.4); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+}
+
+@keyframes iconShake {
+    0%, 100% { transform: rotate(0); }
+    20%      { transform: rotate(-12deg); }
+    40%      { transform: rotate(10deg); }
+    60%      { transform: rotate(-6deg); }
+    80%      { transform: rotate(3deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .icon,
+    :hover > .icon {
+        transition: none;
+        transform: none;
+        animation: none !important;
+    }
+}
+
+// First-run tour (Tutorial.tsx). It sits inside .app-content, so the
+// titlebar stays above it and the window can still be moved or closed.
+// The spotlight is a hole made by a huge spread shadow; its box glides from
+// target to target.
+$tour-ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+.tutorial {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    animation: fadeInOnly 240ms ease-out;
+}
+
+.tutorial-spot {
+    position: fixed;
+    // Below a pixel or so, WebView2 stops painting the spread shadow that
+    // dims the window, so the closed spotlight keeps a few pixels.
+    min-width: 4px;
+    min-height: 4px;
+    border-radius: $radius-md;
+    pointer-events: none;
+    // Same three layers in both states, so the change between them only
+    // fades the ring and never touches the scrim.
+    --spot-ring: color-mix(in srgb, #{$accent-soft} 70%, transparent);
+    --spot-glow: #{rgba($accent, 0.25)};
+    box-shadow: 0 0 0 100vmax var(--tour-scrim), 0 0 0 1.5px var(--spot-ring),
+        0 0 24px 2px var(--spot-glow);
+    transition: top 460ms $tour-ease, left 460ms $tour-ease, width 460ms $tour-ease,
+        height 460ms $tour-ease, box-shadow 300ms ease;
+
+    &.empty {
+        --spot-ring: transparent;
+        --spot-glow: transparent;
+    }
+}
+
+.tutorial-card {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    max-width: 360px;
+    margin: 0 auto;
+    padding: 16px 18px 14px;
+    background: $bg-elevated;
+    border: 1px solid $border;
+    border-radius: $radius-lg;
+    box-shadow: $shadow-lg, $bevel-strong;
+    animation: tutorialCardIn 380ms $tour-ease both;
+
+    &.centered {
+        top: 50%;
+        translate: 0 -50%;
+    }
+}
+
+@keyframes tutorialCardIn {
+    from { opacity: 0; transform: translateY(6px) scale(0.98); }
+    to   { opacity: 1; transform: none; }
+}
+
+.tutorial-count {
+    display: block;
+    margin-bottom: 6px;
+    font-family: $font-mono;
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    color: $text-tertiary;
+}
+
+.tutorial-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: $text-primary;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+}
+
+.tutorial-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: $text-secondary;
+    text-wrap: pretty;
+
+    p:first-child {
+        color: $text-primary;
+    }
+
+    ul {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    li {
+        position: relative;
+        padding-left: 14px;
+
+        &::before {
+            content: '';
+            position: absolute;
+            left: 3px;
+            top: 0.68em;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: $accent-soft;
+            opacity: 0.8;
+        }
+    }
+}
+
+// The control a step names, drawn as a small key cap.
+.tutorial-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 18px;
+    margin: 0 2px;
+    vertical-align: -4px;
+    border: 1px solid $border;
+    border-radius: 5px;
+    background: rgba(var(--fg), 0.05);
+    color: $text-primary;
+    box-shadow: $bevel;
+}
+
+.tutorial-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 16px;
+
+    button {
+        padding: 7px 14px;
+        border-radius: $radius-sm;
+        font-size: 12px;
+        font-weight: 600;
+        font-family: $font-family;
+        cursor: pointer;
+        transition: all $transition-smooth;
+    }
+}
+
+.tutorial-skip {
+    margin-right: auto;
+    background: transparent;
+    border: none;
+    color: $text-tertiary;
+
+    &:hover {
+        color: $text-primary;
+    }
+}
+
+.tutorial-back {
+    background: transparent;
+    border: 1px solid $border;
+    color: $text-secondary;
+
+    &:hover {
+        background: rgba(var(--fg), 0.05);
+        color: $text-primary;
+    }
+}
+
+.tutorial-next {
+    background: $accent-gradient;
+    border: none;
+    color: white;
+    box-shadow: 0 2px 10px rgba($accent, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+
+    &:hover {
+        box-shadow: 0 4px 16px rgba($accent, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        transform: translateY(-0.5px);
+    }
+
+    &:active {
+        transform: scale(0.97);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tutorial,
+    .tutorial-card {
+        animation: none;
+    }
+
+    .tutorial-spot {
+        transition: none;
+    }
+}
+
+// Account rows in Settings: the title line holds the switch, the name line a
+// quiet sign-out link that only turns red under the pointer.
+.account-row {
+    .toggle-label {
+        transition: opacity $transition-smooth;
+    }
+
+    &.paused .toggle-label {
+        opacity: 0.55;
+    }
+
+    .toggle {
+        flex-shrink: 0;
+    }
+}
+
+.account-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 6px;
+}
+
+.account-link {
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    color: $text-tertiary;
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    text-underline-offset: 2px;
+    transition: color $transition-smooth, text-decoration-color $transition-smooth;
+
+    &:hover {
+        color: $error;
+        text-decoration-color: currentColor;
+    }
+}
+
+.btn-account-connect {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 5px 14px;
+    border: 1px solid rgba($accent, 0.3);
+    border-radius: $radius-sm;
+    background: $accent-subtle;
+    color: $accent-soft;
+    font-size: 11.5px;
+    font-weight: 600;
+    font-family: $font-family;
+    cursor: pointer;
+    box-shadow: $bevel;
+    transition: all $transition-smooth;
+
+    &:hover:not(:disabled) {
+        background: rgba($accent, 0.18);
+        border-color: rgba($accent, 0.45);
+    }
+
+    &:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+    &:disabled {
+        opacity: 0.7;
+        cursor: progress;
     }
 }

@@ -22,6 +22,9 @@ const MOCK_CONFIG: AppConfig = {
     notifications: true,
     syncOnStartup: false,
     heatmap: false,
+    theme: 'dark',
+    tutorialDone: false,
+    webeepEnabled: true,
     language: 'it',
 };
 
@@ -41,7 +44,11 @@ let config = { ...MOCK_CONFIG };
 
 window.api = {
     login: async () => ({ success: true, user: { id: '1', userName: 'mario.rossi', name: { given: 'Mario', family: 'Rossi' } } }),
-    autoLogin: async () => ({ success: true, user: { id: '1', userName: 'mario.rossi', name: { given: 'Mario', family: 'Rossi' } } }),
+    autoLogin: async () => ({
+        bocconi: { id: '1', userName: 'mario.rossi', name: { given: 'Mario', family: 'Rossi' } },
+        webeep: { id: 'webeep:9', userName: '10612345', name: { given: 'Mario', family: 'Rossi' } },
+    }),
+    webeepLogin: async () => ({ success: true, user: { id: 'webeep:9', userName: '10612345', name: { given: 'Mario', family: 'Rossi' } } }),
     logout: async () => ({ success: true }),
     getCourses: async () => ({ success: true, courses: MOCK_COURSES }),
     getInstructors: async () => ({}),

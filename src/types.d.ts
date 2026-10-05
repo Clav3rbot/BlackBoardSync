@@ -46,6 +46,9 @@ export interface AppConfig {
     syncOnStartup: boolean;
     heatmap: boolean;
     language: string;
+    theme: string;
+    tutorialDone: boolean;
+    webeepEnabled: boolean;
 }
 
 export interface SyncProgress {
@@ -59,6 +62,7 @@ export interface SyncProgress {
 export interface SyncResultCourse {
     courseName: string;
     files: string[];
+    webeep: boolean;
 }
 
 export interface SyncResult {
@@ -66,12 +70,23 @@ export interface SyncResult {
     totalScanned: number;
     courses: SyncResultCourse[];
     duration: number; // seconds
+    warnings: string[]; // one per university that could not be reached
 }
 
 export interface LoginResult {
     success: boolean;
     cookies: string[];
     error?: string;
+}
+
+/// Which university a course or file came from.
+export type Provider = 'bocconi' | 'webeep';
+
+export interface AccountsResult {
+    bocconi?: UserInfo | null;
+    webeep?: UserInfo | null;
+    bocconiError?: string;
+    webeepError?: string;
 }
 
 export interface ApiResult<T = any> {
@@ -86,8 +101,9 @@ declare global {
     interface Window {
         api: {
             login: (username: string, password: string) => Promise<ApiResult>;
-            autoLogin: () => Promise<ApiResult>;
-            logout: () => Promise<ApiResult>;
+            autoLogin: () => Promise<AccountsResult>;
+            webeepLogin: () => Promise<ApiResult>;
+            logout: (provider?: Provider | 'all') => Promise<ApiResult>;
             getCourses: () => Promise<ApiResult>;
             getInstructors: (courseIds: string[]) => Promise<Record<string, string>>;
             getCachedInstructors: () => Promise<Record<string, string>>;
@@ -97,7 +113,7 @@ declare global {
             updateConfig: (partial: Partial<AppConfig>) => Promise<AppConfig>;
             selectFolder: () => Promise<string | null>;
             openFolder: (folderPath: string) => Promise<void>;
-            openCourseFolder: (name: string) => Promise<void>;
+            openCourseFolder: (courseId: string, name: string) => Promise<void>;
             minimize: () => Promise<void>;
             maximize: () => Promise<void>;
             close: () => Promise<void>;

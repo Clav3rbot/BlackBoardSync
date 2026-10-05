@@ -3,10 +3,15 @@
     "windows": [
       {
         "label": "main",
+        "title": "BlackBoard Sync",
+        "width": 480,
+        "height": 780,
+        "minWidth": 380,
+        "minHeight": 520,
+        "visible": false,
         "transparent": true,
         "decorations": false,
-        "shadow": false,
-        "visible": false
+        "shadow": false
       }
     ]
   },

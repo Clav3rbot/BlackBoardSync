@@ -3,6 +3,15 @@ import HeatmapBackground from './HeatmapBackground';
 import Icon from './Icon';
 import Marquee from './Marquee';
 import { getT } from '../i18n';
+import { useEscape } from '../useEscape';
+
+// Course ids are namespaced by university (see webeep::ID_PREFIX in Rust), so the
+// source badge needs no extra field on the wire.
+// Height of the actions menu plus its gap, to tell whether it fits below.
+const ACTIONS_MENU_ROOM = 120;
+
+const isWebeep = (courseId: string) => courseId.startsWith('webeep:');
+const sourceLabel = (courseId: string) => (isWebeep(courseId) ? 'PoliMi' : 'Bocconi');
 
 interface Course {
     id: string;
@@ -70,6 +79,9 @@ const CourseList: React.FC<CourseListProps> = ({
     const [revealedTerms, setRevealedTerms] = useState<Set<string>>(new Set());
     const [showHiddenTermPills, setShowHiddenTermPills] = useState(false);
     const [actionsOpenId, setActionsOpenId] = useState<string | null>(null);
+    // The menu opens upward for rows near the bottom, where it would be cut off.
+    const [actionsUp, setActionsUp] = useState(false);
+    useEscape(() => setActionsOpenId(null), !!actionsOpenId);
 
 
 
@@ -125,6 +137,10 @@ const CourseList: React.FC<CourseListProps> = ({
         return result;
     }, [courses, lang]);
 
+    // The source badge only tells anything apart when both universities are
+    // in the list.
+    const mixedSources = courses.some((c) => isWebeep(c.id)) && courses.some((c) => !isWebeep(c.id));
+
     const visibleTermGroups = useMemo(
         () => termGroups.filter((g) => !hiddenTerms.includes(g.termId)),
         [termGroups, hiddenTerms]
@@ -133,6 +149,33 @@ const CourseList: React.FC<CourseListProps> = ({
     const hiddenTermGroups = useMemo(
         () => termGroups.filter((g) => hiddenTerms.includes(g.termId)),
         [termGroups, hiddenTerms]
+    );
+
+    // Counted from the courses actually on show, not by subtracting the config
+    // arrays: hiddenCourses can hold ids that are no longer in the list at all
+    // (a past term, or the other university while it is disconnected), which
+    // made the subtraction undercount. Hidden terms were not deducted either.
+    const visibleCount = useMemo(
+        () =>
+            visibleTermGroups.reduce(
+                (n, g) => n + g.courses.filter((c) => !hiddenCourses.includes(c.id)).length,
+                0
+            ),
+        [visibleTermGroups, hiddenCourses]
+    );
+
+    // Same rule for the selection: enabledCourses keeps the ids of hidden
+    // courses and of a paused university, which would inflate the badge.
+    const selectedCount = useMemo(
+        () =>
+            visibleTermGroups.reduce(
+                (n, g) =>
+                    n +
+                    g.courses.filter((c) => !hiddenCourses.includes(c.id) && enabledCourses.includes(c.id))
+                        .length,
+                0
+            ),
+        [visibleTermGroups, hiddenCourses, enabledCourses]
     );
 
     const visibleGroups = useMemo(() => {
@@ -218,10 +261,10 @@ const CourseList: React.FC<CourseListProps> = ({
                 <div className="actions-backdrop" onMouseDown={() => setActionsOpenId(null)} />
             )}
             <div className="section-header">
-                <span className="section-label">{t('coursesHeader')} ({courses.length - hiddenCourses.length})</span>
+                <span className="section-label">{t('coursesHeader')} ({visibleCount})</span>
                 {!allEnabled && (
                     <span className="section-badge">
-                        {enabledCourses.length} {t('coursesSelected')}
+                        {selectedCount} {t('coursesSelected')}
                     </span>
                 )}
             </div>
@@ -406,6 +449,11 @@ const CourseList: React.FC<CourseListProps> = ({
                                                         ) : (
                                                             <span className="course-name">
                                                                 <Marquee text={displayName} />
+                                                                {mixedSources && (
+                                                                    <span className="course-source">
+                                                                        {sourceLabel(course.id)}
+                                                                    </span>
+                                                                )}
                                                             </span>
                                                         )}
                                                         {course.instructor && !isEditing ? (
@@ -426,13 +474,19 @@ const CourseList: React.FC<CourseListProps> = ({
                                                         >
                                                             <button
                                                                 className={`course-actions-trigger${actionsOpenId === course.id ? ' active' : ''}`}
-                                                                onClick={(e) => { e.stopPropagation(); setActionsOpenId(actionsOpenId === course.id ? null : course.id); }}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const r = e.currentTarget.getBoundingClientRect();
+                                                                    const list = e.currentTarget.closest('.course-list')?.getBoundingClientRect();
+                                                                    setActionsUp(r.bottom + ACTIONS_MENU_ROOM > (list?.bottom ?? window.innerHeight));
+                                                                    setActionsOpenId(actionsOpenId === course.id ? null : course.id);
+                                                                }}
                                                                 title={t('actionsTooltip')}
                                                             >
                                                                 <Icon name="dots" size={15} />
                                                             </button>
                                                             {actionsOpenId === course.id && (
-                                                                <div className="course-actions-popup">
+                                                                <div className={`course-actions-popup${actionsUp ? ' up' : ''}`}>
                                                                     <button
                                                                         className="course-actions-popup-item"
                                                                         onClick={(e) => { e.stopPropagation(); setActionsOpenId(null); setEditingId(course.id); setEditValue(displayName); }}
@@ -442,7 +496,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                     </button>
                                                                     <button
                                                                         className="course-actions-popup-item"
-                                                                        onClick={(e) => { e.stopPropagation(); setActionsOpenId(null); window.api.openCourseFolder(displayName); }}
+                                                                        onClick={(e) => { e.stopPropagation(); setActionsOpenId(null); window.api.openCourseFolder(course.id, displayName); }}
                                                                     >
                                                                         <Icon name="folder" size={13} />
                                                                         {t('openFolder')}
@@ -469,7 +523,14 @@ const CourseList: React.FC<CourseListProps> = ({
                                             <div key={course.id} className="course-item">
                                                 <div className="course-row course-hidden">
                                                     <div className="course-info">
-                                                        <span className="course-name">{displayName}</span>
+                                                        <span className="course-name">
+                                                            {displayName}
+                                                            {mixedSources && (
+                                                                <span className="course-source">
+                                                                    {sourceLabel(course.id)}
+                                                                </span>
+                                                            )}
+                                                        </span>
                                                         {course.instructor ? (
                                                             <span className={`course-instructor${cacheMisses?.has(course.id) ? ' fade-in' : ''}`}>{course.instructor}</span>
                                                         ) : (loadingInstructors && cacheMisses?.has(course.id)) ? (

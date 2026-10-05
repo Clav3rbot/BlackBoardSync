@@ -1,6 +1,7 @@
 use crate::blackboard::{BlackboardAPI, ContentItem, Course, UserInfo};
 use crate::login::LoginManager;
 use crate::state::{AppState, Session};
+use crate::webeep;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -10,16 +11,20 @@ use futures_util::StreamExt;
 use tauri::{AppHandle, Manager, Emitter};
 
 #[derive(Clone)]
-struct FileToDownload {
-    course_id: String,
-    course_name: String,
-    content_id: String,
-    attachment_id: String,
-    file_name: String,
-    relative_path: String,
+pub struct FileToDownload {
+    pub course_id: String,
+    pub course_name: String,
+    pub content_id: String,
+    pub attachment_id: String,
+    pub file_name: String,
+    pub relative_path: String,
     // Set for Ultra document files, which are signed bbcswebdav links in the
-    // item body rather than REST attachments. None means the attachment path.
-    url: Option<String>,
+    // item body rather than REST attachments, and for every WeBeep file. None
+    // means the Blackboard attachment path.
+    pub url: Option<String>,
+    // Which university this file came from: it selects the HTTP client used to
+    // fetch it, since the two authenticate in completely different ways.
+    pub webeep: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -39,6 +44,7 @@ pub struct SyncProgressPayload {
 pub struct SyncResultCourse {
     pub course_name: String,
     pub files: Vec<String>,
+    pub webeep: bool,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -48,25 +54,35 @@ pub struct SyncResult {
     pub total_scanned: u64,
     pub courses: Vec<SyncResultCourse>,
     pub duration: u64,
+    // One entry per university that could not be reached. With two sources a
+    // partial failure is routine, so it is reported alongside the results
+    // instead of aborting the whole sync.
+    pub warnings: Vec<String>,
 }
 
 pub async fn trigger_sync(app: &AppHandle) {
     let state = app.state::<AppState>();
 
+    // Either university on its own is enough to run a sync; only the case where
+    // neither is connected is an error.
     let session = {
         state.session.lock().unwrap().clone()
     };
+    let has_webeep = {
+        let store = state.store.lock().unwrap();
+        store.load_webeep_token().is_some() && store.get_config().webeep_enabled
+    };
 
-    let Some(session) = session else {
+    if session.is_none() && !has_webeep {
         app.emit("sync-progress", SyncProgressPayload {
             phase: "error".to_string(),
             current: 0,
             total: 0,
             current_file: None,
-            error: Some("Sessione non attiva. Rieffettua il login.".to_string()),
+            error: Some("Nessun account collegato. Effettua l'accesso.".to_string()),
         }).ok();
         return;
-    };
+    }
 
     // Prevent concurrent syncs
     if state.syncing.swap(true, Ordering::SeqCst) {
@@ -76,12 +92,20 @@ pub async fn trigger_sync(app: &AppHandle) {
     state.abort_flag.store(false, Ordering::SeqCst);
     app.emit("sync-start", ()).ok();
 
-    let result = run_sync(app, &session).await;
+    let result = run_sync(app, session.as_ref()).await;
 
     match result {
+        // Stopped by the user before anything arrived: no summary to show (it
+        // would claim everything is up to date), and the last sync time stays
+        // that of the last run that finished.
+        Ok(sync_result)
+            if state.abort_flag.load(Ordering::SeqCst) && sync_result.total_downloaded == 0 =>
+        {
+            app.emit("sync-complete", ()).ok();
+        }
         Ok(sync_result) => {
             let config = state.store.lock().unwrap().get_config();
-            {
+            if !state.abort_flag.load(Ordering::SeqCst) {
                 let mut store = state.store.lock().unwrap();
                 store.update_config(serde_json::json!({
                     "lastSync": chrono::Utc::now().to_rfc3339()
@@ -97,11 +121,14 @@ pub async fn trigger_sync(app: &AppHandle) {
                     .unwrap_or(false);
 
                 if !is_visible {
-                    let body = if sync_result.total_downloaded > 0 {
+                    let mut body = if sync_result.total_downloaded > 0 {
                         format!("Scaricati {} file nuovi", sync_result.total_downloaded)
                     } else {
                         "Nessun file nuovo trovato".to_string()
                     };
+                    if !sync_result.warnings.is_empty() {
+                        body.push_str(&format!(" · {}", sync_result.warnings.join(" · ")));
+                    }
                     use tauri_plugin_notification::NotificationExt;
                     app.notification()
                         .builder()
@@ -126,12 +153,13 @@ pub async fn trigger_sync(app: &AppHandle) {
     state.syncing.store(false, Ordering::SeqCst);
 }
 
-async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, String> {
-    let state = app.state::<AppState>();
-    let config = state.store.lock().unwrap().get_config();
-    let abort_flag = Arc::clone(&state.abort_flag);
-    let start = std::time::Instant::now();
-
+/// Opens the Blackboard side of a sync: refreshes the session if needed and
+/// lists the courses. Kept separate from `run_sync` so its failures can be
+/// caught and turned into a warning instead of ending the whole sync.
+async fn open_blackboard(
+    app: &AppHandle,
+    session: &Session,
+) -> Result<(BlackboardAPI, Vec<Course>), String> {
     // The stored session cookie can expire between launch and sync. When it
     // does, Blackboard answers API calls with an HTML SAML login page instead
     // of JSON, and reqwest surfaces that as "error decoding response body".
@@ -139,7 +167,65 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
     // credentials if it has lapsed, so a routine sync doesn't fail with a
     // cryptic decode error.
     let (api, user) = ensure_valid_session(app, session).await?;
-    let all_courses = api.get_courses_for_sync(&user.id).await?;
+    let courses = api.get_courses_for_sync(&user.id).await?;
+    Ok((api, courses))
+}
+
+async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResult, String> {
+    let state = app.state::<AppState>();
+    let config = state.store.lock().unwrap().get_config();
+    let abort_flag = Arc::clone(&state.abort_flag);
+    let start = std::time::Instant::now();
+
+    // Each university is opened independently. One being unreachable downgrades
+    // to a warning so the other still syncs — with two accounts, a partial
+    // outage is the common case, not an exceptional one.
+    let mut warnings: Vec<String> = Vec::new();
+
+    // The two universities share nothing, so their logins and course lists are
+    // fetched side by side rather than one after the other.
+    let (bb_opened, wb_opened) = tokio::join!(
+        async {
+            match session {
+                None => Ok(None),
+                Some(s) => open_blackboard(app, s).await.map(Some),
+            }
+        },
+        async {
+            match webeep::active_api(app).await? {
+                None => Ok(None),
+                Some((api, info)) => {
+                    let courses = webeep::get_courses(&api, info.userid).await?;
+                    Ok::<_, String>(Some((api, courses)))
+                }
+            }
+        }
+    );
+
+    let bb_source = bb_opened.unwrap_or_else(|e| {
+        warnings.push(format!("Bocconi: {}", e));
+        None
+    });
+    let wb_source = wb_opened.unwrap_or_else(|e| {
+        warnings.push(format!("PoliMi: {}", e));
+        None
+    });
+
+    if bb_source.is_none() && wb_source.is_none() {
+        return Err(if warnings.is_empty() {
+            "Nessun account collegato. Effettua l'accesso.".to_string()
+        } else {
+            warnings.join(" · ")
+        });
+    }
+
+    let mut all_courses: Vec<Course> = Vec::new();
+    if let Some((_, courses)) = &bb_source {
+        all_courses.extend(courses.iter().cloned());
+    }
+    if let Some((_, courses)) = &wb_source {
+        all_courses.extend(courses.iter().cloned());
+    }
 
     // Filter courses
     let mut courses: Vec<Course> = if config.sync_all_courses {
@@ -162,19 +248,47 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
     let total_courses = courses.len() as u64;
     let scanned_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
 
+    // WeBeep courses now sit at the sync root beside the Blackboard ones, so two
+    // universities offering a course with the same name would write into the
+    // same folder. The Blackboard name wins, because its folder already exists
+    // on disk and renaming it would re-download that whole archive.
+    let blackboard_dirs: HashSet<String> = courses
+        .iter()
+        .filter(|c| !webeep::is_webeep(&c.id))
+        .map(|c| {
+            sanitize_path(config.course_aliases.get(&c.id).unwrap_or(&c.name))
+        })
+        .collect();
+
     let scan_handles: Vec<_> = courses.iter().map(|course| {
-        let api = api.clone();
+        let bb_api = bb_source.as_ref().map(|(api, _)| api.clone());
+        let wb_api = wb_source.as_ref().map(|(api, _)| api.clone());
         let course = course.clone();
         let abort = Arc::clone(&abort_flag);
         let app_h = app.clone();
         let alias = config.course_aliases.get(&course.id)
             .cloned()
             .unwrap_or_else(|| course.name.clone());
-        let base = sanitize_path(&alias);
+        let dir = sanitize_path(&alias);
+        let base = if webeep::is_webeep(&course.id) && blackboard_dirs.contains(&dir) {
+            sanitize_path(&format!("{} (PoliMi)", alias))
+        } else {
+            dir
+        };
         let counter = Arc::clone(&scanned_count);
 
         tokio::spawn(async move {
-            let files = scan_course(&api, &course, &base, &abort).await;
+            let files = if webeep::is_webeep(&course.id) {
+                match wb_api {
+                    Some(api) => webeep::scan_course(&api, &course, &base).await,
+                    None => Vec::new(),
+                }
+            } else {
+                match bb_api {
+                    Some(api) => scan_course(&api, &course, &base, &abort).await,
+                    None => Vec::new(),
+                }
+            };
             let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
             app_h.emit("sync-progress", SyncProgressPayload {
                 phase: "scanning".to_string(),
@@ -228,6 +342,7 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
             total_scanned,
             courses: vec![],
             duration: start.elapsed().as_secs(),
+            warnings,
         });
     }
 
@@ -237,6 +352,7 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
     let total_dl = to_download.len() as u64;
     let queue = Arc::new(tokio::sync::Mutex::new(VecDeque::from(to_download)));
     let downloaded_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let failed_files: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
     let downloaded_files: Arc<tokio::sync::Mutex<Vec<FileToDownload>>> =
         Arc::new(tokio::sync::Mutex::new(Vec::new()));
 
@@ -245,13 +361,15 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
 
     for _ in 0..concurrency {
         let queue = Arc::clone(&queue);
-        let api = api.clone();
+        let bb_api = bb_source.as_ref().map(|(api, _)| api.clone());
+        let wb_api = wb_source.as_ref().map(|(api, _)| api.clone());
         let abort = Arc::clone(&abort_flag);
         let app_h = app.clone();
         let sync_dir = sync_dir.clone();
         let canon_base = canon_base.clone();
         let lex_base = lex_base.clone();
         let dl_count = Arc::clone(&downloaded_count);
+        let failed = Arc::clone(&failed_files);
         let dl_files = Arc::clone(&downloaded_files);
 
         let h = tokio::spawn(async move {
@@ -264,11 +382,19 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
                 };
                 let file = match file { Some(f) => f, None => break };
 
-                let fetched = match &file.url {
-                    Some(url) => api.download_url(url).await,
-                    None => api
-                        .download_file(&file.course_id, &file.content_id, &file.attachment_id)
-                        .await,
+                let fetched = if file.webeep {
+                    match (&wb_api, &file.url) {
+                        (Some(api), Some(url)) => api.download(url).await,
+                        _ => Err("WeBeep non connesso".to_string()),
+                    }
+                } else {
+                    match (&bb_api, &file.url) {
+                        (Some(api), Some(url)) => api.download_url(url).await,
+                        (Some(api), None) => api
+                            .download_file(&file.course_id, &file.content_id, &file.attachment_id)
+                            .await,
+                        (None, _) => Err("Bocconi non connessa".to_string()),
+                    }
                 };
 
                 match fetched {
@@ -283,6 +409,9 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
                         }
                         if let Err(e) = save_response(response, &full_path, &abort).await {
                             eprintln!("Download failed for {}: {}", file.file_name, e);
+                            if !abort.load(Ordering::SeqCst) {
+                                failed.lock().unwrap().push(format!("{} ({})", file.file_name, e));
+                            }
                         } else {
                             let count = dl_count.fetch_add(1, Ordering::SeqCst) + 1;
                             dl_files.lock().await.push(file.clone());
@@ -297,6 +426,7 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
                     }
                     Err(e) => {
                         eprintln!("Download failed for {}: {}", file.file_name, e);
+                        failed.lock().unwrap().push(format!("{} ({})", file.file_name, e));
                     }
                 }
             }
@@ -309,6 +439,15 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
     }
 
     let downloaded = downloaded_count.load(Ordering::SeqCst);
+    // Named, so the user can tell a transient error from a file that will never download.
+    let failed = std::mem::take(&mut *failed_files.lock().unwrap());
+    if !failed.is_empty() {
+        warnings.push(format!(
+            "{} file non scaricati, verranno riprovati al prossimo sync: {}",
+            failed.len(),
+            failed.join("; ")
+        ));
+    }
     let dl_files = downloaded_files.lock().await;
 
     // Build per-course result
@@ -317,6 +456,7 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
         let entry = course_map.entry(f.course_id.clone()).or_insert_with(|| SyncResultCourse {
             course_name: f.course_name.clone(),
             files: vec![],
+            webeep: f.webeep,
         });
         entry.files.push(f.file_name.clone());
     }
@@ -334,6 +474,7 @@ async fn run_sync(app: &AppHandle, session: &Session) -> Result<SyncResult, Stri
         total_scanned,
         courses: course_map.into_values().collect(),
         duration: start.elapsed().as_secs(),
+        warnings,
     })
 }
 
@@ -381,7 +522,7 @@ async fn ensure_valid_session(
     Ok((refreshed, user))
 }
 
-/// Overrides the client's 30 s total timeout, which would cut off large videos.
+/// Overrides the clients' 30 s total timeout, which would cut off large videos.
 pub const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 /// Writes to `<path>.part`, renamed only when complete: sync skips existing
@@ -462,6 +603,7 @@ async fn scan_course(
                         .into_owned(),
                     file_name: att.file_name,
                     url: None,
+                    webeep: false,
                 })
                 .collect()
         })
@@ -522,6 +664,7 @@ fn files_from_contents(items: &[ContentItem], course: &Course, base_path: &str) 
             relative_path: PathBuf::from(&dir).join(sanitize_path(&name)).to_string_lossy().into_owned(),
             file_name: name,
             url,
+            webeep: false,
         };
 
         // Ultra keeps a document's files as links in its body, never as REST
@@ -862,17 +1005,29 @@ mod tests {
         let config = store.get_config();
         let t = std::time::Instant::now();
 
-        let mut api = BlackboardAPI::new(&store.load_session().expect("sessione"));
-        let user = match api.get_current_user().await {
-            Ok(u) => u,
-            Err(_) => {
-                let (u, p) = store.load_credentials().expect("credenziali");
-                let r = LoginManager::new().login(&u, &p).await;
-                api = BlackboardAPI::new(&r.cookies);
-                api.get_current_user().await.expect("login")
-            }
-        };
-        let mut courses = api.get_courses_for_sync(&user.id).await.unwrap();
+        let mut courses: Vec<Course> = Vec::new();
+        let mut bb = None;
+        if let Some(cookies) = store.load_session() {
+            let mut api = BlackboardAPI::new(&cookies);
+            let user = match api.get_current_user().await {
+                Ok(u) => u,
+                Err(_) => {
+                    let (u, p) = store.load_credentials().expect("credenziali");
+                    let r = LoginManager::new().login(&u, &p).await;
+                    api = BlackboardAPI::new(&r.cookies);
+                    api.get_current_user().await.expect("login")
+                }
+            };
+            courses.extend(api.get_courses_for_sync(&user.id).await.unwrap());
+            bb = Some(api);
+        }
+        let mut wb = None;
+        if let Some(token) = store.load_webeep_token() {
+            let api = webeep::WeBeepAPI::new(&token);
+            let info = api.site_info().await.unwrap();
+            courses.extend(webeep::get_courses(&api, info.userid).await.unwrap());
+            wb = Some(api);
+        }
         courses.retain(|c| config.sync_all_courses || config.enabled_courses.contains(&c.id));
         courses.retain(|c| !config.hidden_courses.contains(&c.id));
         courses.retain(|c| c.term.as_ref().map(|t| !config.hidden_terms.contains(&t.id)).unwrap_or(true));
@@ -881,10 +1036,14 @@ mod tests {
         let abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let t = std::time::Instant::now();
         let scans = courses.iter().map(|c| {
-            let (api, abort) = (&api, &abort);
+            let (bb, wb, abort) = (bb.clone(), wb.clone(), abort.clone());
             async move {
                 let t = std::time::Instant::now();
-                let files = scan_course(api, c, &c.name, abort).await;
+                let files = if webeep::is_webeep(&c.id) {
+                    webeep::scan_course(wb.as_ref().unwrap(), c, &c.name).await
+                } else {
+                    scan_course(bb.as_ref().unwrap(), c, &c.name, &abort).await
+                };
                 (c.name.clone(), files.len(), t.elapsed())
             }
         });

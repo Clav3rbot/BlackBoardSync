@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import appIcon from '../../../static/icons/png/128x128.png';
 import { getT } from '../i18n';
 
+// Sign-in is Bocconi only; PoliMi is connected later from Settings, where it
+// can also be paused.
 interface LoginViewProps {
     lang: 'it' | 'en';
-    onLogin: (user: any) => void;
+    onLogin: (provider: 'bocconi' | 'webeep', user: any) => void;
 }
 
 const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
@@ -28,7 +30,7 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
         try {
             const result = await window.api.login(username, password);
             if (result.success) {
-                onLogin(result.user);
+                onLogin('bocconi', result.user);
             } else {
                 setError(result.error || t('loginError'));
             }
@@ -49,45 +51,47 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
                 <p className="login-subtitle">{t('loginSubtitle')}</p>
             </div>
 
-            <form className="login-form" onSubmit={handleSubmit}>
-                <div className="form-group">
-                    <label htmlFor="username">{t('usernameLabel')}</label>
-                    <input
-                        id="username"
-                        type="text"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        placeholder={t('usernamePlaceholder')}
-                        disabled={loading}
-                        autoFocus
-                    />
-                </div>
+            <div className="login-provider">
+                <form className="login-form" onSubmit={handleSubmit}>
+                    <div className="form-group">
+                        <label htmlFor="username">{t('usernameLabel')}</label>
+                        <input
+                            id="username"
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            placeholder={t('usernamePlaceholder')}
+                            disabled={loading}
+                            autoFocus
+                        />
+                    </div>
 
-                <div className="form-group">
-                    <label htmlFor="password">{t('passwordLabel')}</label>
-                    <input
-                        id="password"
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder={t('passwordPlaceholder')}
-                        disabled={loading}
-                    />
-                </div>
+                    <div className="form-group">
+                        <label htmlFor="password">{t('passwordLabel')}</label>
+                        <input
+                            id="password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder={t('passwordPlaceholder')}
+                            disabled={loading}
+                        />
+                    </div>
 
-                {error && <div className="error-message">{error}</div>}
+                    {error && <div className="error-message">{error}</div>}
 
-                <button type="submit" className="login-btn" disabled={loading}>
-                    {loading ? (
-                        <>
-                            <span className="spinner-small" />
-                            {t('loggingIn')}
-                        </>
-                    ) : (
-                        t('loginButton')
-                    )}
-                </button>
-            </form>
+                    <button type="submit" className="login-btn" disabled={loading}>
+                        {loading ? (
+                            <>
+                                <span className="spinner-small" />
+                                {t('loggingIn')}
+                            </>
+                        ) : (
+                            t('loginButton')
+                        )}
+                    </button>
+                </form>
+            </div>
 
             <div className="login-footer">
                 <p>{t('loginFooterCredentials')}</p>
