@@ -41,6 +41,9 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 - **Rinomina corsi** - assegna alias personalizzati alle cartelle dei corsi
 - **Selezione corsi** - scegli quali corsi sincronizzare
 - **Sincronizzazione automatica** - intervallo configurabile (30m, 1h, 2h) o programmata a un orario specifico (es. mezzanotte)
+- **WeBeep (Politecnico di Milano)** - puoi sincronizzare anche i file del Politecnico collegando l'account dalle impostazioni
+- **Tema chiaro e scuro** - selezionabile dalle impostazioni, con una transizione animata tra i due
+- **Tutorial al primo avvio** - una guida a passi mostra le parti principali dell'app
 - **Riepilogo sync** - modale con dettaglio dei file scaricati per ogni corso
 - **Interfaccia multilingua** - switcher IT/EN nelle impostazioni, preferenza salvata nella configurazione; al primo avvio la lingua viene rilevata automaticamente dalla lingua del sistema
 - **Pannello impostazioni** - accessibile dall'icona ⚙️ nell'header
@@ -102,7 +105,7 @@ src/                            # Frontend (React)
 │   ├── i18n.ts                 # Traduzioni IT/EN
 │   └── components/             # Componenti UI (Login, Sync, Settings, ecc.)
 └── styles/
-    └── main.scss               # Stili (dark theme, glassmorphism)
+    └── main.scss               # Stili (tema chiaro e scuro, glassmorphism)
 
 src-tauri/                      # Backend (Tauri & Rust)
 ├── Cargo.toml                  # Dipendenze Rust
@@ -112,6 +115,7 @@ src-tauri/                      # Backend (Tauri & Rust)
     ├── commands.rs             # Comandi Tauri invocabili dal frontend
     ├── blackboard.rs           # Client API Blackboard
     ├── login.rs                # Autenticazione SSO Bocconi (SAML)
+    ├── webeep.rs               # Client WeBeep (Politecnico di Milano)
     ├── download.rs             # Gestore download e sincronizzazione
     ├── store.rs                # Persistenza configurazione e Keyring
     ├── state.rs                # Stato condiviso in memoria
@@ -124,7 +128,7 @@ src-tauri/                      # Backend (Tauri & Rust)
 - **Tauri v2** + **Rust** - per il backend nativo ultraleggero
 - **TypeScript 5.3**
 - **React 19** - UI dichiarativa
-- **SCSS** - dark theme con glassmorphism e gradienti
+- **SCSS** - tema chiaro e scuro con glassmorphism e gradienti
 - **Webpack** - bundling frontend
 - **reqwest** - client HTTP asincrono in Rust
 - **scraper** - parsing HTML in Rust per il flusso SAML
@@ -133,7 +137,7 @@ src-tauri/                      # Backend (Tauri & Rust)
 
 ## Disclaimer
 
-Questa applicazione **non è affiliata, associata o approvata dall'Università Bocconi** in alcun modo. È uno strumento indipendente creato per velocizzare il download dei documenti dalla piattaforma Blackboard.
+Questa applicazione **non è affiliata, associata o approvata dall'Università Bocconi né dal Politecnico di Milano** in alcun modo. È uno strumento indipendente creato per velocizzare il download dei documenti dalle piattaforme Blackboard e WeBeep.
 
 Le credenziali inserite vengono salvate localmente sul dispositivo dell'utente tramite i meccanismi nativi del sistema operativo (Credential Manager/Keychain) e non vengono mai trasmesse a terzi. Il creatore dell'app **non è in alcun modo responsabile** dell'uso, della gestione o della sicurezza delle credenziali inserite dall'utente.
 
