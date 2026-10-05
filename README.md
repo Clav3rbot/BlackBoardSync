@@ -15,6 +15,8 @@
 
 **BlackBoard Sync** è una semplice app che serve per tenere sincronizzati tutti i tuoi file di Blackboard, user-friendly e senza compromessi.
 
+Se studi anche al Politecnico di Milano, puoi sincronizzare anche i file di **WeBeep**: basta collegare l'account dalle impostazioni.
+
 Sto sviluppando quest'app come strumento ad uso personale, ma ho pensato potesse essere utile ad altri studenti, perciò è completamente opensource e gratuita sotto [licenza GPLv3](LICENSE).
 
 ---

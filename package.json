@@ -1,7 +1,7 @@
 {
   "name": "blackboard-sync",
-  "version": "1.1.6",
-  "description": "Sincronizza i file dei corsi Blackboard (Università Bocconi)",
+  "version": "1.2.0",
+  "description": "Sincronizza i file dei corsi Blackboard (Università Bocconi) e WeBeep (Politecnico di Milano)",
   "scripts": {
     "dev": "npx webpack serve --config webpack.dev.config.js",
     "dev:tauri": "webpack serve --config webpack.tauri-dev.config.js",
@@ -13,6 +13,8 @@
     "tauri",
     "blackboard",
     "bocconi",
+    "polimi",
+    "webeep",
     "sync",
     "typescript"
   ],

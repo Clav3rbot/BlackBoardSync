@@ -13,8 +13,10 @@ import { FolderOpenIcon } from '@phosphor-icons/react/dist/csr/FolderOpen';
 import { FolderSimpleIcon } from '@phosphor-icons/react/dist/csr/FolderSimple';
 import { GearSixIcon } from '@phosphor-icons/react/dist/csr/GearSix';
 import { MinusIcon } from '@phosphor-icons/react/dist/csr/Minus';
+import { MoonIcon } from '@phosphor-icons/react/dist/csr/Moon';
 import { PencilSimpleIcon } from '@phosphor-icons/react/dist/csr/PencilSimple';
 import { SignOutIcon } from '@phosphor-icons/react/dist/csr/SignOut';
+import { SunIcon } from '@phosphor-icons/react/dist/csr/Sun';
 import { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
 import { XIcon } from '@phosphor-icons/react/dist/csr/X';
 
@@ -30,11 +32,13 @@ const GLYPHS = {
     folderOpen: FolderOpenIcon,
     hide: EyeSlashIcon,
     minimize: MinusIcon,
+    moon: MoonIcon,
     pencil: PencilSimpleIcon,
     resize: CornersOutIcon,
     settings: GearSixIcon,
     show: EyeIcon,
     signOut: SignOutIcon,
+    sun: SunIcon,
     sync: ArrowsClockwiseIcon,
     warning: WarningIcon,
 } as const;
@@ -54,7 +58,8 @@ const Icon: React.FC<IconProps> = ({ name, size = 16, weight, className }) => {
         <Glyph
             size={size}
             weight={weight ?? (size <= 12 ? 'bold' : 'regular')}
-            className={className}
+            // icon-<name> picks the glyph's own hover motion in main.scss.
+            className={`icon icon-${name}${className ? ` ${className}` : ''}`}
             style={{ flexShrink: 0 }}
         />
     );

@@ -3,6 +3,7 @@ import Icon from './components/Icon';
 import LoginView from './components/LoginView';
 import SyncView from './components/SyncView';
 import { getT } from './i18n';
+import { applyTheme } from './theme';
 
 interface UserInfo {
     id: string;
@@ -10,15 +11,26 @@ interface UserInfo {
     name: { given: string; family: string };
 }
 
+// Both universities are tracked independently: either one on its own is enough
+// to use the app, and their courses are merged into a single list downstream.
+export interface Accounts {
+    bocconi: UserInfo | null;
+    webeep: UserInfo | null;
+}
+
 const App: React.FC = () => {
     const [loading, setLoading] = useState(true);
-    const [loggedIn, setLoggedIn] = useState(false);
-    const [user, setUser] = useState<UserInfo | null>(null);
+    const [accounts, setAccounts] = useState<Accounts>({ bocconi: null, webeep: null });
     const [offline, setOffline] = useState(false);
     const restoring = useRef(false);
     const [lang, setLang] = useState<'it' | 'en'>(
         navigator.language.startsWith('it') ? 'it' : 'en'
     );
+
+    const loggedIn = !!(accounts.bocconi || accounts.webeep);
+    // The header shows one identity; Bocconi is the primary account when both
+    // are connected, since it is the one holding stored credentials.
+    const user = accounts.bocconi ?? accounts.webeep;
 
     const t = getT(lang);
 
@@ -26,6 +38,7 @@ const App: React.FC = () => {
         window.api
             .getConfig()
             .then((cfg) => {
+                applyTheme(cfg?.theme);
                 if (cfg && cfg.language) {
                     setLang(cfg.language as 'it' | 'en');
                 }
@@ -55,10 +68,10 @@ const App: React.FC = () => {
         window.api
             .autoLogin()
             .then((result) => {
-                if (result.success && result.user) {
-                    setUser(result.user);
-                    setLoggedIn(true);
-                }
+                setAccounts({
+                    bocconi: result.bocconi ?? null,
+                    webeep: result.webeep ?? null,
+                });
                 setOffline(false);
                 setLoading(false);
             })
@@ -71,19 +84,23 @@ const App: React.FC = () => {
             });
     };
 
-    const handleLogin = (u: UserInfo) => {
-        setUser(u);
-        setLoggedIn(true);
+    const handleLogin = (provider: 'bocconi' | 'webeep', u: UserInfo) => {
+        setAccounts((prev) => ({ ...prev, [provider]: u }));
     };
 
-    const handleLogout = async () => {
+    // Signing out of one university leaves the other running; the backend only
+    // tears down auto-sync once nothing is connected.
+    const handleLogout = async (provider: 'bocconi' | 'webeep' | 'all' = 'all') => {
         try {
-            await window.api.logout();
+            await window.api.logout(provider);
         } catch (err) {
             console.error('Logout failed:', err);
         } finally {
-            setUser(null);
-            setLoggedIn(false);
+            setAccounts((prev) =>
+                provider === 'all'
+                    ? { bocconi: null, webeep: null }
+                    : { ...prev, [provider]: null }
+            );
         }
     };
 
@@ -124,9 +141,19 @@ const App: React.FC = () => {
                         <p>{t('offlineHint')}</p>
                     </div>
                 ) : loggedIn && user ? (
-                    <SyncView lang={lang} onLanguageChange={setLang} user={user} onLogout={handleLogout} />
+                    <SyncView
+                        lang={lang}
+                        onLanguageChange={setLang}
+                        user={user}
+                        accounts={accounts}
+                        onLogin={handleLogin}
+                        onLogout={handleLogout}
+                    />
                 ) : (
-                    <LoginView lang={lang} onLogin={handleLogin} />
+                    <LoginView
+                        lang={lang}
+                        onLogin={handleLogin}
+                    />
                 )}
             </div>
         </div>

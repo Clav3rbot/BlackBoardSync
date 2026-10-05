@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import Icon from './Icon';
+import { formatStudentName } from './Header';
 import { getT } from '../i18n';
+import { applyTheme } from '../theme';
+import { useEscape } from '../useEscape';
+import type { Accounts } from '../App';
 
 interface AppConfig {
     syncDir: string;
@@ -20,15 +24,52 @@ interface AppConfig {
     syncOnStartup: boolean;
     heatmap: boolean;
     language: string;
+    theme: string;
+    tutorialDone: boolean;
+    webeepEnabled: boolean;
 }
 
 interface SettingsViewProps {
     config: AppConfig;
     onConfigChange: (config: AppConfig) => void;
     onClose: () => void;
+    // Set from outside (the tour) to slide the panel out as a click would.
+    dismiss?: boolean;
+    lang: 'it' | 'en';
+    accounts: Accounts;
+    onLogin: (provider: 'bocconi' | 'webeep', user: any) => void;
+    onLogout: (provider?: 'bocconi' | 'webeep' | 'all') => void;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onClose }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({
+    config,
+    onConfigChange,
+    onClose,
+    dismiss,
+    accounts,
+    onLogin,
+    onLogout,
+}) => {
+    const [webeepBusy, setWebeepBusy] = useState(false);
+    const [webeepError, setWebeepError] = useState('');
+
+    const connectWebeep = async () => {
+        setWebeepBusy(true);
+        setWebeepError('');
+        try {
+            const result = await window.api.webeepLogin();
+            if (result.success) {
+                onLogin('webeep', result.user);
+            } else {
+                setWebeepError(result.error || '');
+            }
+        } catch {
+            setWebeepError('');
+        } finally {
+            setWebeepBusy(false);
+        }
+    };
+
     const t = getT(config.language);
     const [appVersion, setAppVersion] = useState('');
     const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -37,6 +78,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
     const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
     const [localTime, setLocalTime] = useState(config.autoSyncScheduledTime);
     const [closing, setClosing] = useState(false);
+
+    useEffect(() => {
+        if (dismiss) setClosing(true);
+    }, [dismiss]);
+
+    useEscape(() => setClosing(true));
 
     useEffect(() => {
         window.api.getAppVersion().then(setAppVersion).catch(() => {});
@@ -68,6 +115,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
     const updateSetting = async (partial: Partial<AppConfig>) => {
         const newConfig = await window.api.updateConfig(partial);
         onConfigChange(newConfig);
+    };
+
+    const theme = config.theme === 'light' ? 'light' : 'dark';
+    const webeepEnabled = config.webeepEnabled !== false;
+
+    // The reveal starts on the click; saving follows in the background.
+    const setTheme = (next: 'dark' | 'light') => {
+        if (next === theme) return;
+        applyTheme(next, true);
+        updateSetting({ theme: next });
     };
 
     const handleSelectFolder = async () => {
@@ -281,6 +338,34 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
 
                         <div className="settings-action-row">
                             <div className="setting-info">
+                                <span className="toggle-label">{t('themeLabel')}</span>
+                                <span className="setting-desc">{t('themeDesc')}</span>
+                            </div>
+                            <div className="language-selector">
+                                <div className={`selector-highlight ${theme}`} />
+                                <button
+                                    className={`lang-btn ${theme === 'dark' ? 'active' : ''}`}
+                                    onClick={() => setTheme('dark')}
+                                    aria-label={t('themeDark')}
+                                    title={t('themeDark')}
+                                >
+                                    <Icon name="moon" size={14} />
+                                </button>
+                                <button
+                                    className={`lang-btn ${theme === 'light' ? 'active' : ''}`}
+                                    onClick={() => setTheme('light')}
+                                    aria-label={t('themeLight')}
+                                    title={t('themeLight')}
+                                >
+                                    <Icon name="sun" size={14} />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="setting-divider" />
+
+                        <div className="settings-action-row">
+                            <div className="setting-info">
                                 <span className="toggle-label">{t('windowSizeLabel')}</span>
                                 <span className="setting-desc">{t('windowSizeDesc')}</span>
                             </div>
@@ -288,6 +373,84 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                 <Icon name="resize" size={12} />
                                 {t('reset')}
                             </button>
+                        </div>
+                    </div>
+
+                    {/* Accounts, one row per university. The name line carries a
+                        quiet sign-out link; PoliMi starts disconnected and, once
+                        connected, gets a switch that pauses it without signing out. */}
+                    <div className="settings-group settings-accounts">
+                        <span className="settings-group-label">{t('accountsTitle')}</span>
+
+                        <div className="settings-action-row account-row">
+                            <div className="setting-info">
+                                <span className="toggle-label">{t('bocconiLabel')}</span>
+                                <span className="setting-desc account-meta">
+                                    {accounts.bocconi ? (
+                                        <>
+                                            <span>{formatStudentName(`${accounts.bocconi.name.given} ${accounts.bocconi.name.family}`)}</span>
+                                            <span aria-hidden="true">·</span>
+                                            <button className="account-link" onClick={() => onLogout('bocconi')}>
+                                                {t('webeepDisconnect')}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        t('accountNotConnected')
+                                    )}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="setting-divider" />
+
+                        <div
+                            className={`settings-action-row account-row ${
+                                accounts.webeep && !webeepEnabled ? 'paused' : ''
+                            }`}
+                        >
+                            <div className="setting-info">
+                                <span className="toggle-label">{t('polimiLabel')}</span>
+                                <span className="setting-desc account-meta">
+                                    {webeepError ? (
+                                        webeepError
+                                    ) : accounts.webeep ? (
+                                        <>
+                                            <span>
+                                                {webeepEnabled
+                                                    ? formatStudentName(`${accounts.webeep.name.given} ${accounts.webeep.name.family}`)
+                                                    : t('webeepPaused')}
+                                            </span>
+                                            <span aria-hidden="true">·</span>
+                                            <button className="account-link" onClick={() => onLogout('webeep')}>
+                                                {t('webeepDisconnect')}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        t('accountNotConnected')
+                                    )}
+                                </span>
+                            </div>
+                            {accounts.webeep ? (
+                                <button
+                                    className={`toggle ${webeepEnabled ? 'active' : ''}`}
+                                    role="switch"
+                                    aria-checked={webeepEnabled}
+                                    aria-label={t('webeepToggle')}
+                                    title={t('webeepToggle')}
+                                    onClick={() => updateSetting({ webeepEnabled: !webeepEnabled })}
+                                >
+                                    <span className="toggle-thumb" />
+                                </button>
+                            ) : (
+                                <button
+                                    className="btn-account-connect"
+                                    onClick={connectWebeep}
+                                    disabled={webeepBusy}
+                                >
+                                    {webeepBusy && <span className="spinner-small" />}
+                                    {webeepBusy ? t('webeepConnecting') : t('webeepConnect')}
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -307,8 +470,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ config, onConfigChange, onC
                                 className={`btn-update ${checkingUpdate ? 'checking' : ''}`}
                                 onClick={handleCheckForUpdates}
                                 disabled={checkingUpdate}
-                                aria-label={t('checkingUpdates')}
-                                title={t('checkingUpdates')}
+                                aria-label={checkingUpdate ? t('checkingUpdates') : t('checkUpdates')}
+                                title={checkingUpdate ? t('checkingUpdates') : t('checkUpdates')}
                             >
                                 {checkingUpdate ? (
                                     <span className="spinner-small" />

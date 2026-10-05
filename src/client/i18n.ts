@@ -25,6 +25,14 @@ export interface TranslationKeys {
     passwordPlaceholder: string;
     loginButton: string;
     loggingIn: string;
+    bocconiLabel: string;
+    polimiLabel: string;
+    webeepConnect: string;
+    webeepConnecting: string;
+    webeepDisconnect: string;
+    accountsTitle: string;
+    accountNotConnected: string;
+    coursesLoadError: string;
     loginError: string;
     maxLenError: string;
     emptyFieldsError: string;
@@ -66,6 +74,7 @@ export interface TranslationKeys {
     updatesGroup: string;
     updatesDesc: string;
     checkingUpdates: string;
+    checkUpdates: string;
     updateAvailable: string;
     updateNotAvailable: string;
     updateReadyTitle: string;
@@ -75,6 +84,30 @@ export interface TranslationKeys {
     updateRestart: string;
     languageLabel: string;
     languageDesc: string;
+    themeLabel: string;
+    themeDesc: string;
+    themeDark: string;
+    themeLight: string;
+    tutorialSkip: string;
+    webeepPaused: string;
+    webeepToggle: string;
+    tutorialBack: string;
+    tutorialNext: string;
+    tutorialStart: string;
+    tutorialWelcomeTitle: string;
+    tutorialWelcomeBody: string;
+    tutorialSyncTitle: string;
+    tutorialSyncBody: string;
+    tutorialFolderTitle: string;
+    tutorialFolderBody: string;
+    tutorialCoursesTitle: string;
+    tutorialCoursesBody: string;
+    tutorialFiltersTitle: string;
+    tutorialFiltersBody: string;
+    tutorialSettingsTitle: string;
+    tutorialSettingsBody: string;
+    tutorialPolimiTitle: string;
+    tutorialPolimiBody: string;
 
     // Course List
     coursesHeader: string;
@@ -122,12 +155,20 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         retry: "Riprova",
 
         loginTitle: "Accedi a Blackboard",
-        loginSubtitle: "Inserisci le tue credenziali dell'Università Bocconi",
+        loginSubtitle: "Accedi con le credenziali dell'Università Bocconi",
         usernameLabel: "Email / Matricola",
         passwordLabel: "Password",
         usernamePlaceholder: "Matricola o email",
         passwordPlaceholder: "Password",
         loginButton: "Accedi",
+        bocconiLabel: "Università Bocconi",
+        polimiLabel: "Politecnico di Milano",
+        webeepConnect: "Collega",
+        webeepConnecting: "Attendo l'accesso...",
+        webeepDisconnect: "Scollega",
+        accountsTitle: "Account",
+        accountNotConnected: "Non collegato",
+        coursesLoadError: "Impossibile caricare i corsi.",
         loggingIn: "Accesso in corso...",
         loginError: "Credenziali non valide o errore di connessione",
         maxLenError: "Le credenziali superano la lunghezza massima (256 caratteri)",
@@ -168,6 +209,7 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         updatesGroup: "Aggiornamenti",
         updatesDesc: "Verifica automatica aggiornamenti",
         checkingUpdates: "Controllo aggiornamenti...",
+        checkUpdates: "Controlla aggiornamenti",
         updateAvailable: "Aggiornamento disponibile!",
         updateNotAvailable: "Nessun aggiornamento disponibile",
         updateReadyTitle: "Aggiornamento pronto",
@@ -177,6 +219,30 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         updateRestart: "Riavvia ora",
         languageLabel: "Lingua",
         languageDesc: "Seleziona la lingua dell'app",
+        themeLabel: "Tema",
+        themeDesc: "Aspetto scuro o chiaro dell'app",
+        themeDark: "Scuro",
+        themeLight: "Chiaro",
+        tutorialSkip: "Salta",
+        webeepPaused: "In pausa, i corsi non vengono sincronizzati",
+        webeepToggle: "Sincronizza i corsi del Politecnico",
+        tutorialBack: "Indietro",
+        tutorialNext: "Avanti",
+        tutorialStart: "Inizia",
+        tutorialWelcomeTitle: "Benvenuto in BlackBoard Sync",
+        tutorialWelcomeBody: "L'app scarica sul tuo computer i materiali dei corsi Bocconi e PoliMi.\nEcco come funziona, in pochi passi.",
+        tutorialSyncTitle: "Sincronizza",
+        tutorialSyncBody: "Scarica i file nuovi di tutti i corsi selezionati.\nQuelli già scaricati vengono saltati, e puoi interrompere in qualsiasi momento.",
+        tutorialFolderTitle: "Cartella dei file",
+        tutorialFolderBody: "Ogni corso ha la sua cartella qui dentro.\n- Clicca il percorso per aprirla\n- Premi [icon:pencil] per sceglierne un'altra",
+        tutorialCoursesTitle: "I tuoi corsi",
+        tutorialCoursesBody: "La spunta decide quali corsi sincronizzare.\nDal menu [icon:dots] puoi:\n- rinominare un corso\n- aprirne la cartella\n- nasconderlo dalla lista",
+        tutorialFiltersTitle: "Filtri per semestre",
+        tutorialFiltersBody: "Mostra un solo semestre alla volta.\nPassa sopra un filtro e premi [icon:close] per nasconderlo.",
+        tutorialSettingsTitle: "Impostazioni",
+        tutorialSettingsBody: "Qui trovi:\n- sincronizzazione automatica\n- tema chiaro o scuro\n- lingua\n- account Bocconi e PoliMi",
+        tutorialPolimiTitle: "Politecnico di Milano",
+        tutorialPolimiBody: "Studi anche al PoliMi? Collega qui WeBeep.\nCon l'interruttore lo metti in pausa senza scollegarti.",
 
         coursesHeader: "Corsi",
         coursesSelected: "selezionati",
@@ -220,12 +286,20 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         retry: "Retry",
 
         loginTitle: "Log in to Blackboard",
-        loginSubtitle: "Enter your Università Bocconi credentials",
+        loginSubtitle: "Sign in with your Bocconi University credentials",
         usernameLabel: "Email / Student ID",
         passwordLabel: "Password",
         usernamePlaceholder: "Student ID or email",
         passwordPlaceholder: "Password",
         loginButton: "Log In",
+        bocconiLabel: "Bocconi University",
+        polimiLabel: "Politecnico di Milano",
+        webeepConnect: "Connect",
+        webeepConnecting: "Waiting for sign-in...",
+        webeepDisconnect: "Disconnect",
+        accountsTitle: "Accounts",
+        accountNotConnected: "Not connected",
+        coursesLoadError: "Unable to load courses.",
         loggingIn: "Logging in...",
         loginError: "Invalid credentials or connection error",
         maxLenError: "Credentials exceed maximum length (256 characters)",
@@ -266,6 +340,7 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         updatesGroup: "Updates",
         updatesDesc: "Automatically check for updates",
         checkingUpdates: "Checking for updates...",
+        checkUpdates: "Check for updates",
         updateAvailable: "Update available!",
         updateNotAvailable: "No update available",
         updateReadyTitle: "Update ready",
@@ -275,6 +350,30 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         updateRestart: "Restart now",
         languageLabel: "Language",
         languageDesc: "Select the application language",
+        themeLabel: "Theme",
+        themeDesc: "Dark or light appearance",
+        themeDark: "Dark",
+        themeLight: "Light",
+        tutorialSkip: "Skip",
+        webeepPaused: "Paused, courses are not synced",
+        webeepToggle: "Sync Politecnico courses",
+        tutorialBack: "Back",
+        tutorialNext: "Next",
+        tutorialStart: "Get started",
+        tutorialWelcomeTitle: "Welcome to BlackBoard Sync",
+        tutorialWelcomeBody: "The app downloads your Bocconi and PoliMi course materials to your computer.\nHere is how it works, in a few steps.",
+        tutorialSyncTitle: "Sync",
+        tutorialSyncBody: "Downloads the new files of every selected course.\nFiles you already have are skipped, and you can stop at any time.",
+        tutorialFolderTitle: "Files folder",
+        tutorialFolderBody: "Every course gets its own folder in here.\n- Click the path to open it\n- Press [icon:pencil] to pick another one",
+        tutorialCoursesTitle: "Your courses",
+        tutorialCoursesBody: "The tick decides which courses are synced.\nFrom the [icon:dots] menu you can:\n- rename a course\n- open its folder\n- hide it from the list",
+        tutorialFiltersTitle: "Semester filters",
+        tutorialFiltersBody: "Show one semester at a time.\nHover a filter and press [icon:close] to hide it.",
+        tutorialSettingsTitle: "Settings",
+        tutorialSettingsBody: "Here you will find:\n- automatic sync\n- light or dark theme\n- language\n- your Bocconi and PoliMi accounts",
+        tutorialPolimiTitle: "Politecnico di Milano",
+        tutorialPolimiBody: "Also at PoliMi? Connect WeBeep here.\nThe switch pauses it without signing you out.",
 
         coursesHeader: "Courses",
         coursesSelected: "selected",

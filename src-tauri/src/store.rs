@@ -23,6 +23,11 @@ pub struct AppConfig {
     pub sync_on_startup: bool,
     pub heatmap: bool,
     pub language: String,
+    pub theme: String,
+    pub tutorial_done: bool,
+    // PoliMi can be paused from Settings without signing out: the token stays,
+    // but courses and syncs skip it.
+    pub webeep_enabled: bool,
 }
 
 impl Default for AppConfig {
@@ -51,6 +56,9 @@ impl Default for AppConfig {
             sync_on_startup: false,
             heatmap: false,
             language: String::new(),
+            theme: "dark".to_string(),
+            tutorial_done: false,
+            webeep_enabled: true,
         }
     }
 }
@@ -168,6 +176,26 @@ impl AppStore {
 
     pub fn clear_session(&self) {
         if let Ok(entry) = keyring::Entry::new("blackboard-sync", "session") {
+            let _ = entry.delete_credential();
+        }
+    }
+
+    // WeBeep (Politecnico) keeps its own keyring entry: the two universities
+    // are connected and disconnected independently, and the Moodle token is
+    // not a password — the Polimi credentials never reach this process.
+    pub fn save_webeep_token(&self, token: &str) {
+        if let Ok(entry) = keyring::Entry::new("blackboard-sync", "webeep") {
+            let _ = entry.set_password(token);
+        }
+    }
+
+    pub fn load_webeep_token(&self) -> Option<String> {
+        let entry = keyring::Entry::new("blackboard-sync", "webeep").ok()?;
+        entry.get_password().ok()
+    }
+
+    pub fn clear_webeep_token(&self) {
+        if let Ok(entry) = keyring::Entry::new("blackboard-sync", "webeep") {
             let _ = entry.delete_credential();
         }
     }

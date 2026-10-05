@@ -2,10 +2,12 @@ import React from 'react';
 import Icon from './Icon';
 import Marquee from './Marquee';
 import { getT } from '../i18n';
+import { useEscape } from '../useEscape';
 
 interface SyncResultCourse {
     courseName: string;
     files: string[];
+    webeep: boolean;
 }
 
 interface SyncResult {
@@ -13,6 +15,7 @@ interface SyncResult {
     totalScanned: number;
     courses: SyncResultCourse[];
     duration: number;
+    warnings: string[];
 }
 
 interface SyncResultModalProps {
@@ -22,6 +25,7 @@ interface SyncResultModalProps {
 }
 
 const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose }) => {
+    useEscape(onClose);
     const hasNewFiles = result.totalDownloaded > 0;
     const t = getT(lang);
 
@@ -65,6 +69,17 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose
                     </p>
                 </div>
 
+                {result.warnings?.length > 0 && (
+                    <div className="modal-warnings">
+                        {result.warnings.map((w, idx) => (
+                            <div key={idx} className="modal-warning">
+                                <Icon name="warning" size={13} />
+                                <span>{w}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {hasNewFiles && (
                     <div className="modal-body">
                         {result.courses.map((course, idx) => (
@@ -72,6 +87,9 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose
                                 <div className="modal-course-header">
                                 <Icon name="warning" size={14} className="modal-course-icon" />
                                     <Marquee className="modal-course-name" text={course.courseName} />
+                                    <span className="course-source">
+                                        {course.webeep ? 'PoliMi' : 'Bocconi'}
+                                    </span>
                                     <span className="modal-course-count">
                                         {course.files.length}
                                     </span>

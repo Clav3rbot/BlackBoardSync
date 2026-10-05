@@ -8,6 +8,7 @@ mod state;
 mod store;
 mod tray;
 mod updater;
+mod webeep;
 
 use crate::state::AppState;
 use std::sync::atomic::Ordering;
@@ -44,6 +45,7 @@ fn main() {
             commands::login,
             commands::auto_login,
             commands::logout,
+            commands::webeep_login,
             commands::get_courses,
             commands::get_instructors,
             commands::get_cached_instructors,
@@ -103,12 +105,14 @@ fn main() {
                         // frame artifacts) and still blurs on Win11, giving the
                         // Win10-style glass. Win10 keeps BLURBEHIND untouched.
                         //
-                        // Tint alpha 205 (~80%): the course list has no tint of its
-                        // own, and at 160 a white wallpaper lifted it to rgb(101,105,109),
-                        // where grey labels fell to ~2:1 contrast.
+                        // Blur only: the tint is painted by the page (--bg-veil in
+                        // main.scss, ~80% so labels keep their contrast over a white
+                        // wallpaper), because it changes with the light/dark theme
+                        // and has to take part in the theme reveal. Alpha 1, not 0:
+                        // some builds drop the acrylic altogether at 0.
                         let win11 = windows_build_number() >= 22000;
-                        if !(win11 && apply_accent_acrylic(hwnd, (10, 14, 20, 205))) {
-                            let _ = window_vibrancy::apply_blur(&window, Some((10, 14, 20, 205)));
+                        if !(win11 && apply_accent_acrylic(hwnd, (10, 14, 20, 1))) {
+                            let _ = window_vibrancy::apply_blur(&window, Some((10, 14, 20, 1)));
                         }
                     }
                 }

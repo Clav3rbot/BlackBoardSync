@@ -25,7 +25,7 @@ const getInitials = (name: string): string => {
     return name.charAt(0).toUpperCase();
 };
 
-const formatStudentName = (name: string): string => {
+export const formatStudentName = (name: string): string => {
     return name
         .toLowerCase()
         .split(/\s+/)

@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './Header';
 import CourseList from './CourseList';
 import SyncResultModal from './SyncResultModal';
 import SettingsView from './SettingsView';
+import Tutorial from './Tutorial';
 import Icon from './Icon';
 import { getT } from '../i18n';
+import type { Accounts } from '../App';
 
 interface Course {
     id: string;
@@ -31,6 +33,9 @@ interface AppConfig {
     syncOnStartup: boolean;
     heatmap: boolean;
     language: string;
+    theme: string;
+    tutorialDone: boolean;
+    webeepEnabled: boolean;
 }
 
 interface SyncProgress {
@@ -44,6 +49,7 @@ interface SyncProgress {
 interface SyncResultCourse {
     courseName: string;
     files: string[];
+    webeep: boolean;
 }
 
 interface SyncResult {
@@ -51,16 +57,26 @@ interface SyncResult {
     totalScanned: number;
     courses: SyncResultCourse[];
     duration: number;
+    warnings: string[];
 }
 
 interface SyncViewProps {
     lang: 'it' | 'en';
     onLanguageChange: (lang: 'it' | 'en') => void;
     user: { id: string; userName: string; name: { given: string; family: string } };
-    onLogout: () => void;
+    accounts: Accounts;
+    onLogin: (provider: 'bocconi' | 'webeep', user: any) => void;
+    onLogout: (provider?: 'bocconi' | 'webeep' | 'all') => void;
 }
 
-const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLogout }) => {
+const SyncView: React.FC<SyncViewProps> = ({
+    lang,
+    onLanguageChange,
+    user,
+    accounts,
+    onLogin,
+    onLogout,
+}) => {
     const t = getT(lang);
     const [courses, setCourses] = useState<Course[]>([]);
     const [config, setConfig] = useState<AppConfig | null>(null);
@@ -69,11 +85,55 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
     const [loadingCourses, setLoadingCourses] = useState(true);
     const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
-    const [coursesError, setCoursesError] = useState(false);
+    const [settingsDismiss, setSettingsDismiss] = useState(false);
+    const [coursesError, setCoursesError] = useState('');
     const [updateReady, setUpdateReady] = useState<{ releaseName: string } | null>(null);
     const [progressVisible, setProgressVisible] = useState(false);
     const [loadingInstructors, setLoadingInstructors] = useState(false);
     const [cacheMisses, setCacheMisses] = useState<Set<string>>(new Set());
+    const [tutorialOpen, setTutorialOpen] = useState(false);
+    const tutorialShown = useRef(false);
+
+    // First time in: the tour starts once the courses are on screen, so it
+    // can point at them. It runs once per session at most.
+    useEffect(() => {
+        if (!config || config.tutorialDone || loadingCourses || syncResult || tutorialShown.current) return;
+        tutorialShown.current = true;
+        setTutorialOpen(true);
+    }, [config, loadingCourses, syncResult]);
+
+    // Connecting, disconnecting or pausing an account changes which courses
+    // exist, so the list is fetched again; the first value is the initial load.
+    const accountsKey = config
+        ? `${!!accounts.bocconi}:${!!accounts.webeep}:${config.webeepEnabled}`
+        : '';
+    const lastAccountsKey = useRef('');
+    useEffect(() => {
+        if (!accountsKey) return;
+        if (lastAccountsKey.current && lastAccountsKey.current !== accountsKey) loadCourses();
+        lastAccountsKey.current = accountsKey;
+    }, [accountsKey]);
+
+    // The tour opens Settings for its PoliMi step and slides it shut again when
+    // it moves on. Closing doesn't check whether the panel is open: the tour's
+    // key handler can hold an older render where it wasn't yet, and a request
+    // left over is cleared whenever the panel opens.
+    const openSettings = () => {
+        setSettingsDismiss(false);
+        setSettingsOpen(true);
+    };
+    const handleTutorialSettings = (open: boolean) => {
+        if (open) openSettings();
+        else setSettingsDismiss(true);
+    };
+
+    const handleTutorialDone = async () => {
+        setTutorialOpen(false);
+        handleTutorialSettings(false);
+        if (config && !config.tutorialDone) {
+            setConfig(await window.api.updateConfig({ tutorialDone: true }));
+        }
+    };
 
     useEffect(() => {
         loadData();
@@ -130,12 +190,20 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
         }
     };
 
+    // Only the latest request may write the list: pausing PoliMi right after
+    // resuming it fires two, and the slower one must not land last.
+    const coursesRequest = useRef(0);
     const loadCourses = async () => {
+        const request = ++coursesRequest.current;
         setLoadingCourses(true);
-        setCoursesError(false);
+        setCoursesError('');
         try {
             const result = await window.api.getCourses();
-            if (result.success && result.courses) {
+            if (request !== coursesRequest.current) return;
+            // A university that fails to answer must say so: with two sources,
+            // silence is indistinguishable from "you have no courses there".
+            setCoursesError(result.error ?? '');
+            if (result.courses) {
                 const list = result.courses;
                 
                 // Read cache first (extremely fast local disk read)
@@ -152,10 +220,13 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
                 const listWithCache = list.map((c) => {
                     if (cached && cached[c.id]) {
                         return { ...c, instructor: cached[c.id] };
-                    } else {
-                        misses.add(c.id);
-                        return c;
                     }
+                    // WeBeep encodes the teacher in the course title, so it
+                    // arrives already resolved — no lookup, no skeleton.
+                    if (!c.instructor) {
+                        misses.add(c.id);
+                    }
+                    return c;
                 });
 
                 setCacheMisses(misses);
@@ -164,13 +235,13 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
                 // Start background fetch for instructor names
                 loadInstructors(list.map((c) => c.id));
             } else {
-                setCoursesError(true);
+                setCoursesError(result.error || t('coursesLoadError'));
             }
         } catch (err) {
             console.error('Failed to load courses:', err);
-            setCoursesError(true);
+            setCoursesError(t('coursesLoadError'));
         } finally {
-            setLoadingCourses(false);
+            if (request === coursesRequest.current) setLoadingCourses(false);
         }
     };
 
@@ -205,12 +276,18 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
         }
     };
 
+    // The button turns into "Stop" under the pointer, so the second click of a
+    // double click would cancel the sync it just started. Stop ignores clicks
+    // for a moment after a start.
+    const syncStartedAt = useRef(0);
     const handleSync = async () => {
+        syncStartedAt.current = Date.now();
         setSyncing(true);
         await window.api.sync();
     };
 
     const handleAbortSync = async () => {
+        if (Date.now() - syncStartedAt.current < 600) return;
         await window.api.abortSync();
         setSyncing(false);
         setProgress(null);
@@ -268,13 +345,9 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
         if (!config) return;
         const hidden = [...(config.hiddenCourses || [])];
         if (!hidden.includes(courseId)) hidden.push(courseId);
-        // Hiding a course also removes it from the sync selection so it is never
-        // synced while hidden.
-        const enabled = (config.enabledCourses || []).filter((id) => id !== courseId);
-        const newConfig = await window.api.updateConfig({
-            hiddenCourses: hidden,
-            enabledCourses: enabled,
-        });
+        // The selection is left alone: syncs already skip hidden courses, and
+        // showing the course again brings back the tick it had.
+        const newConfig = await window.api.updateConfig({ hiddenCourses: hidden });
         setConfig(newConfig);
     };
 
@@ -361,8 +434,8 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
                 syncDir={config.syncDir}
                 onSync={handleSync}
                 onAbort={handleAbortSync}
-                onLogout={onLogout}
-                onSettings={() => setSettingsOpen(true)}
+                onLogout={() => onLogout('all')}
+                onSettings={openSettings}
                 onOpenFolder={() => window.api.openFolder(config.syncDir)}
                 onChangeFolder={handleChangeFolder}
             />
@@ -391,7 +464,8 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
                 </div>
             )}
 
-            {syncResult && (
+            {/* A sync that ends during the tour keeps its summary for after. */}
+            {syncResult && !tutorialOpen && (
                 <SyncResultModal
                     lang={lang}
                     result={syncResult}
@@ -401,7 +475,7 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
 
             {coursesError && !loadingCourses && (
                 <div className="error-message" style={{ margin: '0 18px 12px' }}>
-                    {lang === 'en' ? 'Unable to load courses.' : 'Impossibile caricare i corsi.'}{' '}
+                    {coursesError}{' '}
                     <a href="#" onClick={(e) => { e.preventDefault(); loadCourses(); }}>{t('retry')}</a>
                 </div>
             )}
@@ -437,8 +511,20 @@ const SyncView: React.FC<SyncViewProps> = ({ lang, onLanguageChange, user, onLog
                             onLanguageChange(newConfig.language as 'it' | 'en');
                         }
                     }}
-                    onClose={() => setSettingsOpen(false)}
+                    onClose={() => {
+                        setSettingsOpen(false);
+                        setSettingsDismiss(false);
+                    }}
+                    dismiss={settingsDismiss}
+                    lang={lang}
+                    accounts={accounts}
+                    onLogin={onLogin}
+                    onLogout={onLogout}
                 />
+            )}
+
+            {tutorialOpen && (
+                <Tutorial lang={lang} onDone={handleTutorialDone} onSettings={handleTutorialSettings} />
             )}
 
             {updateReady && (
