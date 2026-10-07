@@ -92,6 +92,7 @@ impl BlackboardAPI {
 
         let client = Client::builder()
             .default_headers(headers)
+            .referer(false)
             .timeout(std::time::Duration::from_secs(30))
             // Catches stalls in downloads, which override the total timeout.
             .read_timeout(std::time::Duration::from_secs(30))

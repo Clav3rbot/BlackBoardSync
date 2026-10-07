@@ -95,6 +95,8 @@ impl WeBeepAPI {
     pub fn new(token: &str) -> Self {
         let client = Client::builder()
             .user_agent(USER_AGENT)
+            // Download URLs carry the token: keep it out of Referer on redirects.
+            .referer(false)
             .timeout(std::time::Duration::from_secs(30))
             .read_timeout(std::time::Duration::from_secs(30))
             .build()

@@ -551,7 +551,9 @@ async fn save_response(
         }
         out.flush().await.map_err(|e| e.to_string())?;
         drop(out);
-        tokio::fs::rename(&part, path).await.map_err(|e| e.to_string())
+        tokio::fs::rename(&part, path).await.map_err(|e| e.to_string())?;
+        mark_as_downloaded(path).await;
+        Ok(())
     }
     .await;
 
@@ -559,6 +561,33 @@ async fn save_response(
         let _ = tokio::fs::remove_file(&part).await;
     }
     result
+}
+
+/// Mark-of-the-Web, so Office uses Protected View and SmartScreen/Gatekeeper
+/// check course files like browser downloads. Best effort.
+async fn mark_as_downloaded(path: &Path) {
+    #[cfg(windows)]
+    {
+        let mut ads = path.as_os_str().to_owned();
+        ads.push(":Zone.Identifier");
+        let _ = tokio::fs::write(ads, "[ZoneTransfer]\r\nZoneId=3\r\n").await;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let _ = tokio::process::Command::new("xattr")
+            .arg("-w")
+            .arg("com.apple.quarantine")
+            .arg(format!("0083;{:x};BlackBoard Sync;", secs))
+            .arg(path)
+            .output()
+            .await;
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let _ = path;
 }
 
 /// Handlers whose items can hold attachments that only `/attachments` reveals.
@@ -992,6 +1021,11 @@ mod tests {
         save_response(response(), &path, &abort).await.unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
         assert!(!part.exists());
+        #[cfg(windows)]
+        {
+            let ads = format!("{}:Zone.Identifier", path.display());
+            assert!(std::fs::read_to_string(ads).unwrap().contains("ZoneId=3"));
+        }
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
