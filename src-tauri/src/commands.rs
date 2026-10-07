@@ -473,6 +473,9 @@ pub async fn open_folder(
     if !resolved.exists() {
         std::fs::create_dir_all(&resolved).map_err(|e| e.to_string())?;
     }
+    if !resolved.is_dir() {
+        return Err("Non è una cartella".to_string());
+    }
 
     app.opener()
         .open_path(resolved.to_string_lossy(), None::<String>)

@@ -1,6 +1,6 @@
 {
   "name": "blackboard-sync",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Sincronizza i file dei corsi Blackboard (Università Bocconi) e WeBeep (Politecnico di Milano)",
   "scripts": {
     "dev": "npx webpack serve --config webpack.dev.config.js",
