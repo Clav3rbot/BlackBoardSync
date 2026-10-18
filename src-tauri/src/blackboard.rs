@@ -50,10 +50,9 @@ pub struct ContentItem {
     pub title: String,
     pub parent_id: Option<String>,
     pub content_handler: Option<serde_json::Value>,
-    // Ultra courses keep a document's files as links inside this HTML body
-    // instead of as REST attachments. Present in the recursive /contents
-    // listing, so reading it costs no extra request.
+    // Ultra documents keep their files as links in this body, which /contents returns for free.
     pub body: Option<String>,
+    pub modified: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -61,10 +60,8 @@ pub struct ContentItem {
 pub struct Attachment {
     pub id: String,
     pub file_name: String,
-    pub mime_type: Option<String>,
 }
 
-/// True only for `https` URLs on the Blackboard host itself.
 fn is_blackboard_url(url: &str) -> bool {
     match url::Url::parse(url) {
         Ok(parsed) => parsed.scheme() == "https" && parsed.host_str() == Some(HOST),
@@ -81,8 +78,7 @@ impl BlackboardAPI {
     pub fn new(cookies: &[String]) -> Self {
         let cookie_header = cookies.join("; ");
         let mut headers = reqwest::header::HeaderMap::new();
-        // Build cookie header defensively: a malformed/tampered cookie value
-        // (e.g. control chars from a corrupt keyring entry) must not panic the app.
+        // A corrupt keyring cookie (e.g. control chars) must not panic the app.
         if let Ok(value) = reqwest::header::HeaderValue::from_str(&cookie_header) {
             headers.insert("Cookie", value);
         }
@@ -128,16 +124,12 @@ impl BlackboardAPI {
         self.get_courses_inner(user_id, true).await
     }
 
-    /// Sync filters on term ids only, so it skips the per-term name lookups:
-    /// the server throttles bursts of requests, and every one saved here
-    /// leaves room for the scan.
+    /// Skips the term name lookups (sync filters on ids only): the server throttles bursts.
     pub async fn get_courses_for_sync(&self, user_id: &str) -> Result<Vec<Course>, String> {
         self.get_courses_inner(user_id, false).await
     }
 
-    // Fast: course list + term names only. Instructor names are resolved
-    // separately via `get_instructors` (many slow round-trips) so the UI can
-    // render the list immediately and fill instructors in afterwards.
+    // Instructors come later from `get_instructors` (slow), so the UI can show the list first.
     async fn get_courses_inner(&self, user_id: &str, term_names: bool) -> Result<Vec<Course>, String> {
         let mut courses: Vec<Course> = Vec::new();
         let mut path = format!(
@@ -145,7 +137,6 @@ impl BlackboardAPI {
             user_id
         );
 
-        // Paginate
         loop {
             let data: serde_json::Value = self.client
                 .get(self.url(&path))
@@ -187,7 +178,6 @@ impl BlackboardAPI {
             return Ok(courses);
         }
 
-        // Resolve term names
         let term_ids: Vec<String> = courses
             .iter()
             .filter_map(|c| c.term.as_ref().map(|t| t.id.clone()))
@@ -225,10 +215,8 @@ impl BlackboardAPI {
         Ok(courses)
     }
 
-    // Resolve instructor display names for the given courses. This is the slow
-    // part of the old course fetch (a membership call + per-instructor expand
-    // call for every course), so it runs on its own and the UI merges the
-    // result in progressively. Returns courseId -> "Name, Name".
+    // courseId -> "Name, Name". Slow (a membership call plus one per instructor, per course),
+    // so it runs apart from the course list.
     pub async fn get_instructors(&self, course_ids: &[String]) -> HashMap<String, String> {
         let mut map: HashMap<String, String> = HashMap::new();
 
@@ -309,10 +297,8 @@ impl BlackboardAPI {
         map
     }
 
-    /// Every content item of a course in one paged listing. Each item carries
-    /// its `parentId`, so the tree is rebuilt locally instead of being walked
-    /// one `/children` request per folder — which on a real course is the
-    /// difference between one round-trip and a hundred.
+    /// The whole course in one paged listing; items carry `parentId`, so the tree is rebuilt
+    /// locally instead of costing one `/children` request per folder.
     pub async fn get_all_contents(&self, course_id: &str) -> Result<Vec<ContentItem>, String> {
         let mut items = Vec::new();
         let mut path = format!("/courses/{}/contents?recursive=true&limit=200", course_id);
@@ -322,8 +308,7 @@ impl BlackboardAPI {
                 .send()
                 .await
                 .map_err(|e| e.to_string())?;
-            // An error body has no `results`; decoding it as an empty page
-            // would pass a course off as having no files.
+            // An error body read as an empty page would pass the course off as having no files.
             if !response.status().is_success() {
                 return Err(format!("HTTP {}", response.status()));
             }
@@ -343,34 +328,25 @@ impl BlackboardAPI {
         course_id: &str,
         content_id: &str,
     ) -> Result<Vec<Attachment>, String> {
-        let mut data: serde_json::Value = self.client
+        let response = self.client
             .get(self.url(&format!(
                 "/courses/{}/contents/{}/attachments",
                 course_id, content_id
             )))
             .send()
             .await
-            .map_err(|e| e.to_string())?
-            .json()
-            .await
             .map_err(|e| e.to_string())?;
+        // A throttled or failed call must not read as "no attachments".
+        if !response.status().is_success() {
+            return Err(format!("HTTP {}", response.status()));
+        }
+        let mut data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
 
         Ok(serde_json::from_value(data["results"].take()).unwrap_or_default())
     }
 
-    /// Download from an absolute URL. Ultra document bodies carry signed
-    /// bbcswebdav links that the attachment endpoint knows nothing about;
-    /// the session cookies on this client are what authorises them.
-    /// Fetches an Ultra document file by its link.
-    ///
-    /// The link comes out of a course's HTML body, which is content authored
-    /// inside Blackboard rather than something this app produced, so the host is
-    /// checked before the request goes out: this client carries the session
-    /// cookie as a default header, and would otherwise hand it to whatever host
-    /// a crafted `data-bbfile` or `href` pointed at.
-    ///
-    /// Cross-host redirects are already safe — reqwest drops the Cookie header
-    /// when a redirect changes host — so only the initial URL needs the check.
+    /// The link comes from course-authored HTML and this client sends the session cookie, so
+    /// the host is checked. Redirects are safe: reqwest drops Cookie when the host changes.
     pub async fn download_url(&self, url: &str) -> Result<reqwest::Response, String> {
         if !is_blackboard_url(url) {
             return Err(format!("URL non attendibile: {}", url));
@@ -432,7 +408,6 @@ mod tests {
         assert!(is_blackboard_url(
             "https://blackboard.unibocconi.it/bbcswebdav/pid-1/file.pdf"
         ));
-        // A crafted link in a course body must not receive the session cookie.
         assert!(!is_blackboard_url("https://evil.example/steal"));
         // Userinfo must not be mistaken for the host.
         assert!(!is_blackboard_url(

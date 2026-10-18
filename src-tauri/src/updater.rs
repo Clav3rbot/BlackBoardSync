@@ -1,5 +1,7 @@
+use crate::state::AppState;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use std::sync::atomic::Ordering;
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_updater::UpdaterExt;
 
 #[derive(Debug, Serialize, Clone)]
@@ -23,9 +25,7 @@ struct UpdateReady {
     release_name: String,
 }
 
-/// Check for updates using the official Tauri updater plugin.
-/// All downloads are cryptographically verified against the Ed25519 public key
-/// configured in tauri.conf.json before installation.
+/// Downloads are verified against the Ed25519 key in tauri.conf.json before installing.
 pub async fn check_for_updates(app: &AppHandle) {
     emit_status(app, "checking", "Controllo aggiornamenti...");
 
@@ -59,14 +59,13 @@ async fn do_check(app: &AppHandle) -> Result<(), String> {
 
     let app_clone = app.clone();
     let version_clone = version.clone();
+    let mut received = 0u64;
 
-    // Download and install with progress reporting.
-    // The plugin automatically verifies the Ed25519 signature before applying.
-    update
-        .download_and_install(
+    let bytes = update
+        .download(
             move |chunk_length, content_length| {
-                let total = content_length.unwrap_or(0) as u64;
-                let received = chunk_length as u64;
+                let total = content_length.unwrap_or(0);
+                received += chunk_length as u64;
                 let percent = if total > 0 {
                     (received * 100 / total) as u32
                 } else {
@@ -83,12 +82,16 @@ async fn do_check(app: &AppHandle) -> Result<(), String> {
                     )
                     .ok();
             },
-            || {
-                // Download finished callback
-            },
+            || {},
         )
         .await
         .map_err(|e| e.to_string())?;
+
+    // On Windows installing quits the app: let a running sync finish first.
+    while app.state::<AppState>().syncing.load(Ordering::SeqCst) {
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    }
+    update.install(bytes).map_err(|e| e.to_string())?;
 
     emit_status(
         app,

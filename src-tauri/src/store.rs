@@ -25,8 +25,7 @@ pub struct AppConfig {
     pub language: String,
     pub theme: String,
     pub tutorial_done: bool,
-    // PoliMi can be paused from Settings without signing out: the token stays,
-    // but courses and syncs skip it.
+    // Paused from Settings: the token stays, but courses and syncs skip PoliMi.
     pub webeep_enabled: bool,
 }
 
@@ -63,6 +62,26 @@ impl Default for AppConfig {
     }
 }
 
+/// Server stamp of a synced file and the highest version kept on disk.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileStamp {
+    pub stamp: String,
+    pub version: u32,
+}
+
+/// Temp file + rename: a crash mid-write must not leave a truncated file.
+fn write_atomic(path: &std::path::Path, bytes: &[u8]) {
+    use std::io::Write;
+    let tmp = path.with_extension("tmp");
+    let written = std::fs::File::create(&tmp).and_then(|mut f| {
+        f.write_all(bytes)?;
+        f.sync_all()
+    });
+    if written.is_ok() {
+        let _ = std::fs::rename(&tmp, path);
+    }
+}
+
 pub struct AppStore {
     config_path: PathBuf,
     config: AppConfig,
@@ -95,8 +114,7 @@ impl AppStore {
                     if let Ok(mut config) =
                         serde_json::from_value::<AppConfig>(serde_json::Value::Object(merged))
                     {
-                        // Migrate pre-existing configs that predate the sync_all_courses
-                        // flag: empty enabled list used to mean "sync everything".
+                        // Configs older than sync_all_courses: an empty enabled list meant "sync everything".
                         if !had_sync_all {
                             config.sync_all_courses = config.enabled_courses.is_empty();
                         }
@@ -134,7 +152,21 @@ impl AppStore {
             let _ = std::fs::create_dir_all(dir);
         }
         if let Ok(json) = serde_json::to_string_pretty(&self.config) {
-            let _ = std::fs::write(&self.config_path, json);
+            write_atomic(&self.config_path, json.as_bytes());
+        }
+    }
+
+    pub fn load_file_stamps(&self) -> HashMap<String, FileStamp> {
+        std::fs::read_to_string(self.data_dir.join("file_stamps.json"))
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save_file_stamps(&self, stamps: &HashMap<String, FileStamp>) {
+        let _ = std::fs::create_dir_all(&self.data_dir);
+        if let Ok(json) = serde_json::to_string(stamps) {
+            write_atomic(&self.data_dir.join("file_stamps.json"), json.as_bytes());
         }
     }
 
@@ -180,9 +212,7 @@ impl AppStore {
         }
     }
 
-    // WeBeep (Politecnico) keeps its own keyring entry: the two universities
-    // are connected and disconnected independently, and the Moodle token is
-    // not a password — the Polimi credentials never reach this process.
+    // Own keyring entry, so each university connects and disconnects independently.
     pub fn save_webeep_token(&self, token: &str) {
         if let Ok(entry) = keyring::Entry::new("blackboard-sync", "webeep") {
             let _ = entry.set_password(token);

@@ -1,5 +1,4 @@
 // Tauri v2 window.api shim — maps window.api.* to Tauri IPC invokes
-// All React components continue to use window.api.* without any changes.
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -27,12 +26,8 @@ const api: Window['api'] = {
     updateConfig: (partial) => invoke('update_config', { partial }),
     selectFolder: () => invoke('select_folder'),
     openFolder: (folderPath) => invoke('open_folder', { folderPath }),
-    openCourseFolder: (courseId, name) => invoke('open_course_folder', { courseId, name }),
+    openCourseFolder: (courseId, courses) => invoke('open_course_folder', { courseId, courses }),
     minimize: () => getCurrentWindow().minimize(),
-    maximize: async () => {
-        const win = getCurrentWindow();
-        return (await win.isMaximized()) ? win.unmaximize() : win.maximize();
-    },
     close: () => getCurrentWindow().close(),
     resetWindowSize: () => invoke('reset_window_size'),
     getAppVersion: () => getVersion(),

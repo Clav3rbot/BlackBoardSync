@@ -9,8 +9,6 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use tauri::{AppHandle, Manager, State};
 
-// ── Response types ────────────────────────────────────────────
-
 #[derive(Serialize)]
 pub struct LoginResponse {
     pub success: bool,
@@ -20,8 +18,7 @@ pub struct LoginResponse {
     pub error: Option<String>,
 }
 
-/// Both universities in one payload. Either may be absent — connecting only one
-/// of the two is a perfectly normal state, so there is no single `success` flag.
+/// Either account may be absent (connecting just one is normal), hence no `success` flag.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountsResponse {
@@ -49,8 +46,6 @@ pub struct SimpleResponse {
     pub error: Option<String>,
 }
 
-// ── Commands ──────────────────────────────────────────────────
-
 #[tauri::command]
 pub async fn login(
     username: String,
@@ -58,7 +53,6 @@ pub async fn login(
     state: State<'_, AppState>,
     _app: AppHandle,
 ) -> Result<LoginResponse, String> {
-    // Input validation
     if username.is_empty() || password.is_empty() {
         return Ok(LoginResponse {
             success: false,
@@ -106,10 +100,8 @@ pub async fn login(
     }
 }
 
-/// Restores the Blackboard session: stored cookies first, falling back to a full
-/// SAML re-auth with the stored credentials.
+/// Stored cookies first, then a SAML re-auth with the stored credentials.
 async fn restore_blackboard(state: &AppState) -> Result<crate::blackboard::UserInfo, String> {
-    // Fast path: try stored session cookies (no SAML round-trip)
     let stored_session = state.store.lock().unwrap().load_session();
     if let Some(cookies) = stored_session {
         let api = BlackboardAPI::new(&cookies);
@@ -117,11 +109,9 @@ async fn restore_blackboard(state: &AppState) -> Result<crate::blackboard::UserI
             *state.session.lock().unwrap() = Some(Session { cookies });
             return Ok(user);
         }
-        // Session expired - clear it and fall through to SAML
         state.store.lock().unwrap().clear_session();
     }
 
-    // Slow path: SAML re-auth with stored credentials
     let creds = state.store.lock().unwrap().load_credentials();
     let Some((username, password)) = creds else {
         return Err("no-credentials".to_string());
@@ -145,32 +135,38 @@ async fn restore_blackboard(state: &AppState) -> Result<crate::blackboard::UserI
     Ok(user)
 }
 
-/// Any HTTP answer counts as online.
-async fn is_online() -> bool {
+/// Any HTTP answer from any of the hosts counts as online.
+async fn is_online(urls: &[&str]) -> bool {
     let Ok(client) = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
     else {
         return true;
     };
-    client.head("https://blackboard.unibocconi.it").send().await.is_ok()
+    let probes = urls.iter().map(|u| client.head(*u).send());
+    futures_util::future::join_all(probes).await.iter().any(|r| r.is_ok())
 }
 
-/// Restores every connected account. Runs once at startup and kicks off the
-/// optional startup sync when at least one university answered.
+/// Restores every connected account at startup and starts the optional startup sync.
 #[tauri::command]
 pub async fn auto_login(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<AccountsResponse, String> {
-    // Autostart runs right after logon, often before Wi-Fi is up: restoring
-    // then would fail for both accounts and drop the user on the login screen.
-    // The UI shows an offline screen instead and calls again once back online.
-    let has_account = {
+    // Autostart often runs before Wi-Fi is up: the UI shows an offline screen and retries,
+    // instead of the login screen a failed restore would bring.
+    let hosts = {
         let store = state.store.lock().unwrap();
-        store.load_credentials().is_some() || store.load_webeep_token().is_some()
+        let mut hosts = Vec::new();
+        if store.load_credentials().is_some() {
+            hosts.push("https://blackboard.unibocconi.it");
+        }
+        if store.load_webeep_token().is_some() {
+            hosts.push("https://webeep.polimi.it");
+        }
+        hosts
     };
-    if has_account && !is_online().await {
+    if !hosts.is_empty() && !is_online(&hosts).await {
         return Err("offline".to_string());
     }
 
@@ -203,9 +199,7 @@ pub async fn auto_login(
     Ok(AccountsResponse { bocconi, webeep: webeep_user, bocconi_error, webeep_error })
 }
 
-/// Connects WeBeep by opening Polimi's SSO in its own window. The password is
-/// typed into that page and never reaches this process - only the resulting
-/// Moodle token is stored.
+/// Only the Moodle token is stored; the Polimi password never reaches this process.
 #[tauri::command]
 pub async fn webeep_login(
     state: State<'_, AppState>,
@@ -234,9 +228,7 @@ pub async fn webeep_login(
     }
 }
 
-/// Disconnects one university, or both when `provider` is omitted. Auto-sync is
-/// only torn down once no account is left, so signing out of one university does
-/// not silently stop the other from syncing.
+/// One university, or both without `provider`. Auto-sync stops only once no account is left.
 #[tauri::command]
 pub async fn logout(
     state: State<'_, AppState>,
@@ -267,9 +259,7 @@ pub async fn logout(
     Ok(SimpleResponse { success: true, error: None })
 }
 
-/// Returns the courses of every connected university as one list, so the UI
-/// renders a single roster. A source that fails is reported in `error` but does
-/// not hide the other one's courses.
+/// Both universities in one list; a failing source goes in `error` without hiding the other.
 #[tauri::command]
 pub async fn get_courses(
     state: State<'_, AppState>,
@@ -338,8 +328,7 @@ pub async fn get_instructors(
     let Some(session) = session else {
         return Ok(HashMap::new());
     };
-    // Moodle exposes no equivalent endpoint, so WeBeep ids are filtered out
-    // rather than sent to Blackboard, where they would 404.
+    // Moodle has no such endpoint, and Blackboard would 404 on WeBeep ids.
     let course_ids: Vec<String> = course_ids
         .into_iter()
         .filter(|id| !webeep::is_webeep(id))
@@ -350,7 +339,6 @@ pub async fn get_instructors(
     let api = BlackboardAPI::new(&session.cookies);
     let fresh = api.get_instructors(&course_ids).await;
 
-    // Update the disk cache with fresh data
     if !fresh.is_empty() {
         let mut cached = state.store.lock().unwrap().load_instructors_cache();
         for (k, v) in &fresh {
@@ -390,7 +378,6 @@ pub fn update_config(
     let old_config = state.store.lock().unwrap().get_config();
     let new_config = state.store.lock().unwrap().update_config(partial.clone());
 
-    // Re-schedule auto-sync if relevant fields changed
     if partial.get("autoSync").is_some()
         || partial.get("autoSyncInterval").is_some()
         || partial.get("autoSyncScheduledTime").is_some()
@@ -398,7 +385,6 @@ pub fn update_config(
         setup_auto_sync(&app);
     }
 
-    // Start-at-login
     if let Some(start) = partial["startAtLogin"].as_bool() {
         use tauri_plugin_autostart::ManagerExt;
         if start {
@@ -408,7 +394,6 @@ pub fn update_config(
         }
     }
 
-    // Minimize to tray
     if let Some(minimize) = partial["minimizeToTray"].as_bool() {
         if minimize && !old_config.minimize_to_tray {
             let _ = tray::create_tray(&app);
@@ -440,36 +425,16 @@ pub async fn open_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
+    use crate::download::{is_inside_resolved, normalize_path};
     use tauri_plugin_opener::OpenerExt;
-    use std::path::{Component, PathBuf};
 
-    let sync_dir_str = state.store.lock().unwrap().get_config().sync_dir;
-    let sync_dir = PathBuf::from(&sync_dir_str);
-    let requested = PathBuf::from(&folder_path);
-
-    // Use filesystem canonicalization when possible, lexical normalization as fallback
-    let (resolved, base) = match (requested.canonicalize(), sync_dir.canonicalize()) {
-        (Ok(r), Ok(b)) => (r, b),
-        _ => {
-            let normalize = |p: &std::path::Path| -> PathBuf {
-                let mut out: Vec<Component> = Vec::new();
-                for c in p.components() {
-                    match c {
-                        Component::ParentDir => { if matches!(out.last(), Some(Component::Normal(_))) { out.pop(); } }
-                        Component::CurDir => {}
-                        other => out.push(other),
-                    }
-                }
-                out.iter().collect()
-            };
-            (normalize(&requested), normalize(&sync_dir))
-        }
-    };
-
-    if resolved != base && !resolved.starts_with(&base) {
+    let sync_dir = std::path::PathBuf::from(state.store.lock().unwrap().get_config().sync_dir);
+    let requested = std::path::PathBuf::from(&folder_path);
+    if !is_inside_resolved(&requested, sync_dir.canonicalize().ok().as_deref(), &normalize_path(&sync_dir)) {
         return Err("Path traversal non consentito".to_string());
     }
 
+    let resolved = normalize_path(&requested);
     if !resolved.exists() {
         std::fs::create_dir_all(&resolved).map_err(|e| e.to_string())?;
     }
@@ -482,28 +447,24 @@ pub async fn open_folder(
         .map_err(|e| e.to_string())
 }
 
-/// Opens a course's folder, named the way `trigger_sync` names it. A WeBeep
-/// course that clashed with a Blackboard name lives in "<name> (PoliMi)".
-/// Falls back to the sync root when the course was never synced.
+/// Opens a course's folder, or the sync root when it was never synced. Takes
+/// the whole course list, which `course_dirs` needs to settle clashing names.
 #[tauri::command]
 pub async fn open_course_folder(
     course_id: String,
-    name: String,
+    courses: Vec<crate::blackboard::Course>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    use crate::download::sanitize_path;
     use tauri_plugin_opener::OpenerExt;
 
-    let sync_dir = std::path::PathBuf::from(state.store.lock().unwrap().get_config().sync_dir);
-    let mut dir = sync_dir.join(sanitize_path(&name));
-    if webeep::is_webeep(&course_id) {
-        let polimi = sync_dir.join(sanitize_path(&format!("{} (PoliMi)", name)));
-        if polimi.is_dir() {
-            dir = polimi;
-        }
-    }
-    let target = if dir.is_dir() { dir } else { sync_dir };
+    let config = state.store.lock().unwrap().get_config();
+    let sync_dir = std::path::PathBuf::from(&config.sync_dir);
+    let target = crate::download::course_dirs(&courses, &config.course_aliases)
+        .get(&course_id)
+        .map(|dir| sync_dir.join(dir))
+        .filter(|dir| dir.is_dir())
+        .unwrap_or(sync_dir);
 
     app.opener()
         .open_path(target.to_string_lossy(), None::<String>)

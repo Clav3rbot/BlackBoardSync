@@ -3,7 +3,7 @@ import Icon, { IconName } from './Icon';
 import { getT, TranslationKeys } from '../i18n';
 
 interface Step {
-    // The part of the window the step is about; none centres the card.
+    // Selector to spotlight; none centres the card.
     target?: string;
     // The target lives in the Settings panel, which the step opens.
     settings?: boolean;
@@ -77,20 +77,15 @@ interface TutorialProps {
     onSettings: (open: boolean) => void;
 }
 
-// A spotlight that moves from one part of the window to the next, with a card
-// explaining each. Clicks outside the card do nothing, so a stray click can't
-// skip it; Esc does.
+// Clicks outside the card do nothing, so a stray click can't skip the tour; Esc does.
 const Tutorial: React.FC<TutorialProps> = ({ lang, onDone, onSettings }) => {
     const t = getT(lang);
-    // Steps whose part isn't on screen (no courses yet, a single semester)
-    // are left out rather than pointing at nothing.
+    // Drop steps whose target isn't on screen (no courses yet, a single semester).
     const [steps] = useState(() =>
         STEPS.filter((s) => !s.target || s.settings || document.querySelector(s.target))
     );
     const [index, setIndex] = useState(0);
-    // Measured per step. Until a step's target exists the spotlight stays where
-    // it was; `card` holds the card back while the Settings panel slides in, so
-    // the spotlight rides in with the row and the card lands once it settles.
+    // `card` holds the card back while the Settings panel slides in, so it lands once the row settles.
     const [measured, setMeasured] = useState<{ index: number; rect: DOMRect | null; card: boolean }>({
         index: -1,
         rect: null,
@@ -100,10 +95,8 @@ const Tutorial: React.FC<TutorialProps> = ({ lang, onDone, onSettings }) => {
     const step = steps[index];
     const last = index === steps.length - 1;
 
-    // The target is followed every frame, not measured once: a sync can start
-    // underneath and push the list down with its progress bar, a panel can
-    // slide, and the window can be resized. State only changes when the box
-    // actually moves.
+    // Followed every frame, not measured once: a sync's progress bar can push the list down,
+    // a panel can slide, the window can resize. State only changes when the box moves.
     useLayoutEffect(() => {
         onSettings(!!step.settings);
         const find = () => (step.target ? document.querySelector(step.target) : null);
@@ -120,9 +113,7 @@ const Tutorial: React.FC<TutorialProps> = ({ lang, onDone, onSettings }) => {
             if (step.target && !el) return;
             if (el && !scrolled) {
                 scrolled = true;
-                // Inside Settings the row sits far down the panel: glide it to
-                // the middle while the panel slides in. Elsewhere, only as far
-                // as needed.
+                // In Settings the row sits far down: glide it to the panel's middle.
                 const scroller = el.closest('.settings-body');
                 if (scroller) {
                     const r = el.getBoundingClientRect();
@@ -139,8 +130,7 @@ const Tutorial: React.FC<TutorialProps> = ({ lang, onDone, onSettings }) => {
             const box = r ? `${r.top}|${r.left}|${r.width}|${r.height}` : 'none';
             stillFrames = box === lastBox ? stillFrames + 1 : 0;
             lastBox = box;
-            // The card waits until the panel has slid in and the scroll has
-            // stopped, so it lands next to the row instead of chasing it.
+            // The card waits for the panel slide and the scroll to stop, so it doesn't chase the row.
             if (!card && performance.now() - start > PANEL_IN_MS && stillFrames >= 6) card = true;
             const key = `${card}|${box}`;
             if (key !== lastKey) {
@@ -165,11 +155,8 @@ const Tutorial: React.FC<TutorialProps> = ({ lang, onDone, onSettings }) => {
         return () => window.removeEventListener('keydown', onKey);
     }, [index]);
 
-    // With no target the spotlight shrinks to a point in the middle, so the
-    // whole window dims and the next step grows out of it. While a Settings
-    // step settles (panel sliding, list scrolling) it stays closed on the
-    // target's centre too, so it never lights up the rows passing by, and
-    // opens once the target stops.
+    // No target: the spotlight shrinks to a point in the middle, dimming the whole window.
+    // A settling Settings step stays closed on the target's centre, so passing rows never light up.
     const pad = step.settings ? PANEL_PAD : PAD;
     const settling = !!rect && !!step.settings && !(measured.index === index && measured.card);
     const spot =

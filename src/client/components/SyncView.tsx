@@ -7,58 +7,7 @@ import Tutorial from './Tutorial';
 import Icon from './Icon';
 import { getT } from '../i18n';
 import type { Accounts } from '../App';
-
-interface Course {
-    id: string;
-    courseId: string;
-    name: string;
-    instructor?: string;
-}
-
-interface AppConfig {
-    syncDir: string;
-    autoSync: boolean;
-    autoSyncInterval: number;
-    autoSyncScheduledTime: string;
-    syncAllCourses: boolean;
-    enabledCourses: string[];
-    courseAliases: Record<string, string>;
-    collapsedTerms: string[];
-    hiddenCourses: string[];
-    hiddenTerms: string[];
-    lastSync: string | null;
-    minimizeToTray: boolean;
-    startAtLogin: boolean;
-    notifications: boolean;
-    syncOnStartup: boolean;
-    heatmap: boolean;
-    language: string;
-    theme: string;
-    tutorialDone: boolean;
-    webeepEnabled: boolean;
-}
-
-interface SyncProgress {
-    phase: 'scanning' | 'downloading' | 'complete' | 'error';
-    current: number;
-    total: number;
-    currentFile?: string;
-    error?: string;
-}
-
-interface SyncResultCourse {
-    courseName: string;
-    files: string[];
-    webeep: boolean;
-}
-
-interface SyncResult {
-    totalDownloaded: number;
-    totalScanned: number;
-    courses: SyncResultCourse[];
-    duration: number;
-    warnings: string[];
-}
+import type { AppConfig, Course, SyncProgress, SyncResult } from '../../types';
 
 interface SyncViewProps {
     lang: 'it' | 'en';
@@ -94,16 +43,14 @@ const SyncView: React.FC<SyncViewProps> = ({
     const [tutorialOpen, setTutorialOpen] = useState(false);
     const tutorialShown = useRef(false);
 
-    // First time in: the tour starts once the courses are on screen, so it
-    // can point at them. It runs once per session at most.
+    // The tour waits for the courses to be on screen so it can point at them; once per session.
     useEffect(() => {
         if (!config || config.tutorialDone || loadingCourses || syncResult || tutorialShown.current) return;
         tutorialShown.current = true;
         setTutorialOpen(true);
     }, [config, loadingCourses, syncResult]);
 
-    // Connecting, disconnecting or pausing an account changes which courses
-    // exist, so the list is fetched again; the first value is the initial load.
+    // Account changes alter which courses exist, so refetch; the first value is the initial load.
     const accountsKey = config
         ? `${!!accounts.bocconi}:${!!accounts.webeep}:${config.webeepEnabled}`
         : '';
@@ -114,10 +61,8 @@ const SyncView: React.FC<SyncViewProps> = ({
         lastAccountsKey.current = accountsKey;
     }, [accountsKey]);
 
-    // The tour opens Settings for its PoliMi step and slides it shut again when
-    // it moves on. Closing doesn't check whether the panel is open: the tour's
-    // key handler can hold an older render where it wasn't yet, and a request
-    // left over is cleared whenever the panel opens.
+    // Closing doesn't check whether the panel is open: the tour's key handler can hold a stale
+    // render, and a leftover request is cleared whenever the panel opens.
     const openSettings = () => {
         setSettingsDismiss(false);
         setSettingsOpen(true);
@@ -168,9 +113,7 @@ const SyncView: React.FC<SyncViewProps> = ({
         };
     }, []);
 
-    // Grace delay: don't flash the progress bar on the very first frame of a
-    // sync (feels abrupt, esp. on startup auto-sync). Show it after 250ms so it
-    // fades in deliberately; hide immediately when the sync ends.
+    // Grace delay so the bar doesn't flash on the first frame of a sync; hide at once when it ends.
     useEffect(() => {
         const active = syncing || progress?.phase === 'error';
         if (!active) {
@@ -190,8 +133,7 @@ const SyncView: React.FC<SyncViewProps> = ({
         }
     };
 
-    // Only the latest request may write the list: pausing PoliMi right after
-    // resuming it fires two, and the slower one must not land last.
+    // Only the latest request may write the list: pausing PoliMi right after resuming fires two.
     const coursesRequest = useRef(0);
     const loadCourses = async () => {
         const request = ++coursesRequest.current;
@@ -200,13 +142,11 @@ const SyncView: React.FC<SyncViewProps> = ({
         try {
             const result = await window.api.getCourses();
             if (request !== coursesRequest.current) return;
-            // A university that fails to answer must say so: with two sources,
-            // silence is indistinguishable from "you have no courses there".
+            // With two sources, a silent failure would look like "no courses there".
             setCoursesError(result.error ?? '');
             if (result.courses) {
                 const list = result.courses;
-                
-                // Read cache first (extremely fast local disk read)
+
                 let cached: Record<string, string> = {};
                 try {
                     const res = await window.api.getCachedInstructors();
@@ -215,14 +155,12 @@ const SyncView: React.FC<SyncViewProps> = ({
                     console.error('Failed to load cached instructors:', e);
                 }
 
-                // Determine which ones are not in the cache (cache misses)
                 const misses = new Set<string>();
                 const listWithCache = list.map((c) => {
                     if (cached && cached[c.id]) {
                         return { ...c, instructor: cached[c.id] };
                     }
-                    // WeBeep encodes the teacher in the course title, so it
-                    // arrives already resolved — no lookup, no skeleton.
+                    // WeBeep courses arrive with the teacher parsed from the title: no lookup.
                     if (!c.instructor) {
                         misses.add(c.id);
                     }
@@ -231,8 +169,7 @@ const SyncView: React.FC<SyncViewProps> = ({
 
                 setCacheMisses(misses);
                 setCourses(listWithCache);
-                
-                // Start background fetch for instructor names
+
                 loadInstructors(list.map((c) => c.id));
             } else {
                 setCoursesError(result.error || t('coursesLoadError'));
@@ -249,7 +186,6 @@ const SyncView: React.FC<SyncViewProps> = ({
         if (courseIds.length === 0) return;
         setLoadingInstructors(true);
 
-        // Background: fetch fresh data and update UI if anything changed
         try {
             const fresh = await window.api.getInstructors(courseIds);
             if (fresh && Object.keys(fresh).length > 0) {
@@ -276,9 +212,8 @@ const SyncView: React.FC<SyncViewProps> = ({
         }
     };
 
-    // The button turns into "Stop" under the pointer, so the second click of a
-    // double click would cancel the sync it just started. Stop ignores clicks
-    // for a moment after a start.
+    // The button turns into "Stop" under the pointer: Stop ignores clicks briefly after a start,
+    // so a double click doesn't cancel the sync it just started.
     const syncStartedAt = useRef(0);
     const handleSync = async () => {
         syncStartedAt.current = Date.now();
@@ -300,8 +235,6 @@ const SyncView: React.FC<SyncViewProps> = ({
 
         let enabled: string[];
         if (config.syncAllCourses) {
-            // Leaving "sync all" mode: materialise the explicit list as every
-            // visible course minus the one just unchecked.
             enabled = visibleIds.filter((id) => id !== courseId);
         } else {
             enabled = [...config.enabledCourses];
@@ -312,8 +245,7 @@ const SyncView: React.FC<SyncViewProps> = ({
             }
         }
 
-        // Re-checking every visible course collapses back to "sync all" so newly
-        // appearing courses keep syncing automatically.
+        // Back to "sync all" when every visible course is checked, so new courses keep syncing.
         const syncAll =
             visibleIds.length > 0 && visibleIds.every((id) => enabled.includes(id));
 
@@ -345,8 +277,7 @@ const SyncView: React.FC<SyncViewProps> = ({
         if (!config) return;
         const hidden = [...(config.hiddenCourses || [])];
         if (!hidden.includes(courseId)) hidden.push(courseId);
-        // The selection is left alone: syncs already skip hidden courses, and
-        // showing the course again brings back the tick it had.
+        // Selection left alone: syncs skip hidden courses, and unhiding brings the tick back.
         const newConfig = await window.api.updateConfig({ hiddenCourses: hidden });
         setConfig(newConfig);
     };
@@ -443,16 +374,12 @@ const SyncView: React.FC<SyncViewProps> = ({
             {showProgress && (
                 <div className={`sync-progress ${isSyncError ? 'error' : ''}`}>
                     <div className={`progress-bar ${isSyncError ? 'error' : ''}`}>
-                        {/* Determinate fill: always anchored left, grows 0 -> pct.
-                            Stays at 0 while connecting, so when scanning starts it
-                            grows forward with no snap-back. */}
+                        {/* Stays at 0 while connecting, so it grows forward with no snap-back. */}
                         <div
                             className="progress-fill"
                             style={{ width: `${progressPct}%` }}
                         />
-                        {/* Indeterminate overlay: a sliding segment for the
-                            "connecting" phase. Fades out (doesn't teleport) once a
-                            real total arrives, masking the hand-off. */}
+                        {/* Fades out once a real total arrives, masking the hand-off. */}
                         <div
                             className={`progress-indeterminate ${indeterminate ? 'visible' : ''}`}
                             aria-hidden="true"

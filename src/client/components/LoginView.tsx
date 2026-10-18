@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import appIcon from '../../../static/icons/png/128x128.png';
 import { getT } from '../i18n';
 
-// Sign-in is Bocconi only; PoliMi is connected later from Settings, where it
-// can also be paused.
+// Sign-in is Bocconi only; PoliMi is connected later from Settings.
 interface LoginViewProps {
     lang: 'it' | 'en';
     onLogin: (provider: 'bocconi' | 'webeep', user: any) => void;

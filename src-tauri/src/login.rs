@@ -250,7 +250,6 @@ impl LoginManager {
         let (return_url, return_body) = {
             let doc3 = Html::parse_document(&body3);
             
-            // Check for login error
             let error_sel = Selector::parse(".error").unwrap();
             if let Some(error_el) = doc3.select(&error_sel).next() {
                 let error_text: String = error_el.text().collect::<Vec<_>>().join("").trim().to_string();

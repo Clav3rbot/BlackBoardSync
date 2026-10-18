@@ -1,6 +1,7 @@
 use crate::blackboard::{BlackboardAPI, ContentItem, Course, UserInfo};
 use crate::login::LoginManager;
 use crate::state::{AppState, Session};
+use crate::store::FileStamp;
 use crate::webeep;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -18,13 +19,19 @@ pub struct FileToDownload {
     pub attachment_id: String,
     pub file_name: String,
     pub relative_path: String,
-    // Set for Ultra document files, which are signed bbcswebdav links in the
-    // item body rather than REST attachments, and for every WeBeep file. None
-    // means the Blackboard attachment path.
+    // Ultra body links (signed bbcswebdav) and every WeBeep file; None means a REST attachment.
     pub url: Option<String>,
-    // Which university this file came from: it selects the HTTP client used to
-    // fetch it, since the two authenticate in completely different ways.
     pub webeep: bool,
+    // Server-side last change, to spot a file re-uploaded under the same name.
+    pub stamp: Option<String>,
+}
+
+/// One download: `version` 1 is the plain path, higher ones "name (vN).ext".
+/// `known` is the version on record before this sync, 0 if none.
+struct Job {
+    file: FileToDownload,
+    version: u32,
+    known: u32,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -54,17 +61,12 @@ pub struct SyncResult {
     pub total_scanned: u64,
     pub courses: Vec<SyncResultCourse>,
     pub duration: u64,
-    // One entry per university that could not be reached. With two sources a
-    // partial failure is routine, so it is reported alongside the results
-    // instead of aborting the whole sync.
     pub warnings: Vec<String>,
 }
 
 pub async fn trigger_sync(app: &AppHandle) {
     let state = app.state::<AppState>();
 
-    // Either university on its own is enough to run a sync; only the case where
-    // neither is connected is an error.
     let session = {
         state.session.lock().unwrap().clone()
     };
@@ -84,7 +86,6 @@ pub async fn trigger_sync(app: &AppHandle) {
         return;
     }
 
-    // Prevent concurrent syncs
     if state.syncing.swap(true, Ordering::SeqCst) {
         return;
     }
@@ -95,9 +96,7 @@ pub async fn trigger_sync(app: &AppHandle) {
     let result = run_sync(app, session.as_ref()).await;
 
     match result {
-        // Stopped by the user before anything arrived: no summary to show (it
-        // would claim everything is up to date), and the last sync time stays
-        // that of the last run that finished.
+        // Stopped before anything arrived: no "up to date" summary, and lastSync is left alone.
         Ok(sync_result)
             if state.abort_flag.load(Ordering::SeqCst) && sync_result.total_downloaded == 0 =>
         {
@@ -113,7 +112,6 @@ pub async fn trigger_sync(app: &AppHandle) {
             }
             app.emit("sync-complete", sync_result.clone()).ok();
 
-            // Notification if window hidden
             if config.notifications {
                 let is_visible = app
                     .get_webview_window("main")
@@ -153,19 +151,11 @@ pub async fn trigger_sync(app: &AppHandle) {
     state.syncing.store(false, Ordering::SeqCst);
 }
 
-/// Opens the Blackboard side of a sync: refreshes the session if needed and
-/// lists the courses. Kept separate from `run_sync` so its failures can be
-/// caught and turned into a warning instead of ending the whole sync.
+/// Separate from `run_sync` so a Blackboard failure becomes a warning, not a failed sync.
 async fn open_blackboard(
     app: &AppHandle,
     session: &Session,
 ) -> Result<(BlackboardAPI, Vec<Course>), String> {
-    // The stored session cookie can expire between launch and sync. When it
-    // does, Blackboard answers API calls with an HTML SAML login page instead
-    // of JSON, and reqwest surfaces that as "error decoding response body".
-    // Validate the session first and silently re-authenticate with the stored
-    // credentials if it has lapsed, so a routine sync doesn't fail with a
-    // cryptic decode error.
     let (api, user) = ensure_valid_session(app, session).await?;
     let courses = api.get_courses_for_sync(&user.id).await?;
     Ok((api, courses))
@@ -177,13 +167,9 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
     let abort_flag = Arc::clone(&state.abort_flag);
     let start = std::time::Instant::now();
 
-    // Each university is opened independently. One being unreachable downgrades
-    // to a warning so the other still syncs — with two accounts, a partial
-    // outage is the common case, not an exceptional one.
     let mut warnings: Vec<String> = Vec::new();
 
-    // The two universities share nothing, so their logins and course lists are
-    // fetched side by side rather than one after the other.
+    // Opened side by side; one failing becomes a warning so the other still syncs.
     let (bb_opened, wb_opened) = tokio::join!(
         async {
             match session {
@@ -226,8 +212,8 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
     if let Some((_, courses)) = &wb_source {
         all_courses.extend(courses.iter().cloned());
     }
+    let dirs = course_dirs(&all_courses, &config.course_aliases);
 
-    // Filter courses
     let mut courses: Vec<Course> = if config.sync_all_courses {
         all_courses
     } else {
@@ -244,21 +230,8 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         });
     }
 
-    // Scan phase — all courses in parallel
     let total_courses = courses.len() as u64;
     let scanned_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
-
-    // WeBeep courses now sit at the sync root beside the Blackboard ones, so two
-    // universities offering a course with the same name would write into the
-    // same folder. The Blackboard name wins, because its folder already exists
-    // on disk and renaming it would re-download that whole archive.
-    let blackboard_dirs: HashSet<String> = courses
-        .iter()
-        .filter(|c| !webeep::is_webeep(&c.id))
-        .map(|c| {
-            sanitize_path(config.course_aliases.get(&c.id).unwrap_or(&c.name))
-        })
-        .collect();
 
     let scan_handles: Vec<_> = courses.iter().map(|course| {
         let bb_api = bb_source.as_ref().map(|(api, _)| api.clone());
@@ -266,27 +239,19 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         let course = course.clone();
         let abort = Arc::clone(&abort_flag);
         let app_h = app.clone();
-        let alias = config.course_aliases.get(&course.id)
-            .cloned()
-            .unwrap_or_else(|| course.name.clone());
-        let dir = sanitize_path(&alias);
-        let base = if webeep::is_webeep(&course.id) && blackboard_dirs.contains(&dir) {
-            sanitize_path(&format!("{} (PoliMi)", alias))
-        } else {
-            dir
-        };
+        let base = dirs[&course.id].clone();
         let counter = Arc::clone(&scanned_count);
 
         tokio::spawn(async move {
             let files = if webeep::is_webeep(&course.id) {
                 match wb_api {
-                    Some(api) => webeep::scan_course(&api, &course, &base).await,
-                    None => Vec::new(),
+                    Some(api) => webeep::scan_course(&api, &course, &base).await.map(|f| (f, None)),
+                    None => Ok((Vec::new(), None)),
                 }
             } else {
                 match bb_api {
                     Some(api) => scan_course(&api, &course, &base, &abort).await,
-                    None => Vec::new(),
+                    None => Ok((Vec::new(), None)),
                 }
             };
             let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
@@ -301,13 +266,20 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         })
     }).collect();
 
-    // Note: scan tasks are already spawned above; each checks `abort_flag`
-    // internally and returns early, so join completes promptly on abort.
+    // Blackboard scans check `abort_flag` themselves, so this join ends promptly on abort.
     let scan_results = futures_util::future::join_all(scan_handles).await;
     let mut all_files: Vec<FileToDownload> = Vec::new();
-    for result in scan_results {
-        if let Ok(files) = result {
-            all_files.extend(files);
+    for (course, result) in courses.iter().zip(scan_results) {
+        let name = config.course_aliases.get(&course.id).unwrap_or(&course.name);
+        match result {
+            Ok(Ok((files, warning))) => {
+                all_files.extend(files);
+                if let Some(w) = warning {
+                    warnings.push(format!("{}: {}", name, w));
+                }
+            }
+            Ok(Err(e)) => warnings.push(format!("{}: {}", name, e)),
+            Err(_) => {}
         }
     }
 
@@ -315,17 +287,36 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
     all_files.retain(|f| seen_paths.insert(f.relative_path.clone()));
 
     let sync_dir = PathBuf::from(&config.sync_dir);
-    // Resolve the base once; re-canonicalizing per file is a wasted syscall.
     let canon_base = sync_dir.canonicalize().ok();
     let lex_base = normalize_path(&sync_dir);
 
-    let to_download: Vec<FileToDownload> = all_files.iter()
-        .filter(|f| {
-            let full = sync_dir.join(&f.relative_path);
-            is_inside_resolved(&full, canon_base.as_deref(), &lex_base) && !full.exists()
-        })
-        .cloned()
-        .collect();
+    // Missing files are downloaded; existing ones only when the server's stamp
+    // moved, and then as a new version beside the old one.
+    let mut stamps = state.store.lock().unwrap().load_file_stamps();
+    let mut to_download: Vec<Job> = Vec::new();
+    for f in &all_files {
+        let full = sync_dir.join(&f.relative_path);
+        if !is_inside_resolved(&full, canon_base.as_deref(), &lex_base) {
+            continue;
+        }
+        let known = stamps.get(&f.relative_path).map_or(0, |s| s.version);
+        if !full.exists() {
+            to_download.push(Job { file: f.clone(), version: 1, known });
+            continue;
+        }
+        let Some(stamp) = &f.stamp else { continue };
+        match stamps.get(&f.relative_path) {
+            // On disk from before versioning: the current server state is the baseline.
+            None => {
+                stamps.insert(f.relative_path.clone(), FileStamp { stamp: stamp.clone(), version: 1 });
+            }
+            Some(s) if &s.stamp != stamp => {
+                to_download.push(Job { file: f.clone(), version: known + 1, known });
+            }
+            _ => {}
+        }
+    }
+    state.store.lock().unwrap().save_file_stamps(&stamps);
 
     let total_scanned = all_files.len() as u64;
 
@@ -346,15 +337,17 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         });
     }
 
-    // Download phase. Measured on a live 83-file / 119 MB sync: 3 workers took
-    // 6.1 s, 8 took 2.7 s, 12 took 2.1 s — past 8 the gain no longer justifies
-    // the extra load on the university servers.
+    // 8 workers: on a live 83-file / 119 MB sync 3 took 6.1 s, 8 took 2.7 s, 12 took 2.1 s;
+    // past 8 the gain is not worth the extra load on the university servers.
     let total_dl = to_download.len() as u64;
     let queue = Arc::new(tokio::sync::Mutex::new(VecDeque::from(to_download)));
     let downloaded_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let processed_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let failed_files: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
     let downloaded_files: Arc<tokio::sync::Mutex<Vec<FileToDownload>>> =
         Arc::new(tokio::sync::Mutex::new(Vec::new()));
+    let new_stamps: Arc<std::sync::Mutex<Vec<(String, FileStamp)>>> =
+        Arc::new(std::sync::Mutex::new(Vec::new()));
 
     let concurrency = 8usize.min(total_dl as usize);
     let mut handles = Vec::new();
@@ -369,18 +362,20 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         let canon_base = canon_base.clone();
         let lex_base = lex_base.clone();
         let dl_count = Arc::clone(&downloaded_count);
+        let done_count = Arc::clone(&processed_count);
         let failed = Arc::clone(&failed_files);
         let dl_files = Arc::clone(&downloaded_files);
+        let new_stamps = Arc::clone(&new_stamps);
 
         let h = tokio::spawn(async move {
             loop {
                 if abort.load(Ordering::SeqCst) { break; }
 
-                let file = {
+                let job = {
                     let mut q = queue.lock().await;
                     q.pop_front()
                 };
-                let file = match file { Some(f) => f, None => break };
+                let Some(Job { mut file, mut version, known }) = job else { break };
 
                 let fetched = if file.webeep {
                     match (&wb_api, &file.url) {
@@ -401,27 +396,55 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
                     Ok(response) => {
                         if abort.load(Ordering::SeqCst) { break; }
 
-                        let full_path = sync_dir.join(&file.relative_path);
+                        // A new stamp can come from an edit that left the file as it
+                        // was, so the copy before it decides whether a version is kept.
+                        let previous = (version > 1)
+                            .then(|| {
+                                [versioned_path(&file.relative_path, known), file.relative_path.clone()]
+                                    .into_iter()
+                                    .map(|p| sync_dir.join(p))
+                                    .find(|p| p.exists())
+                            })
+                            .flatten();
+                        let mut full_path = sync_dir.join(versioned_path(&file.relative_path, version));
+                        while version > 1 && full_path.exists() {
+                            version += 1;
+                            full_path = sync_dir.join(versioned_path(&file.relative_path, version));
+                        }
                         if !is_inside_resolved(&full_path, canon_base.as_deref(), &lex_base) { continue; }
 
                         if let Some(dir) = full_path.parent() {
                             let _ = tokio::fs::create_dir_all(dir).await;
                         }
-                        if let Err(e) = save_response(response, &full_path, &abort).await {
-                            eprintln!("Download failed for {}: {}", file.file_name, e);
-                            if !abort.load(Ordering::SeqCst) {
-                                failed.lock().unwrap().push(format!("{} ({})", file.file_name, e));
+                        match save_response(response, &full_path, &abort, previous.as_deref()).await {
+                            Err(e) => {
+                                eprintln!("Download failed for {}: {}", file.file_name, e);
+                                if !abort.load(Ordering::SeqCst) {
+                                    failed.lock().unwrap().push(format!("{} ({})", file.file_name, e));
+                                }
                             }
-                        } else {
-                            let count = dl_count.fetch_add(1, Ordering::SeqCst) + 1;
-                            dl_files.lock().await.push(file.clone());
-                            app_h.emit("sync-progress", SyncProgressPayload {
-                                phase: "downloading".to_string(),
-                                current: count,
-                                total: total_dl,
-                                current_file: Some(file.file_name.clone()),
-                                error: None,
-                            }).ok();
+                            Ok(saved) => {
+                                if let Some(stamp) = file.stamp.clone() {
+                                    let version = if saved { version.max(known) } else { known.max(1) };
+                                    new_stamps.lock().unwrap()
+                                        .push((file.relative_path.clone(), FileStamp { stamp, version }));
+                                }
+                                if saved {
+                                    dl_count.fetch_add(1, Ordering::SeqCst);
+                                    if let Some(name) = full_path.file_name() {
+                                        file.file_name = name.to_string_lossy().into_owned();
+                                    }
+                                    dl_files.lock().await.push(file.clone());
+                                }
+                                let done = done_count.fetch_add(1, Ordering::SeqCst) + 1;
+                                app_h.emit("sync-progress", SyncProgressPayload {
+                                    phase: "downloading".to_string(),
+                                    current: done,
+                                    total: total_dl,
+                                    current_file: Some(file.file_name.clone()),
+                                    error: None,
+                                }).ok();
+                            }
                         }
                     }
                     Err(e) => {
@@ -438,6 +461,11 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         let _ = h.await;
     }
 
+    for (path, stamp) in std::mem::take(&mut *new_stamps.lock().unwrap()) {
+        stamps.insert(path, stamp);
+    }
+    state.store.lock().unwrap().save_file_stamps(&stamps);
+
     let downloaded = downloaded_count.load(Ordering::SeqCst);
     // Named, so the user can tell a transient error from a file that will never download.
     let failed = std::mem::take(&mut *failed_files.lock().unwrap());
@@ -450,7 +478,6 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
     }
     let dl_files = downloaded_files.lock().await;
 
-    // Build per-course result
     let mut course_map: HashMap<String, SyncResultCourse> = HashMap::new();
     for f in dl_files.iter() {
         let entry = course_map.entry(f.course_id.clone()).or_insert_with(|| SyncResultCourse {
@@ -478,11 +505,8 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
     })
 }
 
-/// Ensure the session cookies still authenticate. If a quick `/users/me`
-/// probe fails (expired cookie → HTML login page → JSON decode error), try a
-/// full SAML re-auth with the stored credentials, persist the refreshed
-/// session, and return it. Errors only if no credentials are stored or the
-/// re-auth itself fails, in which case the user must log in again.
+/// An expired cookie gets an HTML login page (a JSON decode error), so a failed `/users/me`
+/// probe triggers a SAML re-auth with the stored credentials and saves the new session.
 async fn ensure_valid_session(
     app: &AppHandle,
     session: &Session,
@@ -525,13 +549,14 @@ async fn ensure_valid_session(
 /// Overrides the clients' 30 s total timeout, which would cut off large videos.
 pub const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
-/// Writes to `<path>.part`, renamed only when complete: sync skips existing
-/// files, so a truncated one would never be fetched again.
+/// Writes `<path>.part`, renamed when complete: sync skips existing files, so a truncated one
+/// would never be refetched. A download identical to `same_as` is dropped with `Ok(false)`.
 async fn save_response(
     response: reqwest::Response,
     path: &Path,
     abort: &std::sync::atomic::AtomicBool,
-) -> Result<(), String> {
+    same_as: Option<&Path>,
+) -> Result<bool, String> {
     use tokio::io::AsyncWriteExt;
 
     let mut part = path.as_os_str().to_owned();
@@ -551,16 +576,57 @@ async fn save_response(
         }
         out.flush().await.map_err(|e| e.to_string())?;
         drop(out);
+        if let Some(other) = same_as {
+            let (a, b) = (part.clone(), other.to_path_buf());
+            if tokio::task::spawn_blocking(move || files_equal(&a, &b)).await.unwrap_or(false) {
+                return Ok(false);
+            }
+        }
         tokio::fs::rename(&part, path).await.map_err(|e| e.to_string())?;
         mark_as_downloaded(path).await;
-        Ok(())
+        Ok(true)
     }
     .await;
 
-    if result.is_err() {
+    if result != Ok(true) {
         let _ = tokio::fs::remove_file(&part).await;
     }
     result
+}
+
+fn files_equal(a: &Path, b: &Path) -> bool {
+    use std::io::Read;
+    let (Ok(fa), Ok(fb)) = (std::fs::File::open(a), std::fs::File::open(b)) else {
+        return false;
+    };
+    if fa.metadata().map(|m| m.len()).ok() != fb.metadata().map(|m| m.len()).ok() {
+        return false;
+    }
+    let (mut ra, mut rb) = (std::io::BufReader::new(fa), std::io::BufReader::new(fb));
+    let (mut ba, mut bb) = (vec![0u8; 64 * 1024], vec![0u8; 64 * 1024]);
+    loop {
+        let n = match ra.read(&mut ba) {
+            Ok(0) => return true,
+            Ok(n) => n,
+            Err(_) => return false,
+        };
+        if rb.read_exact(&mut bb[..n]).is_err() || ba[..n] != bb[..n] {
+            return false;
+        }
+    }
+}
+
+fn versioned_path(rel: &str, version: u32) -> String {
+    if version <= 1 {
+        return rel.to_string();
+    }
+    let path = Path::new(rel);
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let name = match path.extension() {
+        Some(ext) => format!("{} (v{}).{}", stem, version, ext.to_string_lossy()),
+        None => format!("{} (v{})", stem, version),
+    };
+    path.with_file_name(name).to_string_lossy().into_owned()
 }
 
 /// Mark-of-the-Web, so Office uses Protected View and SmartScreen/Gatekeeper
@@ -590,10 +656,8 @@ async fn mark_as_downloaded(path: &Path) {
     let _ = path;
 }
 
-/// Handlers whose items can hold attachments that only `/attachments` reveals.
-/// Folders and links never do, and a file item names its one attachment in
-/// its own `contentHandler`, so asking for any of those would be a round-trip
-/// for nothing.
+/// Folders and links never hold REST attachments, and a file item names its one in its own
+/// `contentHandler`, so neither is worth an `/attachments` request.
 fn may_have_attachments(handler: &str) -> bool {
     !(handler == "resource/x-bb-folder"
         || handler == "resource/x-bb-file"
@@ -605,21 +669,18 @@ async fn scan_course(
     course: &Course,
     base_path: &str,
     abort_flag: &Arc<std::sync::atomic::AtomicBool>,
-) -> Vec<FileToDownload> {
-    let Ok(items) = api.get_all_contents(&course.id).await else {
-        return Vec::new();
-    };
+) -> Result<(Vec<FileToDownload>, Option<String>), String> {
+    let items = api.get_all_contents(&course.id).await?;
     let lookups = files_from_contents(&items, course, base_path);
 
-    // Only the items that may hide REST attachments cost a request now.
     const CONCURRENCY: usize = 6;
-    let fetched: Vec<Vec<FileToDownload>> = futures_util::stream::iter(lookups.pending)
-        .map(|(item_id, dir)| async move {
+    let fetched: Vec<Result<Vec<FileToDownload>, String>> = futures_util::stream::iter(lookups.pending)
+        .map(|(item_id, dir, stamp)| async move {
             if abort_flag.load(Ordering::SeqCst) {
-                return Vec::new();
+                return Ok(Vec::new());
             }
-            let attachments = api.get_attachments(&course.id, &item_id).await.unwrap_or_default();
-            attachments
+            let attachments = api.get_attachments(&course.id, &item_id).await?;
+            Ok(attachments
                 .into_iter()
                 .map(|att| FileToDownload {
                     course_id: course.id.clone(),
@@ -633,33 +694,57 @@ async fn scan_course(
                     file_name: att.file_name,
                     url: None,
                     webeep: false,
+                    stamp: stamp.clone(),
                 })
-                .collect()
+                .collect())
         })
         .buffer_unordered(CONCURRENCY)
         .collect()
         .await;
 
+    let failed = fetched.iter().filter(|r| r.is_err()).count();
     let mut files = lookups.files;
-    files.extend(fetched.into_iter().flatten());
-    files
+    files.extend(fetched.into_iter().flatten().flatten());
+    separate_clashes(&mut files, &items);
+    let warning = (failed > 0).then(|| format!("{} elementi non letti, riprovati al prossimo sync", failed));
+    Ok((files, warning))
+}
+
+/// Same-named files of different items move into a folder named after their
+/// item, otherwise the dedup in `run_sync` keeps only one.
+fn separate_clashes(files: &mut [FileToDownload], items: &[ContentItem]) {
+    let mut claims: HashMap<String, HashSet<String>> = HashMap::new();
+    for f in files.iter() {
+        claims.entry(f.relative_path.clone()).or_default().insert(f.content_id.clone());
+    }
+    let titles: HashMap<&str, &str> = items.iter().map(|i| (i.id.as_str(), i.title.as_str())).collect();
+
+    for f in files.iter_mut() {
+        if claims[&f.relative_path].len() < 2 {
+            continue;
+        }
+        let path = PathBuf::from(&f.relative_path);
+        let title = titles.get(f.content_id.as_str()).copied().unwrap_or(f.content_id.as_str());
+        let dir = path.parent().unwrap_or(Path::new("")).join(sanitize_path(title));
+        f.relative_path = dir
+            .join(path.file_name().unwrap_or_default())
+            .to_string_lossy()
+            .into_owned();
+    }
 }
 
 struct ContentScan {
-    /// Files known from the listing alone.
     files: Vec<FileToDownload>,
-    /// (item id, folder) for items whose attachments still need asking for.
-    pending: Vec<(String, String)>,
+    /// (item id, folder, stamp) for items whose attachments still need asking for.
+    pending: Vec<(String, String, Option<String>)>,
 }
 
-/// Lays out a course's files from its flat, recursive content listing. Split
-/// from the network call so the tree rebuild can be tested against fixtures.
+/// Lays out a course's files from its flat, recursive content listing.
 fn files_from_contents(items: &[ContentItem], course: &Course, base_path: &str) -> ContentScan {
     let by_id: HashMap<&str, &ContentItem> = items.iter().map(|i| (i.id.as_str(), i)).collect();
 
-    // An item's folder is the chain of its ancestors' titles. The course root
-    // is not part of the listing, so the walk stops at the first unknown
-    // parent; the depth cap guards against a malformed parent cycle.
+    // The course root is not in the listing, so the walk stops at the first unknown parent;
+    // the depth cap guards against a parent cycle.
     let folder_of = |item: &ContentItem| -> String {
         let mut titles = Vec::new();
         let mut parent = item.parent_id.as_deref();
@@ -694,11 +779,12 @@ fn files_from_contents(items: &[ContentItem], course: &Course, base_path: &str) 
             file_name: name,
             url,
             webeep: false,
+            stamp: item.modified.clone(),
         };
+        let pending = (item.id.clone(), dir.clone(), item.modified.clone());
 
-        // Ultra keeps a document's files as links in its body, never as REST
-        // attachments (checked live: every such document answers with an
-        // empty list), so a body carrying them spares the lookup.
+        // Ultra keeps document files as body links, never REST attachments (checked live:
+        // those documents answer with an empty list), so a body with them skips the lookup.
         let body_files = item.body.as_deref().map(extract_ultra_files).unwrap_or_default();
 
         if handler == "resource/x-bb-file" {
@@ -706,10 +792,10 @@ fn files_from_contents(items: &[ContentItem], course: &Course, base_path: &str) 
             match name {
                 // The attachment id is resolved at download time.
                 Some(name) => scan.files.push(file(name.to_string(), String::new(), None)),
-                None => scan.pending.push((item.id.clone(), dir.clone())),
+                None => scan.pending.push(pending),
             }
         } else if body_files.is_empty() && may_have_attachments(handler) {
-            scan.pending.push((item.id.clone(), dir.clone()));
+            scan.pending.push(pending);
         }
 
         for (name, url) in body_files {
@@ -730,8 +816,7 @@ const HTML_ENTITIES: &[(&str, char)] = &[
     ("&nbsp;", ' '),
 ];
 
-/// Single left-to-right pass, so a decoded `&amp;` is never re-read as the
-/// start of another entity.
+/// Single pass, so a decoded `&amp;` is never re-read as the start of another entity.
 fn html_unescape(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut rest = s;
@@ -766,12 +851,8 @@ fn attr_value<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
     Some(&tag[start..start + len])
 }
 
-/// Pull downloadable files out of an Ultra document body. Each file is an
-/// anchor or image carrying a `data-bbfile` attribute whose value is
-/// HTML-escaped JSON, so URLs inside it come out clean once the attribute is
-/// unescaped; the tag's own href is still raw HTML and needs its own pass.
-/// `resourceUrl` is missing on some items, and then href is the download URL.
-/// Returns (file name, absolute URL).
+/// (name, URL) of each file in an Ultra body: tags whose `data-bbfile` holds HTML-escaped
+/// JSON. The tag's href, raw HTML, is the fallback when `resourceUrl` is missing.
 fn extract_ultra_files(body: &str) -> Vec<(String, String)> {
     let mut files = Vec::new();
 
@@ -797,8 +878,7 @@ fn extract_ultra_files(body: &str) -> Vec<(String, String)> {
         let tag_rest = &chunk[value_end..];
         let tag_rest = &tag_rest[..tag_rest.find('>').unwrap_or(tag_rest.len())];
 
-        // Files pasted into the editor can keep the upload's temporary
-        // /sessions/ URL as resourceUrl (and href), which 404s once that
+        // Pasted files can keep the upload's temporary /sessions/ URL, which 404s once that
         // session ends; viewerUrl then holds the stored bbcswebdav copy.
         let Some(url) = [
             meta["resourceUrl"].as_str().map(str::to_string),
@@ -823,13 +903,11 @@ pub fn sanitize_path(name: &str) -> String {
         .map(|c| if "<>:\"/\\|?*".contains(c) || (c.is_control() && !c.is_whitespace()) { '_' } else { c })
         .collect();
     let sanitized = sanitized.split_whitespace().collect::<Vec<_>>().join(" ");
-    let sanitized = sanitized.trim().to_string();
+    // Windows drops trailing dots and spaces, so "x.docm." would be saved as "x.docm" while its
+    // Mark-of-the-Web stream lands on a separate "x.docm." entry. Also rules out "." and "..".
+    let sanitized = sanitized.trim_end_matches(['.', ' ']);
 
-    // Strip path traversal components (defense in depth)
-    let sanitized = sanitized.replace("..", "");
-    let sanitized = sanitized.trim().to_string();
-
-    if sanitized.is_empty() || sanitized.chars().all(|c| c == '.') {
+    if sanitized.is_empty() {
         return "_".to_string();
     }
 
@@ -842,19 +920,49 @@ pub fn sanitize_path(name: &str) -> String {
     if reserved {
         format!("_{}", sanitized)
     } else {
-        sanitized
+        sanitized.to_string()
     }
 }
 
-/// Normalize a path lexically by resolving `.` and `..` components
-/// without touching the filesystem (works on paths that don't exist yet).
-fn normalize_path(path: &Path) -> PathBuf {
+/// Built from the full list so names don't shift when a course is switched off. On a clash
+/// the older course (Bocconi, then lower id) keeps the name; the newer gets "(PoliMi)" or its code.
+pub fn course_dirs(courses: &[Course], aliases: &HashMap<String, String>) -> HashMap<String, String> {
+    let mut order: Vec<&Course> = courses.iter().collect();
+    // (length, text) sorts same-format ids numerically.
+    order.sort_by_key(|c| (webeep::is_webeep(&c.id), c.id.len(), c.id.as_str()));
+
+    // Lowercased, as Windows and macOS folders ignore case. Value: held by WeBeep.
+    let mut taken: HashMap<String, bool> = HashMap::new();
+    let mut dirs = HashMap::new();
+    for course in order {
+        let name = aliases.get(&course.id).unwrap_or(&course.name);
+        let is_webeep = webeep::is_webeep(&course.id);
+        let mut dir = sanitize_path(name);
+        if is_webeep && taken.get(&dir.to_lowercase()) == Some(&false) {
+            dir = sanitize_path(&format!("{} (PoliMi)", name));
+        }
+        if taken.contains_key(&dir.to_lowercase()) {
+            dir = sanitize_path(&format!("{} ({})", name, course.course_id));
+        }
+        // The fallback can be taken too, e.g. by a course literally named "A (X)".
+        let mut n = 2;
+        while taken.contains_key(&dir.to_lowercase()) {
+            dir = sanitize_path(&format!("{} ({}) {}", name, course.course_id, n));
+            n += 1;
+        }
+        taken.insert(dir.to_lowercase(), is_webeep);
+        dirs.insert(course.id.clone(), dir);
+    }
+    dirs
+}
+
+/// Resolves `.` and `..` lexically, so it works on paths that don't exist yet.
+pub fn normalize_path(path: &Path) -> PathBuf {
     use std::path::Component;
     let mut components: Vec<Component> = Vec::new();
     for component in path.components() {
         match component {
             Component::ParentDir => {
-                // Only pop if the last component is a normal dir, never pop past root/prefix
                 match components.last() {
                     Some(Component::Normal(_)) => { components.pop(); }
                     _ => {} // Ignore `..` that would escape
@@ -867,12 +975,9 @@ fn normalize_path(path: &Path) -> PathBuf {
     components.iter().collect()
 }
 
-/// Containment check against a pre-resolved sync dir. `canon_base` is the
-/// canonicalized sync dir (None if it couldn't be canonicalized); `lex_base`
-/// is its lexical normalization, used when the path can't be canonicalized
-/// (e.g. it doesn't exist yet). Comparing canonical-vs-canonical or
-/// lexical-vs-lexical keeps both sides consistent (no \\?\ prefix mismatch).
-fn is_inside_resolved(path: &Path, canon_base: Option<&Path>, lex_base: &Path) -> bool {
+/// Compares canonical with canonical, or lexical with lexical when `path` can't be
+/// canonicalized (not created yet), so a `\\?\` prefix never causes a mismatch.
+pub fn is_inside_resolved(path: &Path, canon_base: Option<&Path>, lex_base: &Path) -> bool {
     match (path.canonicalize(), canon_base) {
         (Ok(resolved), Some(base)) => resolved.as_path() == base || resolved.starts_with(base),
         _ => {
@@ -894,14 +999,18 @@ pub fn setup_auto_sync(app: &AppHandle) {
     if !config.auto_sync { return; }
 
     let app_clone = app.clone();
+    // Own task: aborting this loop must not kill a sync and leave `syncing` stuck.
+    let start_sync = move || {
+        let app = app_clone.clone();
+        tauri::async_runtime::spawn(async move { trigger_sync(&app).await });
+    };
 
     let new_handle = if config.auto_sync_interval == 0 {
         let time_str = config.auto_sync_scheduled_time.clone();
         tauri::async_runtime::spawn(async move {
             loop {
-                let delay = next_scheduled_delay(&time_str);
-                tokio::time::sleep(delay).await;
-                trigger_sync(&app_clone).await;
+                wait_until(next_scheduled_time(&time_str)).await;
+                start_sync();
             }
         })
     } else {
@@ -910,7 +1019,7 @@ pub fn setup_auto_sync(app: &AppHandle) {
             let duration = tokio::time::Duration::from_secs(mins * 60);
             loop {
                 tokio::time::sleep(duration).await;
-                trigger_sync(&app_clone).await;
+                start_sync();
             }
         })
     };
@@ -918,7 +1027,18 @@ pub fn setup_auto_sync(app: &AppHandle) {
     *handle = Some(new_handle);
 }
 
-fn next_scheduled_delay(time_str: &str) -> std::time::Duration {
+/// Short steps on the wall clock: macOS stops the monotonic one during standby.
+async fn wait_until(target: chrono::DateTime<chrono::Local>) {
+    loop {
+        let left = (target - chrono::Local::now()).to_std().unwrap_or_default();
+        if left.is_zero() {
+            return;
+        }
+        tokio::time::sleep(left.min(std::time::Duration::from_secs(60))).await;
+    }
+}
+
+fn next_scheduled_time(time_str: &str) -> chrono::DateTime<chrono::Local> {
     let parts: Vec<u32> = time_str.split(':')
         .filter_map(|s| s.parse().ok())
         .collect();
@@ -936,9 +1056,7 @@ fn next_scheduled_delay(time_str: &str) -> std::time::Duration {
     if target <= now {
         target = target + chrono::Duration::days(1);
     }
-
-    let diff = (target - now).to_std().unwrap_or(std::time::Duration::from_secs(3600));
-    diff
+    target
 }
 
 #[cfg(test)]
@@ -983,8 +1101,7 @@ mod tests {
 
     #[test]
     fn ignores_bodies_without_bbfile_links() {
-        // Original-course bodies have plain links and must keep yielding
-        // nothing here, so those courses stay on the attachment path.
+        // Original-course bodies have plain links; those courses stay on the attachment path.
         let body = r#"<p>See <a href="https://bb.example/webapps/blackboard/thing">the notes</a>.</p>"#;
         assert!(extract_ultra_files(body).is_empty());
     }
@@ -1003,6 +1120,12 @@ mod tests {
         assert_eq!(sanitize_path("LPT1"), "_LPT1");
         assert_eq!(sanitize_path("Console.pdf"), "Console.pdf");
         assert_eq!(sanitize_path("a\u{7}b\nc"), "a_b c");
+        assert_eq!(sanitize_path("Slides..pdf"), "Slides..pdf");
+        assert_eq!(sanitize_path(" .. "), "_");
+        assert_eq!(sanitize_path("../x"), ".._x");
+        assert_eq!(sanitize_path("Syllabus.docm."), "Syllabus.docm");
+        assert_eq!(sanitize_path("Finance. ."), "Finance");
+        assert_eq!(sanitize_path("CON."), "_CON");
     }
 
     #[tokio::test]
@@ -1014,11 +1137,11 @@ mod tests {
         let response = || reqwest::Response::from(tauri::http::Response::new("hello".to_string()));
 
         let abort = std::sync::atomic::AtomicBool::new(true);
-        assert!(save_response(response(), &path, &abort).await.is_err());
+        assert!(save_response(response(), &path, &abort, None).await.is_err());
         assert!(!path.exists() && !part.exists());
 
         abort.store(false, Ordering::SeqCst);
-        save_response(response(), &path, &abort).await.unwrap();
+        assert_eq!(save_response(response(), &path, &abort, None).await, Ok(true));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
         assert!(!part.exists());
         #[cfg(windows)]
@@ -1026,6 +1149,14 @@ mod tests {
             let ads = format!("{}:Zone.Identifier", path.display());
             assert!(std::fs::read_to_string(ads).unwrap().contains("ZoneId=3"));
         }
+
+        // Same bytes under a new stamp: no new version.
+        let v2 = dir.join("notes (v2).pdf");
+        assert_eq!(save_response(response(), &v2, &abort, Some(&path)).await, Ok(false));
+        assert!(!v2.exists() && !dir.join("notes (v2).pdf.part").exists());
+        let changed = reqwest::Response::from(tauri::http::Response::new("hello!".to_string()));
+        assert_eq!(save_response(changed, &v2, &abort, Some(&path)).await, Ok(true));
+        assert_eq!(std::fs::read_to_string(&v2).unwrap(), "hello!");
 
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1076,9 +1207,9 @@ mod tests {
                 let files = if webeep::is_webeep(&c.id) {
                     webeep::scan_course(wb.as_ref().unwrap(), c, &c.name).await
                 } else {
-                    scan_course(bb.as_ref().unwrap(), c, &c.name, &abort).await
+                    scan_course(bb.as_ref().unwrap(), c, &c.name, &abort).await.map(|(f, _)| f)
                 };
-                (c.name.clone(), files.len(), t.elapsed())
+                (c.name.clone(), files.map_or(0, |f| f.len()), t.elapsed())
             }
         });
         let results = futures_util::future::join_all(scans).await;
@@ -1089,8 +1220,7 @@ mod tests {
         println!("scansione: {:?} ({} file)", t.elapsed(), total);
     }
 
-    /// Shapes taken from a live `?recursive=true` listing: top-level items
-    /// point at the course root, which the listing itself does not contain.
+    /// Shapes from a live `?recursive=true` listing; top-level items point at the absent root.
     #[test]
     fn rebuilds_folders_from_a_flat_listing() {
         let items: Vec<ContentItem> = serde_json::from_str(r#"[
@@ -1113,9 +1243,8 @@ mod tests {
         paths.sort();
         // A document's body files sit beside the document, not inside it.
         assert_eq!(paths, ["Corso/Week 1/Slides/l1.pdf", "Corso/Week 1/n.pdf", "Corso/syllabus.pdf"]);
-        // Only a document without body files can hide REST attachments;
-        // folders, files, links and Ultra bodies must not cost a request each.
-        let pending: Vec<&str> = scan.pending.iter().map(|(id, _)| id.as_str()).collect();
+        // Only a document without body files can hide REST attachments.
+        let pending: Vec<&str> = scan.pending.iter().map(|(id, _, _)| id.as_str()).collect();
         assert_eq!(pending, ["o"]);
     }
 
@@ -1123,5 +1252,76 @@ mod tests {
     fn unescape_is_single_pass() {
         assert_eq!(html_unescape("a&amp;quot;b"), "a&quot;b");
         assert_eq!(html_unescape("&lt;p&gt;x&#39;y&lt;/p&gt;"), "<p>x'y</p>");
+    }
+
+    fn course(id: &str, course_id: &str, name: &str) -> Course {
+        Course { id: id.into(), course_id: course_id.into(), name: name.into(), term: None, instructor: None }
+    }
+
+    #[test]
+    fn clashing_course_names_get_their_own_folders() {
+        // Newest first: the older course must still keep the plain name.
+        let courses = [
+            course("webeep:10", "IOT-27", "INTERNET OF THINGS"),
+            course("webeep:9", "IOT-26", "INTERNET OF THINGS"),
+            course("webeep:5", "FIN", "Finance"),
+            course("_200_1", "FIN-BB", "FINANCE"),
+            course("_300_1", "MKT", "Marketing"),
+        ];
+        let aliases = HashMap::from([("_300_1".to_string(), "Mio corso".to_string())]);
+        let dirs = course_dirs(&courses, &aliases);
+        assert_eq!(dirs["webeep:9"], "INTERNET OF THINGS");
+        assert_eq!(dirs["webeep:10"], "INTERNET OF THINGS (IOT-27)");
+        // Folders ignore case, so "Finance" clashes with the Bocconi "FINANCE".
+        assert_eq!(dirs["_200_1"], "FINANCE");
+        assert_eq!(dirs["webeep:5"], "Finance (PoliMi)");
+        assert_eq!(dirs["_300_1"], "Mio corso");
+    }
+
+    #[test]
+    fn fallback_folder_names_do_not_collide() {
+        let courses = [course("_1_1", "A", "A"), course("_2_1", "Y", "A (X)"), course("_3_1", "X", "A")];
+        let dirs = course_dirs(&courses, &HashMap::new());
+        assert_eq!(dirs["_2_1"], "A (X)");
+        assert_eq!(dirs["_3_1"], "A (X) 2");
+    }
+
+    #[test]
+    fn same_named_files_of_different_items_do_not_collide() {
+        let items: Vec<ContentItem> = serde_json::from_str(r#"[
+            {"id":"f","title":"Week 3","parentId":"root","contentHandler":{"id":"resource/x-bb-folder"}},
+            {"id":"a","title":"Lecture A","parentId":"f","contentHandler":{"id":"resource/x-bb-file","file":{"fileName":"slides.pdf"}}},
+            {"id":"b","title":"Lecture B","parentId":"f","contentHandler":{"id":"resource/x-bb-file","file":{"fileName":"slides.pdf"}}},
+            {"id":"d","title":"Notes","parentId":"f","contentHandler":{"id":"resource/x-bb-document"},
+             "body":"<a data-bbfile=\"{&quot;linkName&quot;:&quot;n.pdf&quot;,&quot;resourceUrl&quot;:&quot;https://bb.example/n&quot;}\"></a><a data-bbfile=\"{&quot;linkName&quot;:&quot;n.pdf&quot;,&quot;resourceUrl&quot;:&quot;https://bb.example/n&quot;}\"></a>"}
+        ]"#).unwrap();
+        let mut files = files_from_contents(&items, &course("c", "C", "C"), "Corso").files;
+        separate_clashes(&mut files, &items);
+        let mut paths: Vec<String> = files.iter().map(|f| f.relative_path.replace('\\', "/")).collect();
+        paths.sort();
+        // A file linked twice by one item is a repeat, not a clash.
+        assert_eq!(paths, [
+            "Corso/Week 3/Lecture A/slides.pdf",
+            "Corso/Week 3/Lecture B/slides.pdf",
+            "Corso/Week 3/n.pdf",
+            "Corso/Week 3/n.pdf",
+        ]);
+    }
+
+    #[test]
+    fn versioned_names_keep_the_extension() {
+        assert_eq!(versioned_path("C/slides.pdf", 1), "C/slides.pdf");
+        assert_eq!(
+            versioned_path("C/slides.pdf", 2).replace('\\', "/"),
+            "C/slides (v2).pdf"
+        );
+        assert_eq!(versioned_path("README", 3), "README (v3)");
+    }
+
+    #[test]
+    fn next_scheduled_time_is_within_a_day() {
+        let now = chrono::Local::now();
+        let next = next_scheduled_time("00:00");
+        assert!(next > now && next <= now + chrono::Duration::days(1));
     }
 }

@@ -1,4 +1,3 @@
-// Stub di window.api per il dev-server browser (sostituisce il backend Tauri)
 // Modifica i dati qui sotto per vedere stati diversi dell'UI.
 
 import type { AppConfig, SyncProgress, SyncResult } from '../types';
@@ -61,7 +60,6 @@ window.api = {
     openFolder: async () => {},
     openCourseFolder: async () => {},
     minimize: async () => {},
-    maximize: async () => {},
     close: async () => {},
     resetWindowSize: async () => {},
     getAppVersion: async () => '1.0.4',

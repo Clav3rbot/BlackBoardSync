@@ -1,5 +1,4 @@
 export interface TranslationKeys {
-    // General / Common
     appName: string;
     loading: string;
     connecting: string;
@@ -16,7 +15,6 @@ export interface TranslationKeys {
     error: string;
     retry: string;
 
-    // Login View
     loginTitle: string;
     loginSubtitle: string;
     usernameLabel: string;
@@ -41,7 +39,6 @@ export interface TranslationKeys {
     loginFooterDisclaimer2: string;
     loginFooterDisclaimer3: string;
 
-    // Sync View
     syncNowButton: string;
     abortSyncButton: string;
     syncingPhaseConnecting: string;
@@ -50,7 +47,6 @@ export interface TranslationKeys {
     syncingPhaseError: string;
     syncingPhaseComplete: string;
 
-    // Settings View
     settingsTitle: string;
     syncFolderGroup: string;
     autoSyncGroup: string;
@@ -109,7 +105,6 @@ export interface TranslationKeys {
     tutorialPolimiTitle: string;
     tutorialPolimiBody: string;
 
-    // Course List
     coursesHeader: string;
     coursesSelected: string;
     coursesEmpty: string;
@@ -127,7 +122,6 @@ export interface TranslationKeys {
     actionUnhide: string;
     termOther: string;
 
-    // Sync Result Modal
     resultTitle: string;
     resultTotalDownloaded: string;
     resultTotalScanned: string;
@@ -401,7 +395,6 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
     }
 };
 
-// Simple helper to get the translation function
 export function getT(lang: string) {
     const activeLang = (lang === 'en' || lang === 'it') ? lang : 'it';
     return (key: keyof TranslationKeys) => translations[activeLang][key] || translations['it'][key];
