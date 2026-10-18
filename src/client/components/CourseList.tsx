@@ -4,22 +4,14 @@ import Icon from './Icon';
 import Marquee from './Marquee';
 import { getT } from '../i18n';
 import { useEscape } from '../useEscape';
+import type { Course } from '../../types';
 
-// Course ids are namespaced by university (see webeep::ID_PREFIX in Rust), so the
-// source badge needs no extra field on the wire.
 // Height of the actions menu plus its gap, to tell whether it fits below.
 const ACTIONS_MENU_ROOM = 120;
 
+// Course ids carry the university prefix (webeep::ID_PREFIX in Rust).
 const isWebeep = (courseId: string) => courseId.startsWith('webeep:');
 const sourceLabel = (courseId: string) => (isWebeep(courseId) ? 'PoliMi' : 'Bocconi');
-
-interface Course {
-    id: string;
-    courseId: string;
-    name: string;
-    term?: { id: string; name: string };
-    instructor?: string;
-}
 
 interface CourseListProps {
     lang: 'it' | 'en';
@@ -79,7 +71,6 @@ const CourseList: React.FC<CourseListProps> = ({
     const [revealedTerms, setRevealedTerms] = useState<Set<string>>(new Set());
     const [showHiddenTermPills, setShowHiddenTermPills] = useState(false);
     const [actionsOpenId, setActionsOpenId] = useState<string | null>(null);
-    // The menu opens upward for rows near the bottom, where it would be cut off.
     const [actionsUp, setActionsUp] = useState(false);
     useEscape(() => setActionsOpenId(null), !!actionsOpenId);
 
@@ -137,8 +128,6 @@ const CourseList: React.FC<CourseListProps> = ({
         return result;
     }, [courses, lang]);
 
-    // The source badge only tells anything apart when both universities are
-    // in the list.
     const mixedSources = courses.some((c) => isWebeep(c.id)) && courses.some((c) => !isWebeep(c.id));
 
     const visibleTermGroups = useMemo(
@@ -151,10 +140,8 @@ const CourseList: React.FC<CourseListProps> = ({
         [termGroups, hiddenTerms]
     );
 
-    // Counted from the courses actually on show, not by subtracting the config
-    // arrays: hiddenCourses can hold ids that are no longer in the list at all
-    // (a past term, or the other university while it is disconnected), which
-    // made the subtraction undercount. Hidden terms were not deducted either.
+    // Counted from the courses on show: hiddenCourses can hold ids no longer listed
+    // (past term, disconnected university), so subtracting the config arrays undercounts.
     const visibleCount = useMemo(
         () =>
             visibleTermGroups.reduce(
@@ -164,8 +151,7 @@ const CourseList: React.FC<CourseListProps> = ({
         [visibleTermGroups, hiddenCourses]
     );
 
-    // Same rule for the selection: enabledCourses keeps the ids of hidden
-    // courses and of a paused university, which would inflate the badge.
+    // Same for the selection: enabledCourses keeps ids of hidden courses and of a paused university.
     const selectedCount = useMemo(
         () =>
             visibleTermGroups.reduce(
@@ -496,7 +482,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                     </button>
                                                                     <button
                                                                         className="course-actions-popup-item"
-                                                                        onClick={(e) => { e.stopPropagation(); setActionsOpenId(null); window.api.openCourseFolder(course.id, displayName); }}
+                                                                        onClick={(e) => { e.stopPropagation(); setActionsOpenId(null); window.api.openCourseFolder(course.id, courses); }}
                                                                     >
                                                                         <Icon name="folder" size={13} />
                                                                         {t('openFolder')}

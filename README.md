@@ -35,6 +35,7 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 
 - **Login SSO Bocconi** - autenticazione SAML2 tramite Shibboleth IDP, le credenziali vengono salvate in modo sicuro tramite il Keyring nativo di sistema (Windows Credential Manager / macOS Keychain) con azzeramento della memoria (`zeroize`)
 - **Sincronizzazione file** - scansiona tutti i corsi e scarica automaticamente gli allegati mancanti con controllo della concorrenza
+- **Versioni dei file** - se un docente ricarica un file con lo stesso nome, la nuova versione viene salvata accanto alla vecchia come `nome (v2).pdf`
 - **Nomi docenti** - caricamento progressivo con skeleton loader; mostra professori e direttori di corso accanto a ogni insegnamento
 - **Matricola in header** - lo student ID viene mostrato accanto al nome utente nell'intestazione
 - **Filtro per semestre** - filtra i corsi per semestre con pill selezionabili

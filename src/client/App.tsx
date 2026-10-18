@@ -4,15 +4,8 @@ import LoginView from './components/LoginView';
 import SyncView from './components/SyncView';
 import { getT } from './i18n';
 import { applyTheme } from './theme';
+import type { UserInfo } from '../types';
 
-interface UserInfo {
-    id: string;
-    userName: string;
-    name: { given: string; family: string };
-}
-
-// Both universities are tracked independently: either one on its own is enough
-// to use the app, and their courses are merged into a single list downstream.
 export interface Accounts {
     bocconi: UserInfo | null;
     webeep: UserInfo | null;
@@ -28,8 +21,7 @@ const App: React.FC = () => {
     );
 
     const loggedIn = !!(accounts.bocconi || accounts.webeep);
-    // The header shows one identity; Bocconi is the primary account when both
-    // are connected, since it is the one holding stored credentials.
+    // Bocconi is the primary identity when both are connected: it holds the stored credentials.
     const user = accounts.bocconi ?? accounts.webeep;
 
     const t = getT(lang);
@@ -50,8 +42,7 @@ const App: React.FC = () => {
         restore();
     }, []);
 
-    // Offline at startup: retry as soon as Windows reports a connection, and
-    // every few seconds in case that event never fires.
+    // Offline at startup: retry on the online event, and on a timer in case it never fires.
     useEffect(() => {
         if (!offline) return;
         window.addEventListener('online', restore);
@@ -88,8 +79,6 @@ const App: React.FC = () => {
         setAccounts((prev) => ({ ...prev, [provider]: u }));
     };
 
-    // Signing out of one university leaves the other running; the backend only
-    // tears down auto-sync once nothing is connected.
     const handleLogout = async (provider: 'bocconi' | 'webeep' | 'all' = 'all') => {
         try {
             await window.api.logout(provider);

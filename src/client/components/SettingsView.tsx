@@ -5,29 +5,7 @@ import { getT } from '../i18n';
 import { applyTheme } from '../theme';
 import { useEscape } from '../useEscape';
 import type { Accounts } from '../App';
-
-interface AppConfig {
-    syncDir: string;
-    autoSync: boolean;
-    autoSyncInterval: number;
-    autoSyncScheduledTime: string;
-    syncAllCourses: boolean;
-    enabledCourses: string[];
-    courseAliases: Record<string, string>;
-    collapsedTerms: string[];
-    hiddenCourses: string[];
-    hiddenTerms: string[];
-    lastSync: string | null;
-    minimizeToTray: boolean;
-    startAtLogin: boolean;
-    notifications: boolean;
-    syncOnStartup: boolean;
-    heatmap: boolean;
-    language: string;
-    theme: string;
-    tutorialDone: boolean;
-    webeepEnabled: boolean;
-}
+import type { AppConfig } from '../../types';
 
 interface SettingsViewProps {
     config: AppConfig;
@@ -120,7 +98,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     const theme = config.theme === 'light' ? 'light' : 'dark';
     const webeepEnabled = config.webeepEnabled !== false;
 
-    // The reveal starts on the click; saving follows in the background.
     const setTheme = (next: 'dark' | 'light') => {
         if (next === theme) return;
         applyTheme(next, true);
@@ -178,7 +155,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
 
                 <div className="settings-body">
-                    {/* Sync folder */}
                     <div className="settings-group">
                         <span className="settings-group-label">{t('syncFolderGroup')}</span>
                         <div className="folder-row">
@@ -196,7 +172,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         </div>
                     </div>
 
-                    {/* Auto sync */}
                     <div className="settings-group">
                         <div className="toggle-row" onClick={() => updateSetting({ autoSync: !config.autoSync })}>
                             <span className="toggle-label">{t('autoSyncGroup')}</span>
@@ -246,7 +221,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         )}
                     </div>
 
-                    {/* General settings */}
                     <div className="settings-group">
                         <span className="settings-group-label">{t('generalGroup')}</span>
 
@@ -376,9 +350,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         </div>
                     </div>
 
-                    {/* Accounts, one row per university. The name line carries a
-                        quiet sign-out link; PoliMi starts disconnected and, once
-                        connected, gets a switch that pauses it without signing out. */}
                     <div className="settings-group settings-accounts">
                         <span className="settings-group-label">{t('accountsTitle')}</span>
 
@@ -454,7 +425,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         </div>
                     </div>
 
-                    {/* Updates */}
                     <div className="settings-group">
                         <span className="settings-group-label">{t('updatesGroup')}</span>
                         <div className="update-row">

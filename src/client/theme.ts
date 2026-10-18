@@ -1,8 +1,5 @@
-// Puts the theme on <html>. With `reveal`, the new colours open out from a
-// slanted band through the middle (the view-transition rules in main.scss);
-// without View Transitions, or with reduced motion, they switch at once.
-// localStorage keeps a copy so the next launch paints the right theme before
-// the config arrives from the backend.
+// With `reveal`, the new colours open from a slanted band (view-transition rules in main.scss).
+// The localStorage copy lets the next launch paint the right theme before the config arrives.
 export function applyTheme(theme: string | undefined, reveal = false) {
     const root = document.documentElement;
     const next = theme === 'light' ? 'light' : 'dark';

@@ -14,20 +14,6 @@ export interface Course {
     instructor?: string;
 }
 
-export interface ContentItem {
-    id: string;
-    title: string;
-    contentHandler?: { id: string };
-    hasChildren?: boolean;
-    body?: string;
-}
-
-export interface Attachment {
-    id: string;
-    fileName: string;
-    mimeType: string;
-}
-
 export interface AppConfig {
     syncDir: string;
     autoSync: boolean;
@@ -73,13 +59,6 @@ export interface SyncResult {
     warnings: string[]; // one per university that could not be reached
 }
 
-export interface LoginResult {
-    success: boolean;
-    cookies: string[];
-    error?: string;
-}
-
-/// Which university a course or file came from.
 export type Provider = 'bocconi' | 'webeep';
 
 export interface AccountsResult {
@@ -113,9 +92,8 @@ declare global {
             updateConfig: (partial: Partial<AppConfig>) => Promise<AppConfig>;
             selectFolder: () => Promise<string | null>;
             openFolder: (folderPath: string) => Promise<void>;
-            openCourseFolder: (courseId: string, name: string) => Promise<void>;
+            openCourseFolder: (courseId: string, courses: Course[]) => Promise<void>;
             minimize: () => Promise<void>;
-            maximize: () => Promise<void>;
             close: () => Promise<void>;
             resetWindowSize: () => Promise<void>;
             getAppVersion: () => Promise<string>;

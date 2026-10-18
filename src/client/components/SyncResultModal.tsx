@@ -3,20 +3,7 @@ import Icon from './Icon';
 import Marquee from './Marquee';
 import { getT } from '../i18n';
 import { useEscape } from '../useEscape';
-
-interface SyncResultCourse {
-    courseName: string;
-    files: string[];
-    webeep: boolean;
-}
-
-interface SyncResult {
-    totalDownloaded: number;
-    totalScanned: number;
-    courses: SyncResultCourse[];
-    duration: number;
-    warnings: string[];
-}
+import type { SyncResult } from '../../types';
 
 interface SyncResultModalProps {
     lang: 'it' | 'en';
@@ -85,7 +72,7 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose
                         {result.courses.map((course, idx) => (
                             <div key={idx} className="modal-course">
                                 <div className="modal-course-header">
-                                <Icon name="warning" size={14} className="modal-course-icon" />
+                                    <Icon name="folder" size={14} className="modal-course-icon" />
                                     <Marquee className="modal-course-name" text={course.courseName} />
                                     <span className="course-source">
                                         {course.webeep ? 'PoliMi' : 'Bocconi'}

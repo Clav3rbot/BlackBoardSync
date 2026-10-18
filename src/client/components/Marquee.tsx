@@ -1,7 +1,6 @@
 import React from 'react';
 
-// Truncated text that scrolls on hover so the whole of it can be read. The
-// distance is measured on enter because the width depends on the window size.
+// The shift is measured on enter because the width depends on the window size.
 const Marquee: React.FC<{ text: string; className?: string }> = ({ text, className }) => {
     const onEnter = (e: React.MouseEvent<HTMLSpanElement>) => {
         const el = e.currentTarget;

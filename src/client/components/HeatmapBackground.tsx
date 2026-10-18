@@ -1,9 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
-// Thermal-camera trail left by the cursor, drawn behind its parent element's
-// content. The canvas is rendered at 1/CELL resolution, stretched by CSS and
-// lightly blurred there, so it reads as a smooth glow instead of blocks. The
-// loop only runs while something is still warm, so an idle view costs nothing.
+// Canvas at 1/CELL resolution, stretched and blurred by CSS so it reads as a smooth glow.
+// The loop only runs while something is still warm, so an idle view costs nothing.
 const CELL = 4; // CSS px per heat cell
 const RADIUS = 10; // brush radius, in cells
 const DEPOSIT = 0.06; // heat added at the brush centre per stamp
@@ -115,8 +113,7 @@ const HeatmapBackground: React.FC = () => {
             raf = warm ? requestAnimationFrame(frame) : 0;
         };
 
-        // Stamps are spaced evenly along the path, so heat tracks distance
-        // travelled rather than how often the OS happens to report the pointer.
+        // Stamps are spaced along the path, so heat tracks distance, not the pointer event rate.
         const onMove = (e: PointerEvent) => {
             const rect = canvas.getBoundingClientRect();
             const p = {
@@ -137,8 +134,7 @@ const HeatmapBackground: React.FC = () => {
             }
         };
 
-        // Forget the last point on exit so re-entering elsewhere doesn't
-        // paint a streak across the section.
+        // Forget the last point so re-entering elsewhere doesn't paint a streak.
         const onLeave = () => {
             last = null;
         };

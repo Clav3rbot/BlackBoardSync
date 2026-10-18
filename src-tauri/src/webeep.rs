@@ -1,10 +1,5 @@
-//! WeBeep (Politecnico di Milano) — Moodle web-service client.
-//!
-//! Unlike Blackboard, which is driven with SAML session cookies, Moodle's REST
-//! API is token-based. The token is obtained once through the site's own mobile
-//! launch flow: we open Polimi's Shibboleth SSO in a webview, the user signs in
-//! there, and Moodle hands back a token via a `moodlemobile://` redirect that we
-//! intercept. The Polimi password therefore never passes through this process.
+//! WeBeep (PoliMi) Moodle client. The token comes from Moodle's mobile launch flow
+//! in an SSO webview, so the Polimi password never passes through this process.
 
 use crate::download::FileToDownload;
 use crate::state::AppState;
@@ -21,16 +16,11 @@ const HOST: &str = "webeep.polimi.it";
 const SERVICE: &str = "moodle_mobile_app";
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BlackBoardSync/1.0";
 
-/// Moodle ids are small integers, so they are prefixed to keep every existing
-/// config list (`enabledCourses`, `hiddenCourses`, `courseAliases`) usable for
-/// both universities with no migration.
+/// Keeps Moodle's small integer ids apart from Blackboard ids in the shared config lists.
 pub const ID_PREFIX: &str = "webeep:";
 
-/// Every SSO window is labelled with this prefix plus its passport, so a stale
-/// window can be found and reclaimed without touching a concurrent attempt.
+/// SSO window label prefix, so a stale window can be found and closed.
 const WINDOW_PREFIX: &str = "webeep-login-";
-
-// ── Wire types ────────────────────────────────────────────────
 
 #[derive(Deserialize)]
 pub struct SiteInfo {
@@ -73,17 +63,15 @@ struct Content {
     filename: Option<String>,
     fileurl: Option<String>,
     filepath: Option<String>,
+    timemodified: Option<i64>,
 }
 
-/// Moodle answers errors with HTTP 200 and this shape, so every response has to
-/// be sniffed for it before being decoded as the expected payload.
+/// Moodle answers errors with HTTP 200 and this shape.
 #[derive(Deserialize)]
 struct MoodleError {
     errorcode: String,
     message: String,
 }
-
-// ── Client ────────────────────────────────────────────────────
 
 #[derive(Clone)]
 pub struct WeBeepAPI {
@@ -135,9 +123,7 @@ impl WeBeepAPI {
             return Err(err.message);
         }
 
-        // The serde error names the offending field and offset, which is what
-        // pins down a shape mismatch; the body itself is not logged, since it
-        // is the user's own course data.
+        // Log the serde error (field and offset), never the body: it is the user's course data.
         serde_json::from_str::<T>(&body).map_err(|e| {
             eprintln!("[webeep] {} illeggibile: {} ({} byte)", function, e, body.len());
             e.to_string()
@@ -158,11 +144,8 @@ impl WeBeepAPI {
             .await
     }
 
-    /// Moodle file URLs are only readable with the token appended as a query
-    /// parameter; they already carry their own `?forcedownload=1`, so the pair
-    /// is appended through the URL parser rather than by string concatenation.
-    /// The host check keeps a tampered API response from redirecting the token
-    /// to a third-party server.
+    /// Appends the token as a query pair (the URLs already carry `?forcedownload=1`).
+    /// The host check stops a tampered response from sending the token elsewhere.
     pub fn signed_url(&self, fileurl: &str) -> Result<String, String> {
         let mut url = url::Url::parse(fileurl).map_err(|e| e.to_string())?;
         if url.scheme() != "https" || url.host_str() != Some(HOST) {
@@ -188,8 +171,6 @@ impl WeBeepAPI {
     }
 }
 
-// ── Course mapping ────────────────────────────────────────────
-
 pub fn is_webeep(course_id: &str) -> bool {
     course_id.starts_with(ID_PREFIX)
 }
@@ -198,13 +179,7 @@ fn numeric_id(course_id: &str) -> Option<i64> {
     course_id.strip_prefix(ID_PREFIX)?.parse().ok()
 }
 
-/// Builds a term from the first year of an academic year pair.
-///
-/// The label carries the university, because the two sit in the same course
-/// list and Blackboard terms are worded differently ("2026/2027 FIRST
-/// SEMESTER"); a bare "2026/27" next to them reads as just another Bocconi
-/// term. The id stays namespaced by ID_PREFIX, so `hiddenTerms` and
-/// `collapsedTerms` are unaffected by the wording.
+/// The label names the university: a bare "2026/27" reads as a Bocconi term in the shared list.
 fn academic_term(start_year: i32) -> crate::blackboard::Term {
     crate::blackboard::Term {
         id: format!("{}term:{}", ID_PREFIX, start_year),
@@ -212,13 +187,8 @@ fn academic_term(start_year: i32) -> crate::blackboard::Term {
     }
 }
 
-/// WeBeep course names carry the academic year they are taught in, in brackets
-/// at the end: "054323 - INTERNET OF THINGS (CESANA MATTEO) [2026-27]".
-///
-/// This is the authoritative source. `startdate` records when the Moodle space
-/// was created, which is routinely a year earlier than the year the course is
-/// actually offered, so deriving the term from it files courses under the wrong
-/// academic year.
+/// Term from the "[2026-27]" suffix of the course name. `startdate` is often a year
+/// early (it is when the Moodle space was created), so it is only the fallback.
 fn term_from_name(fullname: &str) -> Option<crate::blackboard::Term> {
     let open = fullname.rfind('[')?;
     let close = fullname[open..].find(']')? + open;
@@ -234,9 +204,7 @@ fn term_from_name(fullname: &str) -> Option<crate::blackboard::Term> {
     Some(academic_term(first.parse().ok()?))
 }
 
-/// Fallback for courses whose name carries no year: Moodle has no Term concept,
-/// so the academic year is derived from the start date with a September
-/// rollover. Less accurate than the name, hence second choice.
+/// Fallback when the name has no year: the start date, with a September rollover.
 fn term_from_startdate(startdate: Option<i64>) -> Option<crate::blackboard::Term> {
     use chrono::Datelike;
     let ts = startdate.filter(|t| *t > 0)?;
@@ -245,8 +213,6 @@ fn term_from_startdate(startdate: Option<i64>) -> Option<crate::blackboard::Term
     Some(academic_term(if month >= 9 { year } else { year - 1 }))
 }
 
-/// Presents the WeBeep account through the same shape the UI already uses for
-/// the Blackboard account, so the header and login views need no second type.
 pub fn user_info(info: &SiteInfo) -> crate::blackboard::UserInfo {
     crate::blackboard::UserInfo {
         id: format!("{}{}", ID_PREFIX, info.userid),
@@ -258,7 +224,7 @@ pub fn user_info(info: &SiteInfo) -> crate::blackboard::UserInfo {
     }
 }
 
-/// Capitalises one name: "BINOSI" -> "Binosi", "D'AMICO" -> "D'Amico".
+/// "BINOSI" -> "Binosi", "D'AMICO" -> "D'Amico".
 fn title_case(word: &str) -> String {
     let mut out = String::with_capacity(word.len());
     let mut at_start = true;
@@ -271,7 +237,6 @@ fn title_case(word: &str) -> String {
             }
             at_start = false;
         } else {
-            // An apostrophe or hyphen starts a new name part.
             out.push(c);
             at_start = true;
         }
@@ -279,13 +244,8 @@ fn title_case(word: &str) -> String {
     out
 }
 
-/// Reformats one WeBeep teacher into the "Given Family" order Blackboard uses,
-/// so both universities read the same way in the course list.
-///
-/// The last word is taken as the given name ("DE MARIA ALESSANDRO" ->
-/// "Alessandro De Maria"). Someone recorded with two given names comes out
-/// scrambled; WeBeep exposes no structured teacher fields to do better, and the
-/// alias rename in the UI is the escape hatch.
+/// "DE MARIA ALESSANDRO" -> "Alessandro De Maria", Blackboard's order. Two given names come
+/// out scrambled: WeBeep has no structured teacher fields, and the UI alias is the fix.
 fn format_teacher(raw: &str) -> Option<String> {
     let words: Vec<&str> = raw.split_whitespace().collect();
     match words.split_last()? {
@@ -298,27 +258,17 @@ fn format_teacher(raw: &str) -> Option<String> {
     }
 }
 
-/// Splits a WeBeep course title into the parts the UI shows separately:
-///
-/// "056896 - OFFENSIVE AND DEFENSIVE CYBERSECURITY (BINOSI LORENZO) [2026-27]"
-///   -> ("OFFENSIVE AND DEFENSIVE CYBERSECURITY", Some("Lorenzo Binosi"))
-///
-/// The course code, teacher and academic year are all encoded into one string
-/// by WeBeep. Pulling them apart keeps the teacher on its own line as with
-/// Blackboard courses, and keeps the sync folder name short — the whole title
-/// would otherwise eat into the Windows 260-character path limit once Moodle
-/// sections and subfolders are nested under it.
+/// "056896 - NAME (BINOSI LORENZO) [2026-27]" -> ("NAME", Some("Lorenzo Binosi")).
+/// The short name also keeps nested sync paths under the Windows 260-character limit.
 fn split_course_title(fullname: &str) -> (String, Option<String>) {
     let mut rest = fullname.trim();
 
-    // Trailing "[2026-27]" — already consumed by term_from_name.
     if rest.ends_with(']') {
         if let Some(open) = rest.rfind('[') {
             rest = rest[..open].trim_end();
         }
     }
 
-    // Trailing "(BINOSI LORENZO)", possibly several separated by commas.
     let mut teacher = None;
     if rest.ends_with(')') {
         if let Some(open) = rest.rfind('(') {
@@ -334,7 +284,6 @@ fn split_course_title(fullname: &str) -> (String, Option<String>) {
         }
     }
 
-    // Leading course code, "056896 - ".
     if let Some((code, name)) = rest.split_once(" - ") {
         if !code.is_empty() && code.chars().all(|c| c.is_ascii_digit()) {
             rest = name.trim();
@@ -365,40 +314,19 @@ pub async fn get_courses(
         .collect())
 }
 
-// ── Scan ──────────────────────────────────────────────────────
-
-/// Walks a course's sections and returns every downloadable file.
-///
-/// Moodle returns the whole tree in a single call, so unlike Blackboard there is
-/// no per-level fan-out to do here.
-///
-/// Files land directly in the course folder, the way Blackboard course files do.
-/// Moodle's own section ("Introduzione") and folder-module ("Course materials")
-/// names are dropped: they are organisational labels rather than a directory
-/// structure the user built, and keeping them buried every file two levels deep.
-/// Only `filepath` survives, because those are real subdirectories created
-/// inside a folder module.
-///
-/// Dropping those levels can make two files collide — the same filename in two
-/// sections. Rather than let the caller's dedup silently discard one, a colliding
-/// file is put back under its module (and then its section) name until it is
-/// unique.
 pub async fn scan_course(
     api: &WeBeepAPI,
     course: &crate::blackboard::Course,
     base_path: &str,
-) -> Vec<FileToDownload> {
+) -> Result<Vec<FileToDownload>, String> {
     let Some(id) = numeric_id(&course.id) else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    let Ok(sections) = api.contents(id).await else {
-        return Vec::new();
-    };
-    files_from_sections(sections, course, base_path)
+    Ok(files_from_sections(api.contents(id).await?, course, base_path))
 }
 
-/// Path layout for a course's files, split out from the network call so the
-/// collision handling can be tested against fixtures.
+/// Files go flat in the course folder: Moodle section and module names are dropped, real
+/// `filepath` subfolders kept. A name clash puts the file back under its module and section.
 fn files_from_sections(
     sections: Vec<Section>,
     course: &crate::blackboard::Course,
@@ -407,16 +335,15 @@ fn files_from_sections(
     struct Candidate {
         section: String,
         module: String,
-        /// Real subdirectories from inside a Moodle folder module.
         sub: PathBuf,
         name: String,
         url: String,
+        stamp: Option<String>,
     }
 
     let mut candidates: Vec<Candidate> = Vec::new();
     for section in sections {
         for module in section.modules {
-            // `url` modules point at external links, not files.
             if module.modname == "url" {
                 continue;
             }
@@ -445,13 +372,13 @@ fn files_from_sections(
                     sub,
                     name,
                     url: fileurl,
+                    stamp: item.timemodified.map(|t| t.to_string()),
                 });
             }
         }
     }
 
-    // A path is only worth disambiguating when more than one distinct file wants
-    // it; the same file listed twice can keep the flat name.
+    // Only distinct files (by URL) contest a path; the same file listed twice stays flat.
     let mut claims: HashMap<PathBuf, HashSet<String>> = HashMap::new();
     for c in &candidates {
         claims
@@ -486,38 +413,28 @@ fn files_from_sections(
                 relative_path: rel.to_string_lossy().into_owned(),
                 url: Some(c.url),
                 webeep: true,
+                stamp: c.stamp,
             }
         })
         .collect()
 }
 
-// ── Token acquisition (SSO webview) ───────────────────────────
-
-/// 128 bits of OS randomness, hex encoded.
 fn random_passport() -> String {
     let mut bytes = [0u8; 16];
-    // A failure here means the OS entropy source is unavailable; falling back to
-    // anything guessable would silently defeat the nonce, so the caller aborts.
+    // No fallback to a guessable nonce: an empty string makes the caller abort.
     if getrandom::getrandom(&mut bytes).is_err() {
         return String::new();
     }
     bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
-/// The signature Moodle returns alongside the token: `md5(wwwroot + passport)`,
-/// with the site URL carrying no trailing slash. Verified against live launch
-/// payloads from webeep.polimi.it.
+/// `md5(wwwroot + passport)`, no trailing slash; verified against live webeep.polimi.it payloads.
 fn launch_signature(passport: &str) -> String {
     format!("{:x}", md5::compute(format!("{}{}", SITE, passport)))
 }
 
-/// Decodes Moodle's launch payload: base64 of
-/// `md5(wwwroot+passport):::token[:::privatetoken]`.
-///
-/// Both signature inputs are public, so recomputing it only proves the payload
-/// belongs to a launch of this site — it is the unguessable passport, not the
-/// hash, that ties the token to the window we opened. The token itself is then
-/// proven separately by calling `site_info`.
+/// Decodes base64 `md5(wwwroot+passport):::token[:::privatetoken]`. The signature inputs are
+/// public: the unguessable passport binds the token to our window, `site_info` proves it.
 fn decode_launch_token(raw: &str, passport: &str) -> Result<String, String> {
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(raw.trim())
@@ -538,23 +455,17 @@ fn decode_launch_token(raw: &str, passport: &str) -> Result<String, String> {
     Ok(token)
 }
 
-/// Opens the Polimi SSO in a dedicated window and resolves once Moodle redirects
-/// to `moodlemobile://token=…`. Returns an error if the user closes the window.
+/// Opens the Polimi SSO window and resolves on the `moodlemobile://token=…` redirect.
 pub async fn acquire_token(app: &AppHandle) -> Result<String, String> {
-    // The passport has to be a real nonce, not merely unique. Moodle signs it
-    // with md5(wwwroot + passport), and both inputs are public, so the signature
-    // only proves the payload belongs to *some* launch of this site. A guessable
-    // passport would let any page that ends up in this webview mint a payload
-    // carrying a token of its choosing. 128 CSPRNG bits removes the guess.
+    // Must be unguessable, not just unique: with a predictable passport any page in
+    // this webview could mint a validly signed payload carrying its own token.
     let passport = random_passport();
     if passport.is_empty() {
         return Err("Impossibile generare un nonce sicuro per l'accesso".to_string());
     }
     let label = format!("{}{}", WINDOW_PREFIX, passport);
 
-    // An abandoned attempt (window left open, SSO never finished) must not lock
-    // the feature out until its timeout expires: reclaim any leftover window and
-    // start a fresh attempt instead of refusing this one.
+    // Close windows of abandoned attempts rather than refusing this one until they time out.
     for (existing_label, window) in app.webview_windows() {
         if existing_label.starts_with(WINDOW_PREFIX) {
             let _ = window.close();
@@ -571,11 +482,8 @@ pub async fn acquire_token(app: &AppHandle) -> Result<String, String> {
 
     let nav_tx = Arc::clone(&tx);
     let nav_passport = passport.clone();
-    // Moodle only ever emits the moodlemobile:// redirect from launch.php, so
-    // the hop before it is always on the WeBeep host. The SSO chain legitimately
-    // leaves that host (Shibboleth, then whichever SPID provider the user picks),
-    // and those hosts cannot be enumerated, so the chain itself stays open —
-    // but a page parked on some other host cannot hand us a token.
+    // The SSO chain crosses hosts we cannot list, but only WeBeep's launch.php emits
+    // moodlemobile://, so a token is accepted only when the previous hop was on HOST.
     let last_host: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let nav_host = Arc::clone(&last_host);
     let window = WebviewWindowBuilder::new(
@@ -591,9 +499,7 @@ pub async fn acquire_token(app: &AppHandle) -> Result<String, String> {
     .focused(true)
     .on_navigation(move |url| {
         if url.scheme() != "moodlemobile" {
-            // Enough to follow the SSO chain when a login stalls. The query and
-            // fragment are dropped on purpose: these hops carry SAML tickets and
-            // OAuth codes, and the final one carries the Moodle token itself.
+            // No query or fragment: they carry SAML tickets, OAuth codes and the token.
             eprintln!("[webeep] nav: {}://{}{}", url.scheme(), url.host_str().unwrap_or("-"), url.path());
             *nav_host.lock().unwrap() = url.host_str().map(|h| h.to_string());
             return true;
@@ -603,8 +509,7 @@ pub async fn acquire_token(app: &AppHandle) -> Result<String, String> {
             eprintln!("[webeep] token offerto da un'origine inattesa, ignorato");
             return false;
         }
-        // `moodlemobile://token=<base64>` has no valid authority, so the payload
-        // is taken off the raw string rather than via Url accessors.
+        // `moodlemobile://token=<base64>` has no valid authority: read the raw string.
         let raw = url.as_str().to_string();
         let payload = raw.split("token=").nth(1).unwrap_or_default().trim_end_matches('/');
         if let Some(tx) = nav_tx.lock().unwrap().take() {
@@ -635,12 +540,8 @@ pub async fn acquire_token(app: &AppHandle) -> Result<String, String> {
     outcome
 }
 
-/// Loads the stored token and verifies it still works.
-///
-/// `Ok(None)` means WeBeep was never connected or is paused in Settings, both
-/// normal states not worth reporting. `Err` means a token is stored but no longer authenticates,
-/// which the user does need to see — but as a warning, never as a failure that
-/// would take the Blackboard side of the sync down with it.
+/// `Ok(None)`: not connected or paused. `Err`: the stored token is rejected, shown as a
+/// warning so the Blackboard side still syncs.
 pub async fn active_api(app: &AppHandle) -> Result<Option<(WeBeepAPI, SiteInfo)>, String> {
     if !app.state::<AppState>().store.lock().unwrap().get_config().webeep_enabled {
         return Ok(None);
@@ -648,8 +549,7 @@ pub async fn active_api(app: &AppHandle) -> Result<Option<(WeBeepAPI, SiteInfo)>
     connected_api(app).await
 }
 
-/// The connected account whether or not it is paused, for showing who is
-/// signed in.
+/// The connected account even when paused, for showing who is signed in.
 pub async fn connected_api(app: &AppHandle) -> Result<Option<(WeBeepAPI, SiteInfo)>, String> {
     let token = app.state::<AppState>().store.lock().unwrap().load_webeep_token();
     let Some(token) = token else {
@@ -664,9 +564,7 @@ pub async fn connected_api(app: &AppHandle) -> Result<Option<(WeBeepAPI, SiteInf
 mod tests {
     use super::*;
 
-    /// Signature taken from a real webeep.polimi.it launch: this pins the
-    /// md5(wwwroot + passport) scheme, which a plain passport comparison got
-    /// wrong and which no amount of local reasoning would have revealed.
+    /// Signature from a real webeep.polimi.it launch, pinning the md5(wwwroot + passport) scheme.
     #[test]
     fn signature_matches_live_launch_payload() {
         assert_eq!(
@@ -683,8 +581,6 @@ mod tests {
         assert_eq!(decode_launch_token(&raw, "pass123").unwrap(), token);
     }
 
-    /// A payload minted for a different passport must not be accepted, or the
-    /// window binding the token to this request would be worthless.
     #[test]
     fn rejects_mismatched_passport() {
         let raw = base64::engine::general_purpose::STANDARD.encode(format!(
@@ -694,8 +590,6 @@ mod tests {
         assert!(decode_launch_token(&raw, "pass123").is_err());
     }
 
-    /// The signature formula is public, so the passport is the only thing an
-    /// attacker cannot reproduce. It must be unpredictable, not merely unique.
     #[test]
     fn passport_is_unpredictable() {
         let a = random_passport();
@@ -728,8 +622,7 @@ mod tests {
             .is_ok());
     }
 
-    /// Pinned to a real WeBeep course name. The bracketed year is the one the
-    /// course is taught in; startdate would have filed this under 2025/26.
+    /// Real WeBeep course name; its startdate would have filed it under 2025/26.
     #[test]
     fn term_comes_from_the_bracketed_year_in_the_name() {
         let term =
@@ -755,8 +648,6 @@ mod tests {
         assert_eq!(teacher.as_deref(), Some("Alessandro De Maria, Anna Rossi"));
     }
 
-    /// A title with none of the decorations must survive untouched rather than
-    /// collapse to an empty folder name.
     #[test]
     fn keeps_plain_titles_as_they_are() {
         let (name, teacher) = split_course_title("ETHICS SEMINAR");
@@ -792,8 +683,6 @@ mod tests {
         out
     }
 
-    /// The layout the user asked for: files sit directly in the course folder,
-    /// with Moodle's section and folder-module labels dropped.
     #[test]
     fn files_land_directly_in_the_course_folder() {
         let out = paths(
@@ -804,7 +693,6 @@ mod tests {
         assert_eq!(out, vec!["CORSO/slides.pdf"]);
     }
 
-    /// Subdirectories created inside a Moodle folder are real structure and stay.
     #[test]
     fn keeps_subdirectories_from_filepath() {
         let out = paths(
@@ -815,8 +703,6 @@ mod tests {
         assert_eq!(out, vec!["CORSO/esercizi/settimana1/es1.pdf"]);
     }
 
-    /// Two different files with the same name would overwrite each other once
-    /// the section names are dropped, so both get put back under their module.
     #[test]
     fn disambiguates_colliding_filenames() {
         let out = paths(
@@ -833,8 +719,7 @@ mod tests {
         );
     }
 
-    /// The same file listed twice is not a collision — it stays flat and the
-    /// caller's dedup drops the repeat.
+    /// Not a collision: the caller's dedup drops the repeat.
     #[test]
     fn repeated_identical_file_stays_flat() {
         let out = paths(
@@ -847,7 +732,6 @@ mod tests {
         assert_eq!(out, vec!["CORSO/x.pdf", "CORSO/x.pdf"]);
     }
 
-    /// External-link modules carry no file and must not produce an entry.
     #[test]
     fn skips_url_modules() {
         let out = paths(
