@@ -1,13 +1,52 @@
 name: Build & Release
 
+# Runs from main, not from tags: a cache saved by a tag run is invisible to the
+# next tag, so every release compiled from scratch. A push releases only when
+# the version in tauri.conf.json has no GitHub release yet.
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
   workflow_dispatch:
+  schedule:
+    # GitHub evicts caches unused for 7 days; restoring them keeps them alive.
+    - cron: '0 6 * * 1,4'
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            release=false
+          elif out=$(gh release view "v$version" 2>&1); then
+            release=false
+          elif echo "$out" | grep -q "release not found"; then
+            release=true
+          else
+            echo "$out"; exit 1
+          fi
+          echo "release=$release" >> "$GITHUB_OUTPUT"
+          echo "v$version, release: $release"
+
   build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
     permissions:
       contents: write
     strategy:
@@ -39,17 +78,13 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          shared-key: release
 
       - run: npm ci
 
       # generate_context! needs the built frontend even for tests.
       - run: npm run build:renderer
       - run: cargo test --manifest-path src-tauri/Cargo.toml
-
-      - name: Get app version
-        id: app_version
-        shell: bash
-        run: echo "value=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> $GITHUB_OUTPUT
 
       - name: Get commit message
         id: commit_info
@@ -67,8 +102,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: v${{ steps.app_version.outputs.value }}
-          releaseName: BlackBoard Sync v${{ steps.app_version.outputs.value }}
+          tagName: v${{ needs.check.outputs.version }}
+          releaseName: BlackBoard Sync v${{ needs.check.outputs.version }}
           generateReleaseNotes: true
           releaseBody: |
             ${{ steps.commit_info.outputs.commit_msg }}
@@ -78,3 +113,27 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
+  keep-cache:
+    if: github.event_name == 'schedule'
+    strategy:
+      matrix:
+        include:
+          - platform: macos-latest
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
+          - platform: windows-latest
+            rust-targets: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          shared-key: release
+          save-if: false
