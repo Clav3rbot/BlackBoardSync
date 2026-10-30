@@ -69,6 +69,18 @@ pub struct FileStamp {
     pub version: u32,
 }
 
+/// A file saved by a sync; `path` is relative to the sync folder.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentDownload {
+    pub name: String,
+    pub path: String,
+    pub course: String,
+    pub at: String,
+}
+
+pub const RECENT_DOWNLOADS_MAX: usize = 100;
+
 /// Temp file + rename: a crash mid-write must not leave a truncated file.
 fn write_atomic(path: &std::path::Path, bytes: &[u8]) {
     use std::io::Write;
@@ -170,6 +182,30 @@ impl AppStore {
         }
     }
 
+    /// Newest first.
+    pub fn load_recent_downloads(&self) -> Vec<RecentDownload> {
+        std::fs::read_to_string(self.data_dir.join("recent_downloads.json"))
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn add_recent_downloads(&self, new: Vec<RecentDownload>) {
+        if new.is_empty() {
+            return;
+        }
+        let mut list = new;
+        list.extend(self.load_recent_downloads());
+        // A file downloaded again (deleted by the user, say) keeps only its newest entry.
+        let mut seen = std::collections::HashSet::new();
+        list.retain(|r| seen.insert(r.path.clone()));
+        list.truncate(RECENT_DOWNLOADS_MAX);
+        let _ = std::fs::create_dir_all(&self.data_dir);
+        if let Ok(json) = serde_json::to_string(&list) {
+            write_atomic(&self.data_dir.join("recent_downloads.json"), json.as_bytes());
+        }
+    }
+
     pub fn save_credentials(&self, username: &str, password: &str) {
         let payload = serde_json::json!({ "username": username, "password": password });
         if let Ok(entry) = keyring::Entry::new("blackboard-sync", "credentials") {
@@ -244,5 +280,30 @@ impl AppStore {
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(path: &str, at: &str) -> RecentDownload {
+        RecentDownload { name: path.into(), path: path.into(), course: "C".into(), at: at.into() }
+    }
+
+    #[test]
+    fn recent_downloads_keep_newest_entry_per_path_and_cap_the_list() {
+        let data_dir = std::env::temp_dir().join(format!("bbsync-recent-{}", std::process::id()));
+        let store = AppStore { config_path: data_dir.join("config.json"), config: AppConfig::default(), data_dir: data_dir.clone() };
+
+        store.add_recent_downloads(vec![entry("a.pdf", "1"), entry("b.pdf", "1")]);
+        store.add_recent_downloads(vec![entry("a.pdf", "2")]);
+        let list = store.load_recent_downloads();
+        assert_eq!(list.iter().map(|r| (r.path.as_str(), r.at.as_str())).collect::<Vec<_>>(), [("a.pdf", "2"), ("b.pdf", "1")]);
+
+        store.add_recent_downloads((0..RECENT_DOWNLOADS_MAX + 5).map(|i| entry(&format!("{i}.pdf"), "3")).collect());
+        assert_eq!(store.load_recent_downloads().len(), RECENT_DOWNLOADS_MAX);
+
+        let _ = std::fs::remove_dir_all(data_dir);
     }
 }

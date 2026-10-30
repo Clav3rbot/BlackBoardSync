@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Header from './Header';
 import CourseList from './CourseList';
 import SyncResultModal from './SyncResultModal';
+import RecentDownloadsModal from './RecentDownloadsModal';
 import SettingsView from './SettingsView';
 import Tutorial from './Tutorial';
 import Icon from './Icon';
@@ -41,6 +42,7 @@ const SyncView: React.FC<SyncViewProps> = ({
     const [loadingInstructors, setLoadingInstructors] = useState(false);
     const [cacheMisses, setCacheMisses] = useState<Set<string>>(new Set());
     const [tutorialOpen, setTutorialOpen] = useState(false);
+    const [recentOpen, setRecentOpen] = useState(false);
     const tutorialShown = useRef(false);
 
     // The tour waits for the courses to be on screen so it can point at them; once per session.
@@ -367,6 +369,7 @@ const SyncView: React.FC<SyncViewProps> = ({
                 onAbort={handleAbortSync}
                 onLogout={() => onLogout('all')}
                 onSettings={openSettings}
+                onRecent={() => setRecentOpen(true)}
                 onOpenFolder={() => window.api.openFolder(config.syncDir)}
                 onChangeFolder={handleChangeFolder}
             />
@@ -398,6 +401,10 @@ const SyncView: React.FC<SyncViewProps> = ({
                     result={syncResult}
                     onClose={() => setSyncResult(null)}
                 />
+            )}
+
+            {recentOpen && (
+                <RecentDownloadsModal lang={lang} onClose={() => setRecentOpen(false)} />
             )}
 
             {coursesError && !loadingCourses && (

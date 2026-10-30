@@ -471,6 +471,62 @@ pub async fn open_course_folder(
         .map_err(|e| e.to_string())
 }
 
+/// Files moved or deleted since their sync can't be opened, so they drop out of the list.
+/// Async so the folder walk of the first call runs off the main thread.
+#[tauri::command]
+pub async fn get_recent_downloads(state: State<'_, AppState>) -> Result<Vec<crate::store::RecentDownload>, String> {
+    let (sync_dir, stored, stamps) = {
+        let store = state.store.lock().unwrap();
+        (
+            std::path::PathBuf::from(store.get_config().sync_dir),
+            store.load_recent_downloads(),
+            store.load_file_stamps(),
+        )
+    };
+    let list: Vec<_> = stored.into_iter().filter(|r| sync_dir.join(&r.path).is_file()).collect();
+    if !list.is_empty() {
+        return Ok(list);
+    }
+    // Nothing recorded yet, or the sync folder changed: start from what is on disk.
+    let synced = crate::download::synced_paths(&stamps);
+    let list = crate::download::recent_files_on_disk(&sync_dir, &synced, crate::store::RECENT_DOWNLOADS_MAX);
+    state.store.lock().unwrap().add_recent_downloads(list.clone());
+    Ok(list)
+}
+
+/// Opens a recently downloaded file, or with `reveal` selects it in its folder.
+#[tauri::command]
+pub async fn open_recent_download(
+    path: String,
+    reveal: bool,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    use crate::download::{is_inside_resolved, normalize_path};
+    use tauri_plugin_opener::OpenerExt;
+
+    let (sync_dir, known) = {
+        let store = state.store.lock().unwrap();
+        let known = store.load_recent_downloads().iter().any(|r| r.path == path);
+        (std::path::PathBuf::from(store.get_config().sync_dir), known)
+    };
+    // Only paths a sync recorded: the webview must not be able to launch any file it names.
+    if !known {
+        return Err("File non presente tra i download recenti".to_string());
+    }
+    let full = sync_dir.join(&path);
+    if !is_inside_resolved(&full, sync_dir.canonicalize().ok().as_deref(), &normalize_path(&sync_dir)) {
+        return Err("Path traversal non consentito".to_string());
+    }
+
+    if reveal {
+        app.opener().reveal_item_in_dir(&full)
+    } else {
+        app.opener().open_path(full.to_string_lossy(), None::<String>)
+    }
+    .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn reset_window_size(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("main") {

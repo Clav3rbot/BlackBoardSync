@@ -2656,6 +2656,79 @@ button:focus:not(:focus-visible),
     flex-shrink: 0;
 }
 
+.recent-course-toggle {
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background $transition;
+
+    &:hover {
+        background: rgba(var(--fg), 0.06);
+    }
+}
+
+.modal-file-item.recent-file {
+    padding: 0;
+    gap: 2px;
+}
+
+.recent-file-open {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px 5px 24px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover .modal-file-name {
+        color: $text-primary;
+    }
+}
+
+.recent-file-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.recent-file-course {
+    font-size: 10px;
+    color: $text-tertiary;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.recent-file-reveal {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: $radius-sm;
+    color: $text-tertiary;
+    cursor: pointer;
+    transition: all $transition-smooth;
+
+    &:hover {
+        background: rgba(var(--fg), 0.06);
+        color: $text-primary;
+    }
+}
+
 .modal-footer {
     padding: 14px 20px;
     border-top: 1px solid $border;
@@ -2811,13 +2884,14 @@ $icon-intent: 140ms;
     transition: transform 520ms $icon-ease;
 }
 
-:hover > :is(.icon-settings, .icon-sync, .icon-close, .icon-minimize, .icon-resize, .icon-signOut, .icon-sun, .icon-moon) {
+:hover > :is(.icon-settings, .icon-sync, .icon-history, .icon-close, .icon-minimize, .icon-resize, .icon-signOut, .icon-sun, .icon-moon) {
     transition: transform 640ms $icon-ease $icon-intent;
 }
 
 // The gear has six teeth, so a sixth of a turn lands on the same silhouette.
 :hover > .icon-settings { transform: rotate(60deg); }
 :hover > .icon-sync { transform: rotate(180deg); }
+:hover > .icon-history { transform: rotate(-60deg); }
 :hover > .icon-close { transform: rotate(90deg); }
 :hover > .icon-minimize { transform: scaleX(0.6); }
 :hover > .icon-resize { transform: scale(1.15); }

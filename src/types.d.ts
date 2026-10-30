@@ -59,6 +59,13 @@ export interface SyncResult {
     warnings: string[]; // one per university that could not be reached
 }
 
+export interface RecentDownload {
+    name: string;
+    path: string; // relative to syncDir
+    course: string;
+    at: string; // ISO time of the download
+}
+
 export type Provider = 'bocconi' | 'webeep';
 
 export interface AccountsResult {
@@ -93,6 +100,8 @@ declare global {
             selectFolder: () => Promise<string | null>;
             openFolder: (folderPath: string) => Promise<void>;
             openCourseFolder: (courseId: string, courses: Course[]) => Promise<void>;
+            getRecentDownloads: () => Promise<RecentDownload[]>;
+            openRecentDownload: (path: string, reveal: boolean) => Promise<void>;
             minimize: () => Promise<void>;
             close: () => Promise<void>;
             resetWindowSize: () => Promise<void>;

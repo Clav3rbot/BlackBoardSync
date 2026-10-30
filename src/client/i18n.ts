@@ -14,6 +14,11 @@ export interface TranslationKeys {
     reset: string;
     error: string;
     retry: string;
+    recentDownloads: string;
+    recentDownloadsHint: string;
+    recentDownloadsEmpty: string;
+    recentDownloadsNoCourse: string;
+    showInFolder: string;
 
     loginTitle: string;
     loginSubtitle: string;
@@ -147,6 +152,11 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         reset: "Ripristina",
         error: "Errore",
         retry: "Riprova",
+        recentDownloads: "Ultimi download",
+        recentDownloadsHint: "Clicca un file per aprirlo",
+        recentDownloadsEmpty: "Nessun file scaricato di recente",
+        recentDownloadsNoCourse: "Altri file",
+        showInFolder: "Mostra nella cartella",
 
         loginTitle: "Accedi a Blackboard",
         loginSubtitle: "Accedi con le credenziali dell'Università Bocconi",
@@ -278,6 +288,11 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         reset: "Reset",
         error: "Error",
         retry: "Retry",
+        recentDownloads: "Recent downloads",
+        recentDownloadsHint: "Click a file to open it",
+        recentDownloadsEmpty: "No recently downloaded files",
+        recentDownloadsNoCourse: "Other files",
+        showInFolder: "Show in folder",
 
         loginTitle: "Log in to Blackboard",
         loginSubtitle: "Sign in with your Bocconi University credentials",

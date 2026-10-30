@@ -56,6 +56,8 @@ fn main() {
             commands::select_folder,
             commands::open_folder,
             commands::open_course_folder,
+            commands::get_recent_downloads,
+            commands::open_recent_download,
             commands::reset_window_size,
             commands::check_for_updates,
             commands::restart_for_update,

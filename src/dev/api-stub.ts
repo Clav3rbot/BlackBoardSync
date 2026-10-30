@@ -59,6 +59,12 @@ window.api = {
     selectFolder: async () => 'C:\\Utenti\\Studente\\Documenti\\Blackboard',
     openFolder: async () => {},
     openCourseFolder: async () => {},
+    getRecentDownloads: async () => [
+        { name: 'Lecture 12 - IS-LM.pdf', path: 'Macroeconomics/Lecture 12 - IS-LM.pdf', course: 'Macroeconomics', at: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+        { name: 'Esercitazione 5.pdf', path: 'Analisi 2/Esercitazione 5.pdf', course: 'Analisi 2', at: new Date(Date.now() - 20 * 60 * 1000).toISOString() },
+        { name: 'Slides week 4 (v2).pptx', path: 'Corporate Finance/Slides week 4 (v2).pptx', course: 'Corporate Finance', at: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString() },
+    ],
+    openRecentDownload: async () => {},
     minimize: async () => {},
     close: async () => {},
     resetWindowSize: async () => {},

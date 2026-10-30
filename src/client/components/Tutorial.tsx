@@ -17,7 +17,7 @@ const STEPS: Step[] = [
     { target: '.sync-dir-box', title: 'tutorialFolderTitle', body: 'tutorialFolderBody' },
     { target: '.course-item .course-row', title: 'tutorialCoursesTitle', body: 'tutorialCoursesBody' },
     { target: '.term-filters', title: 'tutorialFiltersTitle', body: 'tutorialFiltersBody' },
-    { target: '.header-actions .btn-header-icon', title: 'tutorialSettingsTitle', body: 'tutorialSettingsBody' },
+    { target: '.btn-settings-icon', title: 'tutorialSettingsTitle', body: 'tutorialSettingsBody' },
     { target: '.settings-accounts', settings: true, title: 'tutorialPolimiTitle', body: 'tutorialPolimiBody' },
 ];
 

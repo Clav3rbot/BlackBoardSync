@@ -3,6 +3,7 @@ import { ArrowsClockwiseIcon } from '@phosphor-icons/react/dist/csr/ArrowsClockw
 import { CaretRightIcon } from '@phosphor-icons/react/dist/csr/CaretRight';
 import { CheckIcon } from '@phosphor-icons/react/dist/csr/Check';
 import { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+import { ClockCounterClockwiseIcon } from '@phosphor-icons/react/dist/csr/ClockCounterClockwise';
 import { CornersOutIcon } from '@phosphor-icons/react/dist/csr/CornersOut';
 import { DotsThreeIcon } from '@phosphor-icons/react/dist/csr/DotsThree';
 import { DownloadSimpleIcon } from '@phosphor-icons/react/dist/csr/DownloadSimple';
@@ -31,6 +32,7 @@ const GLYPHS = {
     folder: FolderSimpleIcon,
     folderOpen: FolderOpenIcon,
     hide: EyeSlashIcon,
+    history: ClockCounterClockwiseIcon,
     minimize: MinusIcon,
     moon: MoonIcon,
     pencil: PencilSimpleIcon,

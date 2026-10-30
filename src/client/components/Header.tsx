@@ -13,6 +13,7 @@ interface HeaderProps {
     onAbort: () => void;
     onLogout: () => void;
     onSettings: () => void;
+    onRecent: () => void;
     onOpenFolder: () => void;
     onChangeFolder: () => void;
 }
@@ -44,6 +45,7 @@ const Header: React.FC<HeaderProps> = ({
     onAbort,
     onLogout,
     onSettings,
+    onRecent,
     onOpenFolder,
     onChangeFolder,
 }) => {
@@ -67,7 +69,10 @@ const Header: React.FC<HeaderProps> = ({
                     </div>
                 </div>
                 <div className="header-actions">
-                    <button className="btn-header-icon" onClick={onSettings} title={t('settings')}>
+                    <button className="btn-header-icon" onClick={onRecent} title={t('recentDownloads')}>
+                        <Icon name="history" size={16} />
+                    </button>
+                    <button className="btn-header-icon btn-settings-icon" onClick={onSettings} title={t('settings')}>
                         <Icon name="settings" size={16} />
                     </button>
                     <button className="btn-header-icon btn-logout-icon" onClick={onLogout} title={t('logout')}>

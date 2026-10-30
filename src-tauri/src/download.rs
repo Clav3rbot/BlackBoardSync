@@ -1,7 +1,7 @@
 use crate::blackboard::{BlackboardAPI, ContentItem, Course, UserInfo};
 use crate::login::LoginManager;
 use crate::state::{AppState, Session};
-use crate::store::FileStamp;
+use crate::store::{FileStamp, RecentDownload};
 use crate::webeep;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -434,6 +434,7 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
                                     if let Some(name) = full_path.file_name() {
                                         file.file_name = name.to_string_lossy().into_owned();
                                     }
+                                    file.relative_path = versioned_path(&file.relative_path, version);
                                     dl_files.lock().await.push(file.clone());
                                 }
                                 let done = done_count.fetch_add(1, Ordering::SeqCst) + 1;
@@ -477,6 +478,15 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         ));
     }
     let dl_files = downloaded_files.lock().await;
+
+    let now = chrono::Utc::now().to_rfc3339();
+    state.store.lock().unwrap().add_recent_downloads(
+        dl_files
+            .iter()
+            .rev()
+            .map(|f| recent_entry(Path::new(&f.relative_path), f.file_name.clone(), now.clone()))
+            .collect(),
+    );
 
     let mut course_map: HashMap<String, SyncResultCourse> = HashMap::new();
     for f in dl_files.iter() {
@@ -614,6 +624,62 @@ fn files_equal(a: &Path, b: &Path) -> bool {
             return false;
         }
     }
+}
+
+/// Files a sync wrote, from the stamps: each synced path plus the versions kept beside it.
+/// A file synced only before stamps existed (v1.2.2) joins at the next sync.
+pub fn synced_paths(stamps: &HashMap<String, FileStamp>) -> HashSet<String> {
+    stamps
+        .iter()
+        .flat_map(|(rel, s)| (1..=s.version.max(1)).map(move |v| slash_path(Path::new(&versioned_path(rel, v)))))
+        .collect()
+}
+
+/// Synced files already in the folder, newest first, to seed the recent list with syncs made
+/// before it was kept. Files the user added are left out; creation time is the download time,
+/// and unlike the modification time it stays put when the user edits the file.
+pub fn recent_files_on_disk(sync_dir: &Path, synced: &HashSet<String>, max: usize) -> Vec<RecentDownload> {
+    let mut found = Vec::new();
+    let mut dirs = vec![sync_dir.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            // Not followed through symlinks, so a link loop can't trap the walk.
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                dirs.push(entry.path());
+                continue;
+            }
+            let Ok(rel) = entry.path().strip_prefix(sync_dir).map(Path::to_path_buf) else { continue };
+            if !meta.is_file() || !synced.contains(&slash_path(&rel)) {
+                continue;
+            }
+            let Ok(at) = meta.created().or_else(|_| meta.modified()) else { continue };
+            found.push((at, rel, entry.file_name().to_string_lossy().into_owned()));
+        }
+    }
+    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.truncate(max);
+    found
+        .into_iter()
+        .map(|(modified, rel, name)| {
+            recent_entry(&rel, name, chrono::DateTime::<chrono::Utc>::from(modified).to_rfc3339())
+        })
+        .collect()
+}
+
+/// `/` separators, so one file compares equal however its path was built.
+fn slash_path(rel: &Path) -> String {
+    rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/")
+}
+
+/// The course is the top folder, so a renamed course groups under the name the user gave it.
+fn recent_entry(rel: &Path, name: String, at: String) -> RecentDownload {
+    let course = match rel.components().count() {
+        0 | 1 => String::new(),
+        _ => rel.components().next().map(|c| c.as_os_str().to_string_lossy().into_owned()).unwrap_or_default(),
+    };
+    RecentDownload { course, path: slash_path(rel), name, at }
 }
 
 fn versioned_path(rel: &str, version: u32) -> String {
@@ -1306,6 +1372,32 @@ mod tests {
             "Corso/Week 3/n.pdf",
             "Corso/Week 3/n.pdf",
         ]);
+    }
+
+    #[test]
+    fn recent_files_on_disk_lists_only_synced_files() {
+        let dir = std::env::temp_dir().join(format!("bbsync-disk-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("Course/Week 1")).unwrap();
+        for f in ["Course/Week 1/a.pdf", "Course/Week 1/a (v2).pdf", "Course/my notes.docx", "root.txt"] {
+            std::fs::write(dir.join(f), "x").unwrap();
+        }
+        let stamps = HashMap::from([
+            (PathBuf::from("Course").join("Week 1").join("a.pdf").to_string_lossy().into_owned(), FileStamp { stamp: "s".into(), version: 2 }),
+            ("root.txt".to_string(), FileStamp { stamp: "s".into(), version: 1 }),
+        ]);
+
+        let mut found: Vec<_> = recent_files_on_disk(&dir, &synced_paths(&stamps), 10)
+            .into_iter()
+            .map(|r| (r.course, r.path))
+            .collect();
+        found.sort();
+        assert_eq!(found, [
+            ("".to_string(), "root.txt".to_string()),
+            ("Course".to_string(), "Course/Week 1/a (v2).pdf".to_string()),
+            ("Course".to_string(), "Course/Week 1/a.pdf".to_string()),
+        ]);
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]
