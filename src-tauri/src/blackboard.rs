@@ -336,6 +336,11 @@ impl BlackboardAPI {
             .send()
             .await
             .map_err(|e| e.to_string())?;
+        // 400 is the server's final "this item cannot hold attachments" (e.g. an Ultra page's
+        // body while hidden from students); retrying it only repeats the sync warning.
+        if response.status() == reqwest::StatusCode::BAD_REQUEST {
+            return Ok(Vec::new());
+        }
         // A throttled or failed call must not read as "no attachments".
         if !response.status().is_success() {
             return Err(format!("HTTP {}", response.status()));
