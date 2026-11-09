@@ -14,7 +14,7 @@ const Marquee: React.FC<{ text: string; className?: string }> = ({ text, classNa
         e.currentTarget.classList.remove('scrolling');
 
     return (
-        <span className={`marquee${className ? ` ${className}` : ''}`} onMouseEnter={onEnter} onMouseLeave={onLeave}>
+        <span className={`marquee${className ? ` ${className}` : ''}`} title={text} onMouseEnter={onEnter} onMouseLeave={onLeave}>
             <span>{text}</span>
         </span>
     );

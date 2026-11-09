@@ -77,7 +77,7 @@ $transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
     --warning: #e3b04b;
     --text-primary: #f2f2f4;
     --text-secondary: #a1a2aa;
-    --text-tertiary: #6e6f78;
+    --text-tertiary: #8b8c95;
     --text-on-glass: #bcbdc4;
     --glass-text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
     --fg: 255, 255, 255;
@@ -202,6 +202,10 @@ body {
 
 button:focus:not(:focus-visible),
 [role='button']:focus:not(:focus-visible) {
+    outline: none;
+}
+
+[role='dialog']:focus-visible {
     outline: none;
 }
 
@@ -442,6 +446,60 @@ button:focus:not(:focus-visible),
     }
 }
 
+.password-field {
+    position: relative;
+
+    input {
+        padding-right: 44px;
+    }
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 7px;
+    width: 30px;
+    height: 30px;
+    margin-top: -15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: $radius-sm;
+    background: transparent;
+    color: $text-tertiary;
+    cursor: pointer;
+    transition: color $transition-smooth;
+
+    &:hover {
+        color: $text-primary;
+    }
+}
+
+.login-alt {
+    display: block;
+    margin: 14px auto 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    font-size: 12px;
+    color: $text-on-glass;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color $transition-smooth;
+
+    &:hover:not(:disabled) {
+        color: $text-primary;
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: progress;
+    }
+}
+
 .error-message {
     background: $error-subtle;
     border: 1px solid color-mix(in srgb, $error 15%, transparent);
@@ -509,7 +567,7 @@ button:focus:not(:focus-visible),
 
     .login-disclaimer {
         margin-top: 12px;
-        font-size: 10px;
+        font-size: 11px;
         color: $text-secondary;
         line-height: 1.5;
         text-align: center;
@@ -544,6 +602,7 @@ button:focus:not(:focus-visible),
     display: flex;
     align-items: center;
     gap: 12px;
+    min-width: 0;
 }
 
 .user-avatar {
@@ -567,6 +626,7 @@ button:focus:not(:focus-visible),
     display: flex;
     flex-direction: column;
     gap: 3px;
+    min-width: 0;
 }
 
 .user-name {
@@ -587,6 +647,14 @@ button:focus:not(:focus-visible),
     font-size: 11px;
     color: $text-tertiary;
     line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color $transition-smooth;
+
+    &.up-to-date {
+        color: $success;
+    }
 }
 
 .btn-logout {
@@ -612,6 +680,8 @@ button:focus:not(:focus-visible),
 .header-actions {
     display: flex;
     gap: 6px;
+    flex-shrink: 0;
+    margin-left: 12px;
 }
 
 .btn-header-icon {
@@ -727,11 +797,21 @@ button:focus:not(:focus-visible),
     cursor: pointer;
     color: $text-secondary;
     font-size: 11px;
+    font-family: $font-family;
+    text-align: left;
+    background: none;
+    border: none;
     min-width: 0;
-    transition: color $transition-smooth;
+    transition: color $transition-smooth, background $transition-smooth;
 
     &:hover {
         color: $text-primary;
+        background: rgba(var(--fg), 0.04);
+    }
+
+    // The box clips its children, so the ring goes inside.
+    &:focus-visible {
+        outline-offset: -2px;
     }
 
     svg {
@@ -763,6 +843,10 @@ button:focus:not(:focus-visible),
     &:hover {
         background: rgba(var(--fg), 0.06);
         color: $text-primary;
+    }
+
+    &:focus-visible {
+        outline-offset: -2px;
     }
 }
 
@@ -890,9 +974,30 @@ button:focus:not(:focus-visible),
 }
 
 .progress-text-label {
+    flex: 1;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.progress-action {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 7px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: $text-primary;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background $transition-smooth;
+
+    &:hover {
+        background: rgba(var(--fg), 0.08);
+    }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -915,15 +1020,15 @@ button:focus:not(:focus-visible),
 }
 
 .section-label {
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 600;
     color: $text-tertiary;
     text-transform: uppercase;
-    letter-spacing: 0.11em;
+    letter-spacing: 0.08em;
 }
 
 .section-badge {
-    font-size: 10px;
+    font-size: 11px;
     color: $accent-soft;
     background: $accent-subtle;
     padding: 2px 10px;
@@ -1112,7 +1217,7 @@ button:focus:not(:focus-visible),
 .app-version {
     text-align: center;
     padding: 12px 18px 18px;
-    font-size: 10.5px;
+    font-size: 11px;
     font-family: $font-mono;
     color: $text-tertiary;
     letter-spacing: 0.02em;
@@ -1234,11 +1339,11 @@ button:focus:not(:focus-visible),
 
 .settings-group-label {
     display: block;
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 600;
     color: $text-tertiary;
     text-transform: uppercase;
-    letter-spacing: 0.11em;
+    letter-spacing: 0.08em;
     margin-bottom: 11px;
 }
 
@@ -1305,10 +1410,21 @@ button:focus:not(:focus-visible),
     white-space: nowrap;
     flex-shrink: 0;
 
-    &:hover {
+    &:hover:not(:disabled) {
         background: rgba(var(--fg), 0.06);
         color: $text-secondary;
         border-color: rgba(var(--fg), 0.1);
+    }
+
+    &:disabled {
+        opacity: 0.6;
+        cursor: progress;
+    }
+
+    .spinner-small {
+        width: 11px;
+        height: 11px;
+        margin-right: 0;
     }
 }
 
@@ -1370,40 +1486,6 @@ button:focus:not(:focus-visible),
     color: $text-secondary;
     min-width: 32px;
     text-align: right;
-}
-
-.btn-update {
-    width: 36px;
-    height: 36px;
-    border: 1px solid $border;
-    background: transparent;
-    color: $text-secondary;
-    cursor: pointer;
-    border-radius: $radius-sm;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    transition: all $transition-smooth;
-
-    &:hover:not(:disabled) {
-        background: rgba(var(--fg), 0.06);
-        border-color: rgba(var(--fg), 0.12);
-        color: $text-primary;
-    }
-
-    &:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-
-    &:active:not(:disabled) {
-        transform: scale(0.94);
-    }
-
-    &.checking {
-        border-color: rgba($accent, 0.3);
-    }
 }
 
 // In-app update dialog
@@ -1903,6 +1985,16 @@ button:focus:not(:focus-visible),
     flex-shrink: 0;
     transition: all $transition-spring;
     cursor: pointer;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+
+    &.term-checkbox {
+        width: 16px;
+        height: 16px;
+        margin-left: 5px;
+        border-radius: 4px;
+    }
 
     &:hover:not(.checked) {
         border-color: rgba(var(--fg), 0.25);
@@ -1975,7 +2067,7 @@ button:focus:not(:focus-visible),
 // has to say where it came from.
 .course-source {
     flex: 0 0 auto;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -2021,7 +2113,7 @@ button:focus:not(:focus-visible),
 }
 
 .course-original-name {
-    font-size: 10px;
+    font-size: 11px;
     color: $text-tertiary;
     white-space: nowrap;
     overflow: hidden;
@@ -2289,11 +2381,11 @@ button:focus:not(:focus-visible),
 }
 
 .term-name {
-    font-size: 9.5px;
+    font-size: 11px;
     font-weight: 600;
     color: $text-tertiary;
     text-transform: uppercase;
-    letter-spacing: 0.11em;
+    letter-spacing: 0.08em;
     flex: 1;
     white-space: nowrap;
     overflow: hidden;
@@ -2301,7 +2393,7 @@ button:focus:not(:focus-visible),
 }
 
 .term-count {
-    font-size: 10px;
+    font-size: 11px;
     color: $text-tertiary;
     background: rgba(var(--fg), 0.04);
     padding: 1px 7px;
@@ -2321,7 +2413,7 @@ button:focus:not(:focus-visible),
     background: transparent;
     color: $text-tertiary;
     border-radius: $radius-full;
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 700;
     cursor: pointer;
     flex-shrink: 0;
@@ -2394,11 +2486,12 @@ button:focus:not(:focus-visible),
         // keeps its resting width.
         .term-pill-label {
             transform: translateX(-6px);
-            mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent calc(100% - 11px));
+            --pill-fade: 26px;
         }
 
         .term-pill-hide-btn {
             opacity: 1;
+            transform: none;
             pointer-events: auto;
         }
     }
@@ -2414,21 +2507,35 @@ button:focus:not(:focus-visible),
     border: none;
     cursor: pointer;
     white-space: nowrap;
-    transition: color $transition-smooth, transform $transition-smooth;
+    mask-image: linear-gradient(
+        to right,
+        #000 calc(100% - var(--pill-fade)),
+        transparent calc(100% - var(--pill-fade) + 11px)
+    );
+    transition: color $transition-smooth, transform $transition-smooth, --pill-fade $transition-smooth;
 
     &:hover {
         color: $text-secondary;
     }
 }
 
+// Registered so the label's fade under the eye can animate; unregistered, it would snap.
+@property --pill-fade {
+    syntax: '<length>';
+    inherits: false;
+    initial-value: -12px;
+}
+
 .term-pill-hide-btn {
     position: absolute;
-    right: 4px;
+    right: 3px;
     top: 50%;
-    margin-top: -7px;
-    width: 14px;
-    height: 14px;
+    margin-top: -9px;
+    width: 18px;
+    height: 18px;
     opacity: 0;
+    // Slides in from the right while the label slides away.
+    transform: translateX(4px);
     pointer-events: none;
     border: none;
     background: transparent;
@@ -2439,14 +2546,52 @@ button:focus:not(:focus-visible),
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    font-size: 12px;
-    line-height: 1;
-    transition: opacity $transition-smooth, color $transition-smooth, background $transition-smooth;
+    transition: opacity $transition-smooth, transform $transition-smooth, color $transition-smooth,
+        background $transition-smooth;
 
     &:hover {
         color: $text-primary;
         background: rgba(var(--fg), 0.08);
     }
+
+}
+
+// An open eye whose slash is drawn or wiped instead of swapping glyphs. `struck`
+// is the hidden state; hover previews what the click will do.
+.eye-strike {
+    position: relative;
+    display: inline-flex;
+
+    &::after {
+        content: '';
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 13px;
+        height: 1.25px;
+        margin: -0.625px 0 0 -6.5px;
+        border-radius: 1px;
+        background: currentColor;
+        transform: rotate(48deg);
+        clip-path: inset(0 100% 0 0);
+        transition: clip-path $transition-smooth;
+    }
+
+    &.struck::after {
+        clip-path: inset(0);
+    }
+
+    &:hover > .icon {
+        animation: none;
+    }
+}
+
+.term-pill-hide-btn:is(:hover, :focus-visible) .eye-strike::after {
+    clip-path: inset(0);
+}
+
+:is(.term-pill-unhide-x, .term-pill-hidden-toggle):is(:hover, :focus-visible) .eye-strike::after {
+    clip-path: inset(0 100% 0 0);
 }
 
 .term-courses {
@@ -2603,7 +2748,7 @@ button:focus:not(:focus-visible),
 }
 
 .modal-course-count {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     color: $accent-soft;
     background: $accent-subtle;
@@ -2646,7 +2791,7 @@ button:focus:not(:focus-visible),
 }
 
 .modal-file-badge {
-    font-size: 9px;
+    font-size: 11px;
     font-weight: 700;
     color: $success;
     background: $success-subtle;
@@ -2702,7 +2847,7 @@ button:focus:not(:focus-visible),
 }
 
 .recent-file-course {
-    font-size: 10px;
+    font-size: 11px;
     color: $text-tertiary;
     white-space: nowrap;
     overflow: hidden;
@@ -2903,6 +3048,7 @@ $icon-intent: 140ms;
 :hover > .icon-dots { animation: iconDots 520ms $icon-ease $icon-intent both; }
 :hover > :is(.icon-hide, .icon-show) { animation: iconBlink 380ms ease-in-out $icon-intent both; }
 :hover > :is(.icon-folder, .icon-folderOpen) { animation: iconLift 560ms $icon-spring $icon-intent both; }
+.term-pill-hidden-toggle:hover .eye-strike:not(.struck) > .icon { animation: iconBlink 380ms ease-in-out $icon-intent both; }
 
 .checkbox.checked > .icon-check,
 .modal-status-icon > .icon {
@@ -3031,7 +3177,7 @@ $tour-ease: cubic-bezier(0.32, 0.72, 0, 1);
     display: block;
     margin-bottom: 6px;
     font-family: $font-mono;
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
     color: $text-tertiary;
 }

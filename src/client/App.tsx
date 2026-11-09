@@ -103,14 +103,14 @@ const App: React.FC = () => {
                     <button
                         className="titlebar-btn"
                         onClick={() => window.api.minimize()}
-                        aria-label="Minimize"
+                        aria-label={t('minimize')}
                     >
                         <Icon name="minimize" size={13} weight="regular" />
                     </button>
                     <button
                         className="titlebar-btn close"
                         onClick={() => window.api.close()}
-                        aria-label="Close"
+                        aria-label={t('close')}
                     >
                         <Icon name="close" size={13} weight="regular" />
                     </button>
@@ -128,6 +128,9 @@ const App: React.FC = () => {
                         <div className="spinner" />
                         <p>{t('offline')}</p>
                         <p>{t('offlineHint')}</p>
+                        <button className="btn-settings-action" onClick={restore}>
+                            {t('retry')}
+                        </button>
                     </div>
                 ) : loggedIn && user ? (
                     <SyncView

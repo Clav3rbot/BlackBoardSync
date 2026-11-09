@@ -7,6 +7,8 @@ interface HeaderProps {
     userName: string;
     matricola?: string;
     lastSync: string;
+    lastSyncTitle?: string;
+    upToDate: boolean;
     syncing: boolean;
     syncDir: string;
     onSync: () => void;
@@ -39,6 +41,8 @@ const Header: React.FC<HeaderProps> = ({
     userName,
     matricola,
     lastSync,
+    lastSyncTitle,
+    upToDate,
     syncing,
     syncDir,
     onSync,
@@ -63,8 +67,12 @@ const Header: React.FC<HeaderProps> = ({
                             {formatStudentName(userName)}
                             {matricola && <span className="user-matricola-text"> {matricola}</span>}
                         </span>
-                        <span className="last-sync">
-                            {t('lastSync')}: {lastSync}
+                        <span
+                            className={`last-sync${upToDate ? ' up-to-date' : ''}`}
+                            title={lastSyncTitle}
+                            aria-live="polite"
+                        >
+                            {upToDate ? t('upToDate') : `${t('lastSync')}: ${lastSync}`}
                         </span>
                     </div>
                 </div>
@@ -100,10 +108,14 @@ const Header: React.FC<HeaderProps> = ({
 
             {syncDir && (
                 <div className="sync-dir-box">
-                    <div className="sync-dir-input" onClick={onOpenFolder} title={syncDir}>
-                        <Icon name="folder" size={14} />
+                    <button
+                        className="sync-dir-input"
+                        onClick={onOpenFolder}
+                        title={`${t('openFolder')}: ${syncDir}`}
+                    >
+                        <Icon name="folderOpen" size={14} />
                         <span className="sync-dir-path">{syncDir}</span>
-                    </div>
+                    </button>
                     <button className="sync-dir-change" onClick={onChangeFolder} title={t('changeFolder')}>
                         <Icon name="pencil" size={13} />
                     </button>

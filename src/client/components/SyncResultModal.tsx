@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import Icon from './Icon';
 import Marquee from './Marquee';
 import { getT } from '../i18n';
 import { useEscape } from '../useEscape';
+import { useFocusTrap } from '../useFocusTrap';
 import type { SyncResult } from '../../types';
 
 interface SyncResultModalProps {
@@ -13,6 +14,8 @@ interface SyncResultModalProps {
 
 const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose }) => {
     useEscape(onClose);
+    const ref = useRef<HTMLDivElement>(null);
+    useFocusTrap(ref);
     const hasNewFiles = result.totalDownloaded > 0;
     const t = getT(lang);
 
@@ -37,7 +40,15 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div
+                ref={ref}
+                className="modal-container"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="sync-result-title"
+                tabIndex={-1}
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="modal-header">
                     <div className="modal-status-icon">
                         {hasNewFiles ? (
@@ -46,7 +57,7 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose
                             <Icon name="checkCircle" size={26} />
                         )}
                     </div>
-                    <h2 className="modal-title">
+                    <h2 id="sync-result-title" className="modal-title">
                         {hasNewFiles 
                             ? (lang === 'en' ? 'Synchronization completed' : 'Sincronizzazione completata')
                             : (lang === 'en' ? 'Everything up to date' : 'Tutto aggiornato')}

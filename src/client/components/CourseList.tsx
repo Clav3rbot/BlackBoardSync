@@ -27,6 +27,7 @@ interface CourseListProps {
     cacheMisses?: Set<string>;
     heatmap?: boolean;
     onToggle: (courseId: string) => void;
+    onToggleTerm: (courseIds: string[], enable: boolean) => void;
     onRename: (courseId: string, newName: string) => void;
     onCollapsedTermsChange: (collapsed: string[]) => void;
     onHide: (courseId: string) => void;
@@ -55,6 +56,7 @@ const CourseList: React.FC<CourseListProps> = ({
     cacheMisses,
     heatmap,
     onToggle,
+    onToggleTerm,
     onRename,
     onCollapsedTermsChange,
     onHide,
@@ -182,6 +184,13 @@ const CourseList: React.FC<CourseListProps> = ({
         });
     };
 
+    // Filtering to a collapsed term opens it: it would otherwise show an empty list.
+    const selectTerm = (termId: string) => {
+        const selecting = activeTerm !== termId;
+        setActiveTerm(selecting ? termId : null);
+        if (selecting && collapsedTerms.has(termId)) toggleTermCollapse(termId);
+    };
+
     const toggleRevealedTerm = (termId: string, e: React.MouseEvent) => {
         e.stopPropagation();
         setRevealedTerms((prev) => {
@@ -267,11 +276,7 @@ const CourseList: React.FC<CourseListProps> = ({
                         <span key={group.termId} className={`term-pill-wrap ${activeTerm === group.termId ? 'active' : ''}`}>
                             <button
                                 className="term-pill-label"
-                                onClick={() =>
-                                    setActiveTerm(
-                                        activeTerm === group.termId ? null : group.termId
-                                    )
-                                }
+                                onClick={() => selectTerm(group.termId)}
                             >
                                 {group.termName}
                             </button>
@@ -279,8 +284,11 @@ const CourseList: React.FC<CourseListProps> = ({
                                 className="term-pill-hide-btn"
                                 onClick={(e) => { e.stopPropagation(); onHideTerm(group.termId); }}
                                 title={t('hideTermTooltip')}
+                                aria-label={t('hideTermTooltip')}
                             >
-                                ×
+                                <span className="eye-strike">
+                                    <Icon name="show" size={12} />
+                                </span>
                             </button>
                         </span>
                     ))}
@@ -291,7 +299,9 @@ const CourseList: React.FC<CourseListProps> = ({
                                 onClick={() => setShowHiddenTermPills((v) => !v)}
                                 title={showHiddenTermPills ? t('hideHiddenTermsTooltip') : `${t('showHiddenTermsTooltip')} (${hiddenTermGroups.length})`}
                             >
-                                <Icon name="hide" size={12} />
+                                <span className={`eye-strike${showHiddenTermPills ? '' : ' struck'}`}>
+                                    <Icon name="show" size={12} />
+                                </span>
                                 <span>{hiddenTermGroups.length}</span>
                             </button>
                             {showHiddenTermPills && hiddenTermGroups.map((group) => (
@@ -301,8 +311,11 @@ const CourseList: React.FC<CourseListProps> = ({
                                         className="term-pill-unhide-x"
                                         onClick={(e) => { e.stopPropagation(); onUnhideTerm(group.termId); }}
                                         title={t('restoreTermTooltip')}
+                                        aria-label={t('restoreTermTooltip')}
                                     >
-                                        <Icon name="close" size={11} />
+                                        <span className="eye-strike struck">
+                                            <Icon name="show" size={12} />
+                                        </span>
                                     </button>
                                 </span>
                             ))}
@@ -318,14 +331,46 @@ const CourseList: React.FC<CourseListProps> = ({
                     const visibleCourses = group.courses.filter(c => !hiddenCourses.includes(c.id));
                     const hiddenCoursesInTerm = group.courses.filter(c => hiddenCourses.includes(c.id));
                     const hiddenCount = hiddenCoursesInTerm.length;
+                    const selectedInTerm = visibleCourses.filter(
+                        (c) => allEnabled || enabledCourses.includes(c.id)
+                    ).length;
+                    const termChecked = selectedInTerm > 0 && selectedInTerm === visibleCourses.length;
 
                     return (
                         <div key={group.termId} className="term-group">
                             {termGroups.length > 1 && (
                                 <div
                                     className="term-header"
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-expanded={!isCollapsed}
                                     onClick={() => toggleTermCollapse(group.termId)}
+                                    onKeyDown={(e) => {
+                                        // Not for keys pressed on the buttons inside the header.
+                                        if (e.target !== e.currentTarget) return;
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            toggleTermCollapse(group.termId);
+                                        }
+                                    }}
                                 >
+                                    {visibleCourses.length > 0 && (
+                                        <button
+                                            className={`checkbox term-checkbox ${selectedInTerm > 0 ? 'checked' : ''}`}
+                                            role="checkbox"
+                                            aria-checked={termChecked ? true : selectedInTerm > 0 ? 'mixed' : false}
+                                            aria-label={`${t('selectAllInTerm')}: ${group.termName}`}
+                                            title={t('selectAllInTerm')}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onToggleTerm(visibleCourses.map((c) => c.id), !termChecked);
+                                            }}
+                                        >
+                                            {selectedInTerm > 0 && (
+                                                <Icon name={termChecked ? 'check' : 'minimize'} size={10} />
+                                            )}
+                                        </button>
+                                    )}
                                     <span
                                         className={`term-chevron ${isCollapsed ? '' : 'expanded'}`}
                                     >
@@ -340,6 +385,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                             className={`term-hidden-btn ${isRevealed ? 'active' : ''}`}
                                             onClick={(e) => toggleRevealedTerm(group.termId, e)}
                                             title={isRevealed ? t('actionHide') : `${hiddenCount} ${t('hiddenCoursesCount')}`}
+                                            aria-label={isRevealed ? t('actionHide') : `${hiddenCount} ${t('hiddenCoursesCount')}`}
                                         >
                                             {isRevealed ? (
                                                 <Icon name="show" size={11} />
@@ -396,8 +442,11 @@ const CourseList: React.FC<CourseListProps> = ({
                                                 <div
                                                     className={`course-row ${isEnabled ? 'enabled' : 'disabled'}`}
                                                 >
-                                                    <div
+                                                    <button
                                                         className={`checkbox ${isEnabled ? 'checked' : ''}`}
+                                                        role="checkbox"
+                                                        aria-checked={isEnabled}
+                                                        aria-label={displayName}
                                                         onClick={() =>
                                                             onToggle(course.id)
                                                         }
@@ -405,7 +454,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                         {isEnabled && (
                                                             <Icon name="check" size={12} />
                                                         )}
-                                                    </div>
+                                                    </button>
                                                     <div
                                                         className="course-info"
                                                         onClick={() =>
@@ -468,6 +517,7 @@ const CourseList: React.FC<CourseListProps> = ({
                                                                     setActionsOpenId(actionsOpenId === course.id ? null : course.id);
                                                                 }}
                                                                 title={t('actionsTooltip')}
+                                                                aria-label={t('actionsTooltip')}
                                                             >
                                                                 <Icon name="dots" size={15} />
                                                             </button>

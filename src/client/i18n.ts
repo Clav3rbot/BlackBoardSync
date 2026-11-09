@@ -19,6 +19,19 @@ export interface TranslationKeys {
     recentDownloadsEmpty: string;
     recentDownloadsNoCourse: string;
     showInFolder: string;
+    cancel: string;
+    minimize: string;
+    upToDate: string;
+    nextSyncAt: string;
+    autoSyncEvery: string;
+    logoutConfirmTitle: string;
+    logoutConfirmText: string;
+    logoutConfirmSubtext: string;
+    showPassword: string;
+    hidePassword: string;
+    loginWithPolimi: string;
+    checkUpdatesShort: string;
+    selectAllInTerm: string;
 
     loginTitle: string;
     loginSubtitle: string;
@@ -157,6 +170,19 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         recentDownloadsEmpty: "Nessun file scaricato di recente",
         recentDownloadsNoCourse: "Altri file",
         showInFolder: "Mostra nella cartella",
+        cancel: "Annulla",
+        minimize: "Riduci a icona",
+        upToDate: "Tutto aggiornato",
+        nextSyncAt: "prossima alle",
+        autoSyncEvery: "auto ogni",
+        logoutConfirmTitle: "Vuoi disconnetterti?",
+        logoutConfirmText: "Dovrai accedere di nuovo per sincronizzare.",
+        logoutConfirmSubtext: "I file già scaricati restano nella cartella.",
+        showPassword: "Mostra password",
+        hidePassword: "Nascondi password",
+        loginWithPolimi: "Solo PoliMi? Accedi con WeBeep",
+        checkUpdatesShort: "Cerca aggiornamenti",
+        selectAllInTerm: "Seleziona tutti i corsi",
 
         loginTitle: "Accedi a Blackboard",
         loginSubtitle: "Accedi con le credenziali dell'Università Bocconi",
@@ -242,7 +268,7 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         tutorialCoursesTitle: "I tuoi corsi",
         tutorialCoursesBody: "La spunta decide quali corsi sincronizzare.\nDal menu [icon:dots] puoi:\n- rinominare un corso\n- aprirne la cartella\n- nasconderlo dalla lista",
         tutorialFiltersTitle: "Filtri per semestre",
-        tutorialFiltersBody: "Mostra un solo semestre alla volta.\nPassa sopra un filtro e premi [icon:close] per nasconderlo.",
+        tutorialFiltersBody: "Mostra un solo semestre alla volta.\nPassa sopra un filtro e premi [icon:hide] per nasconderlo.",
         tutorialSettingsTitle: "Impostazioni",
         tutorialSettingsBody: "Qui trovi:\n- sincronizzazione automatica\n- tema chiaro o scuro\n- lingua\n- account Bocconi e PoliMi",
         tutorialPolimiTitle: "Politecnico di Milano",
@@ -293,6 +319,19 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         recentDownloadsEmpty: "No recently downloaded files",
         recentDownloadsNoCourse: "Other files",
         showInFolder: "Show in folder",
+        cancel: "Cancel",
+        minimize: "Minimize",
+        upToDate: "Everything up to date",
+        nextSyncAt: "next at",
+        autoSyncEvery: "auto every",
+        logoutConfirmTitle: "Log out?",
+        logoutConfirmText: "You will need to sign in again to sync.",
+        logoutConfirmSubtext: "Files already downloaded stay in the folder.",
+        showPassword: "Show password",
+        hidePassword: "Hide password",
+        loginWithPolimi: "PoliMi only? Sign in with WeBeep",
+        checkUpdatesShort: "Check for updates",
+        selectAllInTerm: "Select all courses",
 
         loginTitle: "Log in to Blackboard",
         loginSubtitle: "Sign in with your Bocconi University credentials",
@@ -378,7 +417,7 @@ export const translations: Record<'it' | 'en', TranslationKeys> = {
         tutorialCoursesTitle: "Your courses",
         tutorialCoursesBody: "The tick decides which courses are synced.\nFrom the [icon:dots] menu you can:\n- rename a course\n- open its folder\n- hide it from the list",
         tutorialFiltersTitle: "Semester filters",
-        tutorialFiltersBody: "Show one semester at a time.\nHover a filter and press [icon:close] to hide it.",
+        tutorialFiltersBody: "Show one semester at a time.\nHover a filter and press [icon:hide] to hide it.",
         tutorialSettingsTitle: "Settings",
         tutorialSettingsBody: "Here you will find:\n- automatic sync\n- light or dark theme\n- language\n- your Bocconi and PoliMi accounts",
         tutorialPolimiTitle: "Politecnico di Milano",

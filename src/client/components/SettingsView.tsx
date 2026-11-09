@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Icon from './Icon';
 import { formatStudentName } from './Header';
 import { getT } from '../i18n';
 import { applyTheme } from '../theme';
 import { useEscape } from '../useEscape';
+import { useFocusTrap } from '../useFocusTrap';
 import type { Accounts } from '../App';
 import type { AppConfig } from '../../types';
+
+// The row takes the click; the switch is what the keyboard and screen readers reach.
+const Switch: React.FC<{ on: boolean; label: string }> = ({ on, label }) => (
+    <button className={`toggle ${on ? 'active' : ''}`} role="switch" aria-checked={on} aria-label={label}>
+        <span className="toggle-thumb" />
+    </button>
+);
 
 interface SettingsViewProps {
     config: AppConfig;
@@ -62,6 +70,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     }, [dismiss]);
 
     useEscape(() => setClosing(true));
+    const panelRef = useRef<HTMLDivElement>(null);
+    useFocusTrap(panelRef);
 
     useEffect(() => {
         window.api.getAppVersion().then(setAppVersion).catch(() => {});
@@ -141,15 +151,20 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     return (
         <div className={`settings-overlay ${closing ? 'closing' : ''}`} onClick={() => setClosing(true)}>
             <div
+                ref={panelRef}
                 className="settings-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="settings-title"
+                tabIndex={-1}
                 onClick={(e) => e.stopPropagation()}
                 onAnimationEnd={(e) => {
                     if (closing && e.target === e.currentTarget) onClose();
                 }}
             >
                 <div className="settings-header">
-                    <h2 className="settings-title">{t('settingsTitle')}</h2>
-                    <button className="settings-close-btn" onClick={() => setClosing(true)}>
+                    <h2 id="settings-title" className="settings-title">{t('settingsTitle')}</h2>
+                    <button className="settings-close-btn" onClick={() => setClosing(true)} aria-label={t('close')}>
                         <Icon name="close" size={15} weight="regular" />
                     </button>
                 </div>
@@ -175,9 +190,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="settings-group">
                         <div className="toggle-row" onClick={() => updateSetting({ autoSync: !config.autoSync })}>
                             <span className="toggle-label">{t('autoSyncGroup')}</span>
-                            <div className={`toggle ${config.autoSync ? 'active' : ''}`}>
-                                <div className="toggle-thumb" />
-                            </div>
+                            <Switch on={config.autoSync} label={t('autoSyncGroup')} />
                         </div>
 
                         {config.autoSync && (
@@ -229,9 +242,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <span className="toggle-label">{t('minimizeToTrayLabel')}</span>
                                 <span className="setting-desc">{t('minimizeToTrayDesc')}</span>
                             </div>
-                            <div className={`toggle ${config.minimizeToTray ? 'active' : ''}`}>
-                                <div className="toggle-thumb" />
-                            </div>
+                            <Switch on={config.minimizeToTray} label={t('minimizeToTrayLabel')} />
                         </div>
 
                         <div className="setting-divider" />
@@ -243,9 +254,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 </span>
                                 <span className="setting-desc">{t('startAtLoginDesc')}</span>
                             </div>
-                            <div className={`toggle ${config.startAtLogin ? 'active' : ''}`}>
-                                <div className="toggle-thumb" />
-                            </div>
+                            <Switch
+                                on={config.startAtLogin}
+                                label={navigator.userAgent.includes('Mac') ? t('startAtLoginLabelMac') : t('startAtLoginLabelWin')}
+                            />
                         </div>
 
                         <div className="setting-divider" />
@@ -255,9 +267,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <span className="toggle-label">{t('syncOnStartupLabel')}</span>
                                 <span className="setting-desc">{t('syncOnStartupDesc')}</span>
                             </div>
-                            <div className={`toggle ${config.syncOnStartup ? 'active' : ''}`}>
-                                <div className="toggle-thumb" />
-                            </div>
+                            <Switch on={config.syncOnStartup} label={t('syncOnStartupLabel')} />
                         </div>
 
                         <div className="setting-divider" />
@@ -267,9 +277,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <span className="toggle-label">{t('notificationsLabel')}</span>
                                 <span className="setting-desc">{t('notificationsDesc')}</span>
                             </div>
-                            <div className={`toggle ${config.notifications ? 'active' : ''}`}>
-                                <div className="toggle-thumb" />
-                            </div>
+                            <Switch on={config.notifications} label={t('notificationsLabel')} />
                         </div>
 
                         <div className="setting-divider" />
@@ -279,9 +287,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 <span className="toggle-label">{t('heatmapLabel')}</span>
                                 <span className="setting-desc">{t('heatmapDesc')}</span>
                             </div>
-                            <div className={`toggle ${config.heatmap ? 'active' : ''}`}>
-                                <div className="toggle-thumb" />
-                            </div>
+                            <Switch on={!!config.heatmap} label={t('heatmapLabel')} />
                         </div>
 
                         <div className="setting-divider" />
@@ -437,17 +443,17 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 </span>
                             </div>
                             <button
-                                className={`btn-update ${checkingUpdate ? 'checking' : ''}`}
+                                className="btn-settings-action"
                                 onClick={handleCheckForUpdates}
                                 disabled={checkingUpdate}
-                                aria-label={checkingUpdate ? t('checkingUpdates') : t('checkUpdates')}
                                 title={checkingUpdate ? t('checkingUpdates') : t('checkUpdates')}
                             >
                                 {checkingUpdate ? (
                                     <span className="spinner-small" />
                                 ) : (
-                                    <Icon name="download" size={15} />
+                                    <Icon name="sync" size={12} />
                                 )}
+                                {t('checkUpdatesShort')}
                             </button>
                         </div>
                         {getUpdateMessage() && (

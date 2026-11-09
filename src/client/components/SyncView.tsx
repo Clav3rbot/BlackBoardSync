@@ -4,6 +4,7 @@ import CourseList from './CourseList';
 import SyncResultModal from './SyncResultModal';
 import RecentDownloadsModal from './RecentDownloadsModal';
 import SettingsView from './SettingsView';
+import ConfirmDialog from './ConfirmDialog';
 import Tutorial from './Tutorial';
 import Icon from './Icon';
 import { getT } from '../i18n';
@@ -43,7 +44,15 @@ const SyncView: React.FC<SyncViewProps> = ({
     const [cacheMisses, setCacheMisses] = useState<Set<string>>(new Set());
     const [tutorialOpen, setTutorialOpen] = useState(false);
     const [recentOpen, setRecentOpen] = useState(false);
+    const [logoutConfirm, setLogoutConfirm] = useState(false);
+    const [upToDate, setUpToDate] = useState(false);
+    const [now, setNow] = useState(Date.now());
     const tutorialShown = useRef(false);
+
+    useEffect(() => {
+        const id = window.setInterval(() => setNow(Date.now()), 30000);
+        return () => window.clearInterval(id);
+    }, []);
 
     // The tour waits for the courses to be on screen so it can point at them; once per session.
     useEffect(() => {
@@ -94,7 +103,13 @@ const SyncView: React.FC<SyncViewProps> = ({
 
         const unsubComplete = window.api.onSyncComplete((result: SyncResult) => {
             setSyncing(false);
-            if (result) setSyncResult(result);
+            if (result && (result.totalDownloaded > 0 || result.warnings?.length > 0)) {
+                setSyncResult(result);
+            } else if (result) {
+                setUpToDate(true);
+                window.setTimeout(() => setUpToDate(false), 5000);
+            }
+            setNow(Date.now());
             loadConfig();
         });
 
@@ -230,22 +245,11 @@ const SyncView: React.FC<SyncViewProps> = ({
         setProgress(null);
     };
 
-    const handleToggleCourse = async (courseId: string) => {
+    const saveSelection = async (change: (enabled: string[]) => string[]) => {
         if (!config) return;
         const hidden = config.hiddenCourses || [];
         const visibleIds = courses.filter((c) => !hidden.includes(c.id)).map((c) => c.id);
-
-        let enabled: string[];
-        if (config.syncAllCourses) {
-            enabled = visibleIds.filter((id) => id !== courseId);
-        } else {
-            enabled = [...config.enabledCourses];
-            if (enabled.includes(courseId)) {
-                enabled = enabled.filter((id) => id !== courseId);
-            } else {
-                enabled.push(courseId);
-            }
-        }
+        const enabled = change(config.syncAllCourses ? visibleIds : config.enabledCourses);
 
         // Back to "sync all" when every visible course is checked, so new courses keep syncing.
         const syncAll =
@@ -257,6 +261,18 @@ const SyncView: React.FC<SyncViewProps> = ({
         });
         setConfig(newConfig);
     };
+
+    const handleToggleCourse = (courseId: string) =>
+        saveSelection((enabled) =>
+            enabled.includes(courseId) ? enabled.filter((id) => id !== courseId) : [...enabled, courseId]
+        );
+
+    const handleToggleTerm = (courseIds: string[], enable: boolean) =>
+        saveSelection((enabled) =>
+            enable
+                ? [...enabled, ...courseIds.filter((id) => !enabled.includes(id))]
+                : enabled.filter((id) => !courseIds.includes(id))
+        );
 
     const handleRenameCourse = async (courseId: string, newName: string) => {
         if (!config) return;
@@ -314,16 +330,34 @@ const SyncView: React.FC<SyncViewProps> = ({
         }
     };
 
-    const formatLastSync = (iso: string | null): string => {
-        if (!iso) return t('never');
-        const date = new Date(iso);
-        return date.toLocaleString(lang === 'en' ? 'en-US' : 'it-IT', {
+    const locale = lang === 'en' ? 'en-US' : 'it-IT';
+    const formatLastSyncDate = (iso: string): string =>
+        new Date(iso).toLocaleString(locale, {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
         });
+
+    const formatLastSync = (iso: string | null): string => {
+        if (!iso) return t('never');
+        const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+        const mins = Math.floor((now - Date.parse(iso)) / 60000);
+        if (mins < 1) return relative.format(0, 'second');
+        if (mins < 60) return relative.format(-mins, 'minute');
+        if (mins < 60 * 24) return relative.format(-Math.floor(mins / 60), 'hour');
+        if (mins < 60 * 24 * 7) return relative.format(-Math.floor(mins / (60 * 24)), 'day');
+        return formatLastSyncDate(iso);
+    };
+
+    // The interval timer restarts with the app, so only the daily mode has a known next time.
+    const autoSyncNote = (cfg: AppConfig): string => {
+        if (!cfg.autoSync) return '';
+        const mins = cfg.autoSyncInterval;
+        return mins === 0
+            ? ` · ${t('nextSyncAt')} ${cfg.autoSyncScheduledTime}`
+            : ` · ${t('autoSyncEvery')} ${mins < 60 ? `${mins}m` : `${mins / 60}h`}`;
     };
 
     if (!config) {
@@ -363,11 +397,15 @@ const SyncView: React.FC<SyncViewProps> = ({
                 userName={`${user.name.given} ${user.name.family}`}
                 matricola={user.userName}
                 lastSync={formatLastSync(config.lastSync)}
+                lastSyncTitle={
+                    (config.lastSync ? formatLastSyncDate(config.lastSync) : t('never')) + autoSyncNote(config)
+                }
+                upToDate={upToDate}
                 syncing={syncing}
                 syncDir={config.syncDir}
                 onSync={handleSync}
                 onAbort={handleAbortSync}
-                onLogout={() => onLogout('all')}
+                onLogout={() => setLogoutConfirm(true)}
                 onSettings={openSettings}
                 onRecent={() => setRecentOpen(true)}
                 onOpenFolder={() => window.api.openFolder(config.syncDir)}
@@ -390,6 +428,21 @@ const SyncView: React.FC<SyncViewProps> = ({
                     </div>
                     <p className="progress-text" aria-live="polite">
                         <span className="progress-text-label">{phaseText}</span>
+                        {isSyncError && (
+                            <>
+                                <button className="progress-action" onClick={handleSync}>
+                                    {t('retry')}
+                                </button>
+                                <button
+                                    className="progress-action"
+                                    onClick={() => setProgress(null)}
+                                    aria-label={t('close')}
+                                    title={t('close')}
+                                >
+                                    <Icon name="close" size={12} />
+                                </button>
+                            </>
+                        )}
                     </p>
                 </div>
             )}
@@ -425,6 +478,7 @@ const SyncView: React.FC<SyncViewProps> = ({
                 hiddenTerms={config.hiddenTerms || []}
                 loading={loadingCourses}
                 onToggle={handleToggleCourse}
+                onToggleTerm={handleToggleTerm}
                 onRename={handleRenameCourse}
                 onCollapsedTermsChange={handleCollapsedTermsChange}
                 onHide={handleHideCourse}
@@ -461,25 +515,34 @@ const SyncView: React.FC<SyncViewProps> = ({
                 <Tutorial lang={lang} onDone={handleTutorialDone} onSettings={handleTutorialSettings} />
             )}
 
+            {logoutConfirm && (
+                <ConfirmDialog
+                    icon="signOut"
+                    title={t('logoutConfirmTitle')}
+                    text={t('logoutConfirmText')}
+                    subtext={t('logoutConfirmSubtext')}
+                    cancelLabel={t('cancel')}
+                    confirmLabel={t('logout')}
+                    onCancel={() => setLogoutConfirm(false)}
+                    onConfirm={() => onLogout('all')}
+                />
+            )}
+
             {updateReady && (
-                <div className="update-dialog-overlay" onClick={() => setUpdateReady(null)}>
-                    <div className="update-dialog" onClick={(e) => e.stopPropagation()}>
-                        <div className="update-dialog-icon">
-                            <Icon name="download" size={30} />
-                        </div>
-                        <h3 className="update-dialog-title">{t('updateReadyTitle')}</h3>
-                        <p className="update-dialog-text">
-                            {updateReady.releaseName
-                                ? (lang === 'en' ? `Version ${updateReady.releaseName} has been downloaded.` : `La versione ${updateReady.releaseName} è stata scaricata.`)
-                                : t('updateReadyText')}
-                        </p>
-                        <p className="update-dialog-subtext">{t('updateReadySubtext')}</p>
-                        <div className="update-dialog-actions">
-                            <button className="btn-update-later" onClick={() => setUpdateReady(null)}>{t('updateLater')}</button>
-                            <button className="btn-update-restart" onClick={() => window.api.restartForUpdate()}>{t('updateRestart')}</button>
-                        </div>
-                    </div>
-                </div>
+                <ConfirmDialog
+                    icon="download"
+                    title={t('updateReadyTitle')}
+                    text={
+                        updateReady.releaseName
+                            ? (lang === 'en' ? `Version ${updateReady.releaseName} has been downloaded.` : `La versione ${updateReady.releaseName} è stata scaricata.`)
+                            : t('updateReadyText')
+                    }
+                    subtext={t('updateReadySubtext')}
+                    cancelLabel={t('updateLater')}
+                    confirmLabel={t('updateRestart')}
+                    onCancel={() => setUpdateReady(null)}
+                    onConfirm={() => window.api.restartForUpdate()}
+                />
             )}
         </div>
     );
