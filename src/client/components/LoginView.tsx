@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import appIcon from '../../../static/icons/png/128x128.png';
+import { EyeMorph } from './MorphIcon';
 import { getT } from '../i18n';
 
-// Sign-in is Bocconi only; PoliMi is connected later from Settings.
+// The form is Bocconi; PoliMi-only students get a link, everyone else connects it from Settings.
 interface LoginViewProps {
     lang: 'it' | 'en';
     onLogin: (provider: 'bocconi' | 'webeep', user: any) => void;
@@ -13,8 +14,27 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [webeepBusy, setWebeepBusy] = useState(false);
 
     const t = getT(lang);
+
+    const handleWebeep = async () => {
+        setWebeepBusy(true);
+        setError('');
+        try {
+            const result = await window.api.webeepLogin();
+            if (result.success) {
+                onLogin('webeep', result.user);
+            } else {
+                setError(result.error || t('loginError'));
+            }
+        } catch {
+            setError(t('loginError'));
+        } finally {
+            setWebeepBusy(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -67,19 +87,30 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
 
                     <div className="form-group">
                         <label htmlFor="password">{t('passwordLabel')}</label>
-                        <input
-                            id="password"
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            placeholder={t('passwordPlaceholder')}
-                            disabled={loading}
-                        />
+                        <div className="password-field">
+                            <input
+                                id="password"
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                placeholder={t('passwordPlaceholder')}
+                                disabled={loading}
+                            />
+                            <button
+                                type="button"
+                                className="password-toggle"
+                                onClick={() => setShowPassword((v) => !v)}
+                                aria-label={t(showPassword ? 'hidePassword' : 'showPassword')}
+                                data-tip={t(showPassword ? 'hidePassword' : 'showPassword')}
+                            >
+                                <EyeMorph closed={!showPassword} />
+                            </button>
+                        </div>
                     </div>
 
-                    {error && <div className="error-message">{error}</div>}
+                    {error && <div className="error-message" role="alert">{error}</div>}
 
-                    <button type="submit" className="login-btn" disabled={loading}>
+                    <button type="submit" className="login-btn" disabled={loading || webeepBusy}>
                         {loading ? (
                             <>
                                 <span className="spinner-small" />
@@ -90,6 +121,14 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
                         )}
                     </button>
                 </form>
+                <button
+                    type="button"
+                    className="login-alt"
+                    onClick={handleWebeep}
+                    disabled={loading || webeepBusy}
+                >
+                    {webeepBusy ? t('webeepConnecting') : t('loginWithPolimi')}
+                </button>
             </div>
 
             <div className="login-footer">

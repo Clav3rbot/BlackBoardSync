@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Icon from './Icon';
 import Marquee from './Marquee';
 import { getT } from '../i18n';
 import { useEscape } from '../useEscape';
+import { useFocusTrap } from '../useFocusTrap';
 import type { RecentDownload } from '../../types';
 
 interface RecentDownloadsModalProps {
@@ -12,6 +13,8 @@ interface RecentDownloadsModalProps {
 
 const RecentDownloadsModal: React.FC<RecentDownloadsModalProps> = ({ lang, onClose }) => {
     useEscape(onClose);
+    const ref = useRef<HTMLDivElement>(null);
+    useFocusTrap(ref);
     const t = getT(lang);
     const [files, setFiles] = useState<RecentDownload[] | null>(null);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -65,12 +68,20 @@ const RecentDownloadsModal: React.FC<RecentDownloadsModalProps> = ({ lang, onClo
 
     return (
         <div className="modal-overlay" onClick={onClose}>
-            <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div
+                ref={ref}
+                className="modal-container"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="recent-downloads-title"
+                tabIndex={-1}
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="modal-header">
                     <div className="modal-status-icon">
                         <Icon name="history" size={26} />
                     </div>
-                    <h2 className="modal-title">{t('recentDownloads')}</h2>
+                    <h2 id="recent-downloads-title" className="modal-title">{t('recentDownloads')}</h2>
                     <p className="modal-subtitle">
                         {files === null ? t('loading') : files.length > 0 ? t('recentDownloadsHint') : t('recentDownloadsEmpty')}
                     </p>
@@ -98,7 +109,7 @@ const RecentDownloadsModal: React.FC<RecentDownloadsModalProps> = ({ lang, onClo
                                             <button
                                                 className="recent-file-open"
                                                 onClick={() => open(file.path, false)}
-                                                title={file.path}
+                                                data-tip={file.path}
                                             >
                                                 <Icon name="file" size={12} className="modal-file-icon" />
                                                 <span className="recent-file-text">
@@ -111,7 +122,7 @@ const RecentDownloadsModal: React.FC<RecentDownloadsModalProps> = ({ lang, onClo
                                             <button
                                                 className="recent-file-reveal"
                                                 onClick={() => open(file.path, true)}
-                                                title={t('showInFolder')}
+                                                data-tip={t('showInFolder')}
                                                 aria-label={t('showInFolder')}
                                             >
                                                 <Icon name="folderOpen" size={13} />

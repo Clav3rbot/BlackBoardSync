@@ -15,7 +15,7 @@
 
 **BlackBoard Sync** è una semplice app che serve per tenere sincronizzati tutti i tuoi file di Blackboard, user-friendly e senza compromessi.
 
-Se studi anche al Politecnico di Milano, puoi sincronizzare anche i file di **WeBeep**: basta collegare l'account dalle impostazioni.
+Se studi anche al Politecnico di Milano, puoi sincronizzare anche i file di **WeBeep**: basta collegare l'account dalle impostazioni. Se studi solo al PoliMi, puoi accedere direttamente con WeBeep dalla schermata di login.
 
 Sto sviluppando quest'app come strumento ad uso personale, ma ho pensato potesse essere utile ad altri studenti, perciò è completamente opensource e gratuita sotto [licenza GPLv3](LICENSE).
 
@@ -40,12 +40,15 @@ Serve per tenere sincronizzati i propri file di Blackboard in una cartella local
 - **Matricola in header** - lo student ID viene mostrato accanto al nome utente nell'intestazione
 - **Filtro per semestre** - filtra i corsi per semestre con pill selezionabili
 - **Rinomina corsi** - assegna alias personalizzati alle cartelle dei corsi
-- **Selezione corsi** - scegli quali corsi sincronizzare
+- **Selezione corsi** - scegli quali corsi sincronizzare, anche un intero semestre con un clic
+- **Nascondi corsi e categorie** - togli dalla lista i corsi o i semestri che non ti servono e ripristinali quando vuoi
 - **Sincronizzazione automatica** - intervallo configurabile (30m, 1h, 2h) o programmata a un orario specifico (es. mezzanotte)
-- **WeBeep (Politecnico di Milano)** - puoi sincronizzare anche i file del Politecnico collegando l'account dalle impostazioni
+- **WeBeep (Politecnico di Milano)** - puoi sincronizzare anche i file del Politecnico collegando l'account dalle impostazioni, oppure accedere solo con WeBeep dalla schermata di login
 - **Tema chiaro e scuro** - selezionabile dalle impostazioni, con una transizione animata tra i due
 - **Tutorial al primo avvio** - una guida a passi mostra le parti principali dell'app
-- **Riepilogo sync** - modale con dettaglio dei file scaricati per ogni corso
+- **Riepilogo sync** - modale con dettaglio dei file scaricati per ogni corso, mostrata solo quando ci sono file nuovi o avvisi
+- **Ultimi download** - elenco dei file scaricati di recente, raggruppati per corso: un clic apre il file o lo mostra nella cartella
+- **Navigazione da tastiera** - corsi, impostazioni e finestre di dialogo si usano anche solo con Tab, Invio e Spazio
 - **Interfaccia multilingua** - switcher IT/EN nelle impostazioni, preferenza salvata nella configurazione; al primo avvio la lingua viene rilevata automaticamente dalla lingua del sistema
 - **Pannello impostazioni** - accessibile dall'icona ⚙️ nell'header
 - **Minimizza nel tray** - l'app resta attiva nella system tray anche chiudendo la finestra
@@ -66,8 +69,8 @@ Scarica l'ultima release dalla pagina [Releases](../../releases).
 
 | Piattaforma | Installer |
 |-------------|-----------|
-| **Windows** | `BlackBoard_Sync_x.x.x_x64-setup.exe` |
-| **macOS** | `BlackBoard_Sync_x.x.x_universal.dmg` |
+| **Windows** | `BlackBoard.Sync_x.x.x_x64-setup.exe` |
+| **macOS** | `BlackBoard.Sync_x.x.x_universal.dmg` |
 
 ---
 

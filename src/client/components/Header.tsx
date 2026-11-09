@@ -1,5 +1,6 @@
 import React from 'react';
 import Icon from './Icon';
+import { SyncMorph } from './MorphIcon';
 import { getT } from '../i18n';
 
 interface HeaderProps {
@@ -7,6 +8,7 @@ interface HeaderProps {
     userName: string;
     matricola?: string;
     lastSync: string;
+    lastSyncTitle?: string;
     syncing: boolean;
     syncDir: string;
     onSync: () => void;
@@ -39,6 +41,7 @@ const Header: React.FC<HeaderProps> = ({
     userName,
     matricola,
     lastSync,
+    lastSyncTitle,
     syncing,
     syncDir,
     onSync,
@@ -63,19 +66,19 @@ const Header: React.FC<HeaderProps> = ({
                             {formatStudentName(userName)}
                             {matricola && <span className="user-matricola-text"> {matricola}</span>}
                         </span>
-                        <span className="last-sync">
+                        <span className="last-sync" data-tip={lastSyncTitle}>
                             {t('lastSync')}: {lastSync}
                         </span>
                     </div>
                 </div>
                 <div className="header-actions">
-                    <button className="btn-header-icon" onClick={onRecent} title={t('recentDownloads')}>
+                    <button className="btn-header-icon" onClick={onRecent} data-tip={t('recentDownloads')} aria-label={t('recentDownloads')}>
                         <Icon name="history" size={16} />
                     </button>
-                    <button className="btn-header-icon btn-settings-icon" onClick={onSettings} title={t('settings')}>
+                    <button className="btn-header-icon btn-settings-icon" onClick={onSettings} data-tip={t('settings')} aria-label={t('settings')}>
                         <Icon name="settings" size={16} />
                     </button>
-                    <button className="btn-header-icon btn-logout-icon" onClick={onLogout} title={t('logout')}>
+                    <button className="btn-header-icon btn-logout-icon" onClick={onLogout} data-tip={t('logout')} aria-label={t('logout')}>
                         <Icon name="signOut" size={16} />
                     </button>
                 </div>
@@ -85,26 +88,21 @@ const Header: React.FC<HeaderProps> = ({
                 className={`sync-btn ${syncing ? 'syncing' : ''}`}
                 onClick={syncing ? onAbort : onSync}
             >
-                {syncing ? (
-                    <>
-                        <span className="spinner-small" />
-                        {t('abortSyncButton')}
-                    </>
-                ) : (
-                    <>
-                        <Icon name="sync" size={16} className="sync-icon" />
-                        {t('syncNowButton')}
-                    </>
-                )}
+                <SyncMorph active={syncing} />
+                {syncing ? t('abortSyncButton') : t('syncNowButton')}
             </button>
 
             {syncDir && (
                 <div className="sync-dir-box">
-                    <div className="sync-dir-input" onClick={onOpenFolder} title={syncDir}>
-                        <Icon name="folder" size={14} />
+                    <button
+                        className="sync-dir-input"
+                        onClick={onOpenFolder}
+                        data-tip={`${t('openFolder')}: ${syncDir}`}
+                    >
+                        <Icon name="folderOpen" size={14} />
                         <span className="sync-dir-path">{syncDir}</span>
-                    </div>
-                    <button className="sync-dir-change" onClick={onChangeFolder} title={t('changeFolder')}>
+                    </button>
+                    <button className="sync-dir-change" onClick={onChangeFolder} data-tip={t('changeFolder')} aria-label={t('changeFolder')}>
                         <Icon name="pencil" size={13} />
                     </button>
                 </div>

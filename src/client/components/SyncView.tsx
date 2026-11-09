@@ -4,9 +4,10 @@ import CourseList from './CourseList';
 import SyncResultModal from './SyncResultModal';
 import RecentDownloadsModal from './RecentDownloadsModal';
 import SettingsView from './SettingsView';
+import ConfirmDialog from './ConfirmDialog';
 import Tutorial from './Tutorial';
-import Icon from './Icon';
 import { getT } from '../i18n';
+import { dismissToast, toast } from '../toast';
 import type { Accounts } from '../App';
 import type { AppConfig, Course, SyncProgress, SyncResult } from '../../types';
 
@@ -28,6 +29,9 @@ const SyncView: React.FC<SyncViewProps> = ({
     onLogout,
 }) => {
     const t = getT(lang);
+    // For the listeners below, which are registered once and would keep the first language.
+    const tRef = useRef(t);
+    tRef.current = t;
     const [courses, setCourses] = useState<Course[]>([]);
     const [config, setConfig] = useState<AppConfig | null>(null);
     const [syncing, setSyncing] = useState(false);
@@ -37,13 +41,20 @@ const SyncView: React.FC<SyncViewProps> = ({
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [settingsDismiss, setSettingsDismiss] = useState(false);
     const [coursesError, setCoursesError] = useState('');
-    const [updateReady, setUpdateReady] = useState<{ releaseName: string } | null>(null);
     const [progressVisible, setProgressVisible] = useState(false);
     const [loadingInstructors, setLoadingInstructors] = useState(false);
     const [cacheMisses, setCacheMisses] = useState<Set<string>>(new Set());
     const [tutorialOpen, setTutorialOpen] = useState(false);
     const [recentOpen, setRecentOpen] = useState(false);
+    const [logoutConfirm, setLogoutConfirm] = useState(false);
+    const [now, setNow] = useState(Date.now());
     const tutorialShown = useRef(false);
+    const lastProgress = useRef({ indeterminate: false, progressPct: 0, phaseText: '' });
+
+    useEffect(() => {
+        const id = window.setInterval(() => setNow(Date.now()), 30000);
+        return () => window.clearInterval(id);
+    }, []);
 
     // The tour waits for the courses to be on screen so it can point at them; once per session.
     useEffect(() => {
@@ -86,25 +97,57 @@ const SyncView: React.FC<SyncViewProps> = ({
         loadData();
 
         const unsubProgress = window.api.onSyncProgress((p: SyncProgress) => {
-            setProgress(p);
-            if (p.phase === 'error') {
-                setSyncing(false);
+            if (p.phase !== 'error') {
+                setProgress(p);
+                return;
             }
+            setSyncing(false);
+            setProgress(null);
+            toast({
+                key: 'sync-error',
+                tone: 'error',
+                icon: 'warning',
+                message: tRef.current('syncingPhaseError'),
+                description: p.error,
+                sticky: true,
+                action: { label: tRef.current('retry'), run: handleSync },
+            });
         });
 
         const unsubComplete = window.api.onSyncComplete((result: SyncResult) => {
             setSyncing(false);
-            if (result) setSyncResult(result);
+            if (result && (result.totalDownloaded > 0 || result.warnings?.length > 0)) {
+                setSyncResult(result);
+            } else if (result) {
+                toast({
+                    key: 'up-to-date',
+                    tone: 'success',
+                    icon: 'checkCircle',
+                    message: tRef.current('upToDate'),
+                    description: `${result.totalScanned} ${tRef.current('filesVerified')}`,
+                });
+            }
+            setNow(Date.now());
             loadConfig();
         });
 
         const unsubSyncStart = window.api.onSyncStart(() => {
             setSyncing(true);
             setProgress(null);
+            dismissToast('sync-error');
         });
 
         const unsubUpdateReady = window.api.onUpdateReady((info: { releaseName: string }) => {
-            setUpdateReady(info);
+            const title = tRef.current('updateReadyTitle');
+            toast({
+                key: 'update-ready',
+                tone: 'accent',
+                icon: 'download',
+                message: info.releaseName ? `${title} · ${info.releaseName}` : title,
+                description: tRef.current('updateReadySubtext'),
+                sticky: true,
+                action: { label: tRef.current('updateRestart'), run: () => window.api.restartForUpdate() },
+            });
         });
 
         return () => {
@@ -117,14 +160,13 @@ const SyncView: React.FC<SyncViewProps> = ({
 
     // Grace delay so the bar doesn't flash on the first frame of a sync; hide at once when it ends.
     useEffect(() => {
-        const active = syncing || progress?.phase === 'error';
-        if (!active) {
+        if (!syncing) {
             setProgressVisible(false);
             return;
         }
         const t = window.setTimeout(() => setProgressVisible(true), 250);
         return () => window.clearTimeout(t);
-    }, [syncing, progress]);
+    }, [syncing]);
 
     const loadData = async () => {
         try {
@@ -230,22 +272,11 @@ const SyncView: React.FC<SyncViewProps> = ({
         setProgress(null);
     };
 
-    const handleToggleCourse = async (courseId: string) => {
+    const saveSelection = async (change: (enabled: string[]) => string[]) => {
         if (!config) return;
         const hidden = config.hiddenCourses || [];
         const visibleIds = courses.filter((c) => !hidden.includes(c.id)).map((c) => c.id);
-
-        let enabled: string[];
-        if (config.syncAllCourses) {
-            enabled = visibleIds.filter((id) => id !== courseId);
-        } else {
-            enabled = [...config.enabledCourses];
-            if (enabled.includes(courseId)) {
-                enabled = enabled.filter((id) => id !== courseId);
-            } else {
-                enabled.push(courseId);
-            }
-        }
+        const enabled = change(config.syncAllCourses ? visibleIds : config.enabledCourses);
 
         // Back to "sync all" when every visible course is checked, so new courses keep syncing.
         const syncAll =
@@ -257,6 +288,18 @@ const SyncView: React.FC<SyncViewProps> = ({
         });
         setConfig(newConfig);
     };
+
+    const handleToggleCourse = (courseId: string) =>
+        saveSelection((enabled) =>
+            enabled.includes(courseId) ? enabled.filter((id) => id !== courseId) : [...enabled, courseId]
+        );
+
+    const handleToggleTerm = (courseIds: string[], enable: boolean) =>
+        saveSelection((enabled) =>
+            enable
+                ? [...enabled, ...courseIds.filter((id) => !enabled.includes(id))]
+                : enabled.filter((id) => !courseIds.includes(id))
+        );
 
     const handleRenameCourse = async (courseId: string, newName: string) => {
         if (!config) return;
@@ -314,16 +357,34 @@ const SyncView: React.FC<SyncViewProps> = ({
         }
     };
 
-    const formatLastSync = (iso: string | null): string => {
-        if (!iso) return t('never');
-        const date = new Date(iso);
-        return date.toLocaleString(lang === 'en' ? 'en-US' : 'it-IT', {
+    const locale = lang === 'en' ? 'en-US' : 'it-IT';
+    const formatLastSyncDate = (iso: string): string =>
+        new Date(iso).toLocaleString(locale, {
             day: '2-digit',
             month: '2-digit',
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
         });
+
+    const formatLastSync = (iso: string | null): string => {
+        if (!iso) return t('never');
+        const relative = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+        const mins = Math.floor((now - Date.parse(iso)) / 60000);
+        if (mins < 1) return relative.format(0, 'second');
+        if (mins < 60) return relative.format(-mins, 'minute');
+        if (mins < 60 * 24) return relative.format(-Math.floor(mins / 60), 'hour');
+        if (mins < 60 * 24 * 7) return relative.format(-Math.floor(mins / (60 * 24)), 'day');
+        return formatLastSyncDate(iso);
+    };
+
+    // The interval timer restarts with the app, so only the daily mode has a known next time.
+    const autoSyncNote = (cfg: AppConfig): string => {
+        if (!cfg.autoSync) return '';
+        const mins = cfg.autoSyncInterval;
+        return mins === 0
+            ? ` · ${t('nextSyncAt')} ${cfg.autoSyncScheduledTime}`
+            : ` · ${t('autoSyncEvery')} ${mins < 60 ? `${mins}m` : `${mins / 60}h`}`;
     };
 
     if (!config) {
@@ -336,16 +397,13 @@ const SyncView: React.FC<SyncViewProps> = ({
         );
     }
 
-    const isSyncError = progress?.phase === 'error';
-    const showProgress = (syncing || isSyncError) && progressVisible;
+    const showProgress = syncing && progressVisible;
     const hasTotal = !!progress && progress.total > 0;
-    const indeterminate = (syncing || isSyncError) && !isSyncError && !hasTotal;
-    const progressPct = isSyncError ? 100 : hasTotal ? (progress!.current / progress!.total) * 100 : 0;
+    const indeterminate = syncing && !hasTotal;
+    const progressPct = hasTotal ? (progress!.current / progress!.total) * 100 : 0;
 
     let phaseText = '';
-    if (isSyncError) {
-        phaseText = `${t('error')}: ${progress?.error ?? t('syncingPhaseError')}`;
-    } else if (!progress) {
+    if (!progress) {
         phaseText = t('syncingPhaseConnecting');
     } else if (progress.phase === 'scanning') {
         phaseText = progress.total > 0
@@ -355,6 +413,11 @@ const SyncView: React.FC<SyncViewProps> = ({
         phaseText = `${progress.currentFile || t('syncingPhaseDownloading')} (${progress.current}/${progress.total})`;
     }
 
+    // The bar keeps its last content while it slides shut, instead of emptying first.
+    if (showProgress || syncing) {
+        lastProgress.current = { indeterminate, progressPct, phaseText };
+    }
+    const bar = lastProgress.current;
 
     return (
         <div className="sync-view">
@@ -363,36 +426,40 @@ const SyncView: React.FC<SyncViewProps> = ({
                 userName={`${user.name.given} ${user.name.family}`}
                 matricola={user.userName}
                 lastSync={formatLastSync(config.lastSync)}
+                lastSyncTitle={
+                    (config.lastSync ? formatLastSyncDate(config.lastSync) : t('never')) + autoSyncNote(config)
+                }
                 syncing={syncing}
                 syncDir={config.syncDir}
                 onSync={handleSync}
                 onAbort={handleAbortSync}
-                onLogout={() => onLogout('all')}
+                onLogout={() => setLogoutConfirm(true)}
                 onSettings={openSettings}
                 onRecent={() => setRecentOpen(true)}
                 onOpenFolder={() => window.api.openFolder(config.syncDir)}
                 onChangeFolder={handleChangeFolder}
             />
 
-            {showProgress && (
-                <div className={`sync-progress ${isSyncError ? 'error' : ''}`}>
-                    <div className={`progress-bar ${isSyncError ? 'error' : ''}`}>
+            {/* Always mounted, so it can slide open and shut. */}
+            <div className={`sync-progress-wrap ${showProgress ? 'open' : ''}`}>
+                <div className="sync-progress">
+                    <div className="progress-bar">
                         {/* Stays at 0 while connecting, so it grows forward with no snap-back. */}
                         <div
                             className="progress-fill"
-                            style={{ width: `${progressPct}%` }}
+                            style={{ width: `${bar.progressPct}%` }}
                         />
                         {/* Fades out once a real total arrives, masking the hand-off. */}
                         <div
-                            className={`progress-indeterminate ${indeterminate ? 'visible' : ''}`}
+                            className={`progress-indeterminate ${bar.indeterminate ? 'visible' : ''}`}
                             aria-hidden="true"
                         />
                     </div>
                     <p className="progress-text" aria-live="polite">
-                        <span className="progress-text-label">{phaseText}</span>
+                        <span className="progress-text-label">{bar.phaseText}</span>
                     </p>
                 </div>
-            )}
+            </div>
 
             {/* A sync that ends during the tour keeps its summary for after. */}
             {syncResult && !tutorialOpen && (
@@ -425,6 +492,7 @@ const SyncView: React.FC<SyncViewProps> = ({
                 hiddenTerms={config.hiddenTerms || []}
                 loading={loadingCourses}
                 onToggle={handleToggleCourse}
+                onToggleTerm={handleToggleTerm}
                 onRename={handleRenameCourse}
                 onCollapsedTermsChange={handleCollapsedTermsChange}
                 onHide={handleHideCourse}
@@ -461,25 +529,17 @@ const SyncView: React.FC<SyncViewProps> = ({
                 <Tutorial lang={lang} onDone={handleTutorialDone} onSettings={handleTutorialSettings} />
             )}
 
-            {updateReady && (
-                <div className="update-dialog-overlay" onClick={() => setUpdateReady(null)}>
-                    <div className="update-dialog" onClick={(e) => e.stopPropagation()}>
-                        <div className="update-dialog-icon">
-                            <Icon name="download" size={30} />
-                        </div>
-                        <h3 className="update-dialog-title">{t('updateReadyTitle')}</h3>
-                        <p className="update-dialog-text">
-                            {updateReady.releaseName
-                                ? (lang === 'en' ? `Version ${updateReady.releaseName} has been downloaded.` : `La versione ${updateReady.releaseName} è stata scaricata.`)
-                                : t('updateReadyText')}
-                        </p>
-                        <p className="update-dialog-subtext">{t('updateReadySubtext')}</p>
-                        <div className="update-dialog-actions">
-                            <button className="btn-update-later" onClick={() => setUpdateReady(null)}>{t('updateLater')}</button>
-                            <button className="btn-update-restart" onClick={() => window.api.restartForUpdate()}>{t('updateRestart')}</button>
-                        </div>
-                    </div>
-                </div>
+            {logoutConfirm && (
+                <ConfirmDialog
+                    icon="signOut"
+                    title={t('logoutConfirmTitle')}
+                    text={t('logoutConfirmText')}
+                    subtext={t('logoutConfirmSubtext')}
+                    cancelLabel={t('cancel')}
+                    confirmLabel={t('logout')}
+                    onCancel={() => setLogoutConfirm(false)}
+                    onConfirm={() => onLogout('all')}
+                />
             )}
         </div>
     );
