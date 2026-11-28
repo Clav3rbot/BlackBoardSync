@@ -1,47 +1,15 @@
+use crate::http;
+use crate::model::{Course, Term, UserInfo};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub const SITE: &str = "https://blackboard.unibocconi.it";
+pub const HOST: &str = "blackboard.unibocconi.it";
 const API_BASE: &str = "https://blackboard.unibocconi.it/learn/api/public/v1";
-const HOST: &str = "blackboard.unibocconi.it";
-const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BlackBoardSync/1.0";
 const EXCLUDED_ROLES: &[&str] = &[
     "Student", "Guest", "CourseBuilder", "BbSpectator", "TeachingAssistant", "Grader",
 ];
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct UserName {
-    pub given: String,
-    pub family: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct UserInfo {
-    pub id: String,
-    pub user_name: String,
-    pub name: UserName,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Term {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Course {
-    pub id: String,
-    pub course_id: String,
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub term: Option<Term>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub instructor: Option<String>,
-}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -82,16 +50,9 @@ impl BlackboardAPI {
         if let Ok(value) = reqwest::header::HeaderValue::from_str(&cookie_header) {
             headers.insert("Cookie", value);
         }
-        if let Ok(ua) = reqwest::header::HeaderValue::from_str(USER_AGENT) {
-            headers.insert("User-Agent", ua);
-        }
 
-        let client = Client::builder()
+        let client = http::client()
             .default_headers(headers)
-            .referer(false)
-            .timeout(std::time::Duration::from_secs(30))
-            // Catches stalls in downloads, which override the total timeout.
-            .read_timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("Failed to build blackboard client");
 
@@ -103,7 +64,7 @@ impl BlackboardAPI {
             path.to_string()
         } else if path.starts_with("/learn/") {
             // `paging.nextPage` comes back rooted at the host, not at API_BASE.
-            format!("https://{}{}", HOST, path)
+            format!("{}{}", SITE, path)
         } else {
             format!("{}{}", API_BASE, path)
         }
@@ -309,10 +270,8 @@ impl BlackboardAPI {
                 .await
                 .map_err(|e| e.to_string())?;
             // An error body read as an empty page would pass the course off as having no files.
-            if !response.status().is_success() {
-                return Err(format!("HTTP {}", response.status()));
-            }
-            let mut data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+            let mut data: serde_json::Value =
+                http::success(response)?.json().await.map_err(|e| e.to_string())?;
             let page: Vec<ContentItem> =
                 serde_json::from_value(data["results"].take()).map_err(|e| e.to_string())?;
             items.extend(page);
@@ -342,10 +301,8 @@ impl BlackboardAPI {
             return Ok(Vec::new());
         }
         // A throttled or failed call must not read as "no attachments".
-        if !response.status().is_success() {
-            return Err(format!("HTTP {}", response.status()));
-        }
-        let mut data: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+        let mut data: serde_json::Value =
+            http::success(response)?.json().await.map_err(|e| e.to_string())?;
 
         Ok(serde_json::from_value(data["results"].take()).unwrap_or_default())
     }
@@ -387,20 +344,14 @@ impl BlackboardAPI {
         self.fetch(&url).await
     }
 
-    /// Non-2xx is an error: a saved error page would count as synced forever.
     async fn fetch(&self, url: &str) -> Result<reqwest::Response, String> {
         let response = self.client
             .get(url)
-            .timeout(crate::download::DOWNLOAD_TIMEOUT)
+            .timeout(http::DOWNLOAD_TIMEOUT)
             .send()
             .await
             .map_err(|e| e.to_string())?;
-
-        let status = response.status();
-        if !status.is_success() {
-            return Err(format!("HTTP {}", status));
-        }
-        Ok(response)
+        http::success(response)
     }
 }
 

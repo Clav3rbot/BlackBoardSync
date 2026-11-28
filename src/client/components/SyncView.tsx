@@ -3,21 +3,21 @@ import Header from './Header';
 import CourseList from './CourseList';
 import SyncResultModal from './SyncResultModal';
 import RecentDownloadsModal from './RecentDownloadsModal';
-import SettingsView from './SettingsView';
+import SettingsView, { formatInterval } from './SettingsView';
 import ConfirmDialog from './ConfirmDialog';
 import Tutorial from './Tutorial';
-import { getT } from '../i18n';
+import { getT, locale as localeOf, type Lang } from '../i18n';
 import { dismissToast, toast } from '../toast';
 import type { Accounts } from '../App';
-import type { AppConfig, Course, SyncProgress, SyncResult } from '../../types';
+import type { Provider, UserInfo, AppConfig, Course, SyncProgress, SyncResult } from '../../types';
 
 interface SyncViewProps {
-    lang: 'it' | 'en';
-    onLanguageChange: (lang: 'it' | 'en') => void;
-    user: { id: string; userName: string; name: { given: string; family: string } };
+    lang: Lang;
+    onLanguageChange: (lang: Lang) => void;
+    user: UserInfo;
     accounts: Accounts;
-    onLogin: (provider: 'bocconi' | 'webeep', user: any) => void;
-    onLogout: (provider?: 'bocconi' | 'webeep' | 'all') => void;
+    onLogin: (provider: Provider, user: UserInfo) => void;
+    onLogout: (provider?: Provider | 'all') => void;
 }
 
 const SyncView: React.FC<SyncViewProps> = ({
@@ -89,7 +89,7 @@ const SyncView: React.FC<SyncViewProps> = ({
         setTutorialOpen(false);
         handleTutorialSettings(false);
         if (config && !config.tutorialDone) {
-            setConfig(await window.api.updateConfig({ tutorialDone: true }));
+            await saveConfig({ tutorialDone: true });
         }
     };
 
@@ -244,13 +244,20 @@ const SyncView: React.FC<SyncViewProps> = ({
         }
     };
 
+    // The language is part of the config, but App holds it for the screens before this one.
+    const applyConfig = (cfg: AppConfig) => {
+        setConfig(cfg);
+        if (cfg.language && cfg.language !== lang) {
+            onLanguageChange(cfg.language as Lang);
+        }
+    };
+
+    const saveConfig = async (partial: Partial<AppConfig>) =>
+        applyConfig(await window.api.updateConfig(partial));
+
     const loadConfig = async () => {
         try {
-            const cfg = await window.api.getConfig();
-            setConfig(cfg);
-            if (cfg.language && cfg.language !== lang) {
-                onLanguageChange(cfg.language as 'it' | 'en');
-            }
+            applyConfig(await window.api.getConfig());
         } catch (err) {
             console.error('Failed to load config:', err);
         }
@@ -282,11 +289,7 @@ const SyncView: React.FC<SyncViewProps> = ({
         const syncAll =
             visibleIds.length > 0 && visibleIds.every((id) => enabled.includes(id));
 
-        const newConfig = await window.api.updateConfig({
-            syncAllCourses: syncAll,
-            enabledCourses: syncAll ? [] : enabled,
-        });
-        setConfig(newConfig);
+        await saveConfig({ syncAllCourses: syncAll, enabledCourses: syncAll ? [] : enabled });
     };
 
     const handleToggleCourse = (courseId: string) =>
@@ -309,55 +312,24 @@ const SyncView: React.FC<SyncViewProps> = ({
         } else {
             delete aliases[courseId];
         }
-        const newConfig = await window.api.updateConfig({ courseAliases: aliases });
-        setConfig(newConfig);
+        await saveConfig({ courseAliases: aliases });
     };
 
-    const handleCollapsedTermsChange = async (collapsed: string[]) => {
-        const newConfig = await window.api.updateConfig({ collapsedTerms: collapsed });
-        setConfig(newConfig);
-    };
-
-    const handleHideCourse = async (courseId: string) => {
+    // Selection left alone when hiding: syncs skip hidden courses, and unhiding brings the tick back.
+    const setHidden = (key: 'hiddenCourses' | 'hiddenTerms', id: string, hide: boolean) => {
         if (!config) return;
-        const hidden = [...(config.hiddenCourses || [])];
-        if (!hidden.includes(courseId)) hidden.push(courseId);
-        // Selection left alone: syncs skip hidden courses, and unhiding brings the tick back.
-        const newConfig = await window.api.updateConfig({ hiddenCourses: hidden });
-        setConfig(newConfig);
-    };
-
-    const handleUnhideCourse = async (courseId: string) => {
-        if (!config) return;
-        const hidden = (config.hiddenCourses || []).filter((id) => id !== courseId);
-        const newConfig = await window.api.updateConfig({ hiddenCourses: hidden });
-        setConfig(newConfig);
-    };
-
-    const handleHideTerm = async (termId: string) => {
-        if (!config) return;
-        const hidden = [...(config.hiddenTerms || [])];
-        if (!hidden.includes(termId)) hidden.push(termId);
-        const newConfig = await window.api.updateConfig({ hiddenTerms: hidden });
-        setConfig(newConfig);
-    };
-
-    const handleUnhideTerm = async (termId: string) => {
-        if (!config) return;
-        const hidden = (config.hiddenTerms || []).filter((id) => id !== termId);
-        const newConfig = await window.api.updateConfig({ hiddenTerms: hidden });
-        setConfig(newConfig);
+        const list = config[key] || [];
+        const partial: Partial<AppConfig> = {};
+        partial[key] = hide ? (list.includes(id) ? list : [...list, id]) : list.filter((x) => x !== id);
+        saveConfig(partial);
     };
 
     const handleChangeFolder = async () => {
         const folder = await window.api.selectFolder();
-        if (folder) {
-            const newConfig = await window.api.updateConfig({ syncDir: folder });
-            setConfig(newConfig);
-        }
+        if (folder) await saveConfig({ syncDir: folder });
     };
 
-    const locale = lang === 'en' ? 'en-US' : 'it-IT';
+    const locale = localeOf(lang);
     const formatLastSyncDate = (iso: string): string =>
         new Date(iso).toLocaleString(locale, {
             day: '2-digit',
@@ -384,7 +356,7 @@ const SyncView: React.FC<SyncViewProps> = ({
         const mins = cfg.autoSyncInterval;
         return mins === 0
             ? ` · ${t('nextSyncAt')} ${cfg.autoSyncScheduledTime}`
-            : ` · ${t('autoSyncEvery')} ${mins < 60 ? `${mins}m` : `${mins / 60}h`}`;
+            : ` · ${t('autoSyncEvery')} ${formatInterval(mins)}`;
     };
 
     if (!config) {
@@ -494,11 +466,11 @@ const SyncView: React.FC<SyncViewProps> = ({
                 onToggle={handleToggleCourse}
                 onToggleTerm={handleToggleTerm}
                 onRename={handleRenameCourse}
-                onCollapsedTermsChange={handleCollapsedTermsChange}
-                onHide={handleHideCourse}
-                onUnhide={handleUnhideCourse}
-                onHideTerm={handleHideTerm}
-                onUnhideTerm={handleUnhideTerm}
+                onCollapsedTermsChange={(collapsed) => saveConfig({ collapsedTerms: collapsed })}
+                onHide={(id) => setHidden('hiddenCourses', id, true)}
+                onUnhide={(id) => setHidden('hiddenCourses', id, false)}
+                onHideTerm={(id) => setHidden('hiddenTerms', id, true)}
+                onUnhideTerm={(id) => setHidden('hiddenTerms', id, false)}
                 loadingInstructors={loadingInstructors}
                 cacheMisses={cacheMisses}
                 heatmap={config.heatmap}
@@ -507,12 +479,7 @@ const SyncView: React.FC<SyncViewProps> = ({
             {settingsOpen && (
                 <SettingsView
                     config={config}
-                    onConfigChange={(newConfig) => {
-                        setConfig(newConfig);
-                        if (newConfig.language && newConfig.language !== lang) {
-                            onLanguageChange(newConfig.language as 'it' | 'en');
-                        }
-                    }}
+                    onConfigChange={applyConfig}
                     onClose={() => {
                         setSettingsOpen(false);
                         setSettingsDismiss(false);

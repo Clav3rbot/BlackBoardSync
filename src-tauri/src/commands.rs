@@ -1,29 +1,38 @@
 use crate::blackboard::BlackboardAPI;
-use crate::download::{setup_auto_sync, trigger_sync};
-use crate::login::LoginManager;
+use crate::download::{setup_auto_sync, trigger_sync, Sources};
+use crate::login::{sign_in, sign_in_again, SignInError};
 use crate::state::{AppState, Session};
 use crate::webeep;
 use crate::tray;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 #[derive(Serialize)]
 pub struct LoginResponse {
     pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub user: Option<crate::blackboard::UserInfo>,
+    pub user: Option<crate::model::UserInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+impl From<Result<crate::model::UserInfo, String>> for LoginResponse {
+    fn from(result: Result<crate::model::UserInfo, String>) -> Self {
+        match result {
+            Ok(user) => Self { success: true, user: Some(user), error: None },
+            Err(e) => Self { success: false, user: None, error: Some(e) },
+        }
+    }
 }
 
 /// Either account may be absent (connecting just one is normal), hence no `success` flag.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountsResponse {
-    pub bocconi: Option<crate::blackboard::UserInfo>,
-    pub webeep: Option<crate::blackboard::UserInfo>,
+    pub bocconi: Option<crate::model::UserInfo>,
+    pub webeep: Option<crate::model::UserInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bocconi_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -34,7 +43,7 @@ pub struct AccountsResponse {
 pub struct CoursesResponse {
     pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub courses: Option<Vec<crate::blackboard::Course>>,
+    pub courses: Option<Vec<crate::model::Course>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
 }
@@ -46,62 +55,38 @@ pub struct SimpleResponse {
     pub error: Option<String>,
 }
 
+impl SimpleResponse {
+    pub const OK: Self = Self { success: true, error: None };
+}
+
 #[tauri::command]
 pub async fn login(
     username: String,
     password: String,
     state: State<'_, AppState>,
-    _app: AppHandle,
 ) -> Result<LoginResponse, String> {
     if username.is_empty() || password.is_empty() {
-        return Ok(LoginResponse {
-            success: false,
-            user: None,
-            error: Some("Credenziali non valide".to_string()),
-        });
+        return Ok(Err("Credenziali non valide".to_string()).into());
     }
     if username.len() > 256 || password.len() > 256 {
-        return Ok(LoginResponse {
-            success: false,
-            user: None,
-            error: Some("Credenziali troppo lunghe".to_string()),
-        });
+        return Ok(Err("Credenziali troppo lunghe".to_string()).into());
     }
 
-    let mut manager = LoginManager::new();
-    let result = manager.login(&username, &password).await;
-
-    if !result.success {
-        return Ok(LoginResponse {
-            success: false,
-            user: None,
-            error: result.error,
-        });
-    }
-
-    let cookies = result.cookies;
-    let api = BlackboardAPI::new(&cookies);
-
-    match api.get_current_user().await {
-        Ok(user) => {
-            {
-                let mut session = state.session.lock().unwrap();
-                *session = Some(Session { cookies: cookies.clone() });
-            }
+    let result = match sign_in(&state, &username, &password).await {
+        Ok((_, user)) => {
             state.store.lock().unwrap().save_credentials(&username, &password);
-            state.store.lock().unwrap().save_session(&cookies);
-            Ok(LoginResponse { success: true, user: Some(user), error: None })
+            Ok(user)
         }
-        Err(e) => Ok(LoginResponse {
-            success: false,
-            user: None,
-            error: Some(format!("Login riuscito ma impossibile ottenere il profilo: {}", e)),
-        }),
-    }
+        Err(SignInError::Rejected(e)) => Err(e),
+        Err(SignInError::NoProfile(e)) => {
+            Err(format!("Login riuscito ma impossibile ottenere il profilo: {}", e))
+        }
+    };
+    Ok(result.into())
 }
 
 /// Stored cookies first, then a SAML re-auth with the stored credentials.
-async fn restore_blackboard(state: &AppState) -> Result<crate::blackboard::UserInfo, String> {
+async fn restore_blackboard(state: &AppState) -> Result<crate::model::UserInfo, String> {
     let stored_session = state.store.lock().unwrap().load_session();
     if let Some(cookies) = stored_session {
         let api = BlackboardAPI::new(&cookies);
@@ -112,32 +97,17 @@ async fn restore_blackboard(state: &AppState) -> Result<crate::blackboard::UserI
         state.store.lock().unwrap().clear_session();
     }
 
-    let creds = state.store.lock().unwrap().load_credentials();
-    let Some((username, password)) = creds else {
-        return Err("no-credentials".to_string());
-    };
-
-    let mut manager = LoginManager::new();
-    let result = manager.login(&username, &password).await;
-    if !result.success {
-        return Err(result.error.unwrap_or_else(|| "Sessione scaduta".to_string()));
+    match sign_in_again(state).await {
+        None => Err("no-credentials".to_string()),
+        Some(Ok((_, user))) => Ok(user),
+        Some(Err(SignInError::Rejected(e))) => Err(e),
+        Some(Err(SignInError::NoProfile(_))) => Err("Sessione scaduta".to_string()),
     }
-
-    let cookies = result.cookies;
-    let api = BlackboardAPI::new(&cookies);
-    let user = api
-        .get_current_user()
-        .await
-        .map_err(|_| "Sessione scaduta".to_string())?;
-
-    *state.session.lock().unwrap() = Some(Session { cookies: cookies.clone() });
-    state.store.lock().unwrap().save_session(&cookies);
-    Ok(user)
 }
 
 /// Any HTTP answer from any of the hosts counts as online.
 async fn is_online(urls: &[&str]) -> bool {
-    let Ok(client) = reqwest::Client::builder()
+    let Ok(client) = crate::http::client()
         .timeout(std::time::Duration::from_secs(5))
         .build()
     else {
@@ -159,10 +129,10 @@ pub async fn auto_login(
         let store = state.store.lock().unwrap();
         let mut hosts = Vec::new();
         if store.load_credentials().is_some() {
-            hosts.push("https://blackboard.unibocconi.it");
+            hosts.push(crate::blackboard::SITE);
         }
         if store.load_webeep_token().is_some() {
-            hosts.push("https://webeep.polimi.it");
+            hosts.push(webeep::SITE);
         }
         hosts
     };
@@ -205,27 +175,18 @@ pub async fn webeep_login(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<LoginResponse, String> {
-    let token = match webeep::acquire_token(&app).await {
-        Ok(t) => t,
-        Err(e) => return Ok(LoginResponse { success: false, user: None, error: Some(e) }),
-    };
+    Ok(connect_webeep(&state, &app).await.into())
+}
 
+async fn connect_webeep(state: &AppState, app: &AppHandle) -> Result<crate::model::UserInfo, String> {
+    let token = webeep::acquire_token(app).await?;
     // Only persist a token that actually authenticates.
-    let api = webeep::WeBeepAPI::new(&token);
-    match api.site_info().await {
-        Ok(info) => {
-            let mut store = state.store.lock().unwrap();
-            store.save_webeep_token(&token);
-            // A fresh connection starts switched on, whatever it was before.
-            store.update_config(serde_json::json!({ "webeepEnabled": true }));
-            Ok(LoginResponse {
-                success: true,
-                user: Some(webeep::user_info(&info)),
-                error: None,
-            })
-        }
-        Err(e) => Ok(LoginResponse { success: false, user: None, error: Some(e) }),
-    }
+    let info = webeep::WeBeepAPI::new(&token).site_info().await?;
+    let mut store = state.store.lock().unwrap();
+    store.save_webeep_token(&token);
+    // A fresh connection starts switched on, whatever it was before.
+    store.update_config(serde_json::json!({ "webeepEnabled": true }));
+    Ok(webeep::user_info(&info))
 }
 
 /// One university, or both without `provider`. Auto-sync stops only once no account is left.
@@ -256,7 +217,7 @@ pub async fn logout(
         }
     }
 
-    Ok(SimpleResponse { success: true, error: None })
+    Ok(SimpleResponse::OK)
 }
 
 /// Both universities in one list; a failing source goes in `error` without hiding the other.
@@ -265,51 +226,27 @@ pub async fn get_courses(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<CoursesResponse, String> {
-    let mut courses: Vec<crate::blackboard::Course> = Vec::new();
-    let mut errors: Vec<String> = Vec::new();
-    let mut connected = false;
-
     let session = state.session.lock().unwrap().clone();
-    if let Some(session) = session {
-        connected = true;
-        let api = BlackboardAPI::new(&session.cookies);
-        match api.get_current_user().await {
-            Ok(user) => match api.get_courses(&user.id).await {
-                Ok(list) => courses.extend(list),
-                Err(e) => errors.push(format!("Bocconi: {}", e)),
-            },
-            Err(e) => errors.push(format!("Bocconi: {}", e)),
-        }
-    }
+    let sources = Sources::open(&app, session.as_ref(), true).await;
+    Ok(courses_response(session.is_some(), &sources))
+}
 
-    match webeep::active_api(&app).await {
-        Ok(None) => {}
-        Ok(Some((api, info))) => {
-            connected = true;
-            match webeep::get_courses(&api, info.userid).await {
-                Ok(list) => courses.extend(list),
-                Err(e) => errors.push(format!("PoliMi: {}", e)),
-            }
-        }
-        Err(e) => {
-            connected = true;
-            errors.push(format!("PoliMi: {}", e));
-        }
-    }
-
-    if !connected {
-        return Ok(CoursesResponse {
+/// A university that failed still counts as connected: its error shows beside the other's courses.
+fn courses_response(had_session: bool, sources: &Sources) -> CoursesResponse {
+    let errors = &sources.errors;
+    if !had_session && sources.webeep.is_none() && errors.is_empty() {
+        return CoursesResponse {
             success: false,
             courses: None,
             error: Some("Non autenticato".to_string()),
-        });
+        };
     }
-
-    Ok(CoursesResponse {
+    let courses = sources.courses();
+    CoursesResponse {
         success: !courses.is_empty() || errors.is_empty(),
         courses: Some(courses),
         error: (!errors.is_empty()).then(|| errors.join(" · ")),
-    })
+    }
 }
 
 #[tauri::command]
@@ -355,13 +292,13 @@ pub async fn sync(app: AppHandle) -> Result<SimpleResponse, String> {
     tauri::async_runtime::spawn(async move {
         trigger_sync(&app).await;
     });
-    Ok(SimpleResponse { success: true, error: None })
+    Ok(SimpleResponse::OK)
 }
 
 #[tauri::command]
 pub async fn abort_sync(state: State<'_, AppState>) -> Result<SimpleResponse, String> {
     state.abort_flag.store(true, Ordering::SeqCst);
-    Ok(SimpleResponse { success: true, error: None })
+    Ok(SimpleResponse::OK)
 }
 
 #[tauri::command]
@@ -398,7 +335,7 @@ pub fn update_config(
         if minimize && !old_config.minimize_to_tray {
             let _ = tray::create_tray(&app);
         } else if !minimize && old_config.minimize_to_tray {
-            let _ = app.remove_tray_by_id("main");
+            tray::remove(&app);
         }
     }
 
@@ -425,12 +362,12 @@ pub async fn open_folder(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    use crate::download::{is_inside_resolved, normalize_path};
+    use crate::paths::{normalize_path, SyncRoot};
     use tauri_plugin_opener::OpenerExt;
 
     let sync_dir = std::path::PathBuf::from(state.store.lock().unwrap().get_config().sync_dir);
     let requested = std::path::PathBuf::from(&folder_path);
-    if !is_inside_resolved(&requested, sync_dir.canonicalize().ok().as_deref(), &normalize_path(&sync_dir)) {
+    if !SyncRoot::new(&sync_dir).contains(&requested) {
         return Err("Path traversal non consentito".to_string());
     }
 
@@ -452,7 +389,7 @@ pub async fn open_folder(
 #[tauri::command]
 pub async fn open_course_folder(
     course_id: String,
-    courses: Vec<crate::blackboard::Course>,
+    courses: Vec<crate::model::Course>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -502,7 +439,6 @@ pub async fn open_recent_download(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    use crate::download::{is_inside_resolved, normalize_path};
     use tauri_plugin_opener::OpenerExt;
 
     let (sync_dir, known) = {
@@ -515,7 +451,7 @@ pub async fn open_recent_download(
         return Err("File non presente tra i download recenti".to_string());
     }
     let full = sync_dir.join(&path);
-    if !is_inside_resolved(&full, sync_dir.canonicalize().ok().as_deref(), &normalize_path(&sync_dir)) {
+    if !crate::paths::SyncRoot::new(&sync_dir).contains(&full) {
         return Err("Path traversal non consentito".to_string());
     }
 
@@ -529,13 +465,7 @@ pub async fn open_recent_download(
 
 #[tauri::command]
 pub async fn reset_window_size(app: AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window("main") {
-        window
-            .set_size(tauri::LogicalSize::new(480.0, 780.0))
-            .map_err(|e| e.to_string())?;
-        window.center().map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    crate::window::reset_size(&app)
 }
 
 #[tauri::command]
@@ -553,4 +483,60 @@ pub async fn restart_for_update(
 ) -> Result<(), String> {
     state.is_quitting.store(true, Ordering::SeqCst);
     app.restart()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn responses_keep_their_json_shape() {
+        let user = crate::model::UserInfo {
+            id: "1".into(),
+            user_name: "u".into(),
+            name: crate::model::UserName { given: "A".into(), family: "B".into() },
+        };
+        let json = |r: LoginResponse| serde_json::to_string(&r).unwrap();
+        assert_eq!(
+            json(Ok(user).into()),
+            r#"{"success":true,"user":{"id":"1","userName":"u","name":{"given":"A","family":"B"}}}"#
+        );
+        assert_eq!(json(Err("no".to_string()).into()), r#"{"success":false,"error":"no"}"#);
+        assert_eq!(serde_json::to_string(&SimpleResponse::OK).unwrap(), r#"{"success":true}"#);
+    }
+
+    #[test]
+    fn course_list_keeps_one_university_when_the_other_fails() {
+        let course = |id: &str| crate::model::Course {
+            id: id.into(), course_id: id.into(), name: id.into(), term: None, instructor: None,
+        };
+        let bocconi = || Some((BlackboardAPI::new(&[]), vec![course("_1_1")]));
+        let polimi = || Some((webeep::WeBeepAPI::new("t"), vec![course("webeep:2")]));
+        let sources = |blackboard, webeep, errors: &[&str]| Sources {
+            blackboard,
+            webeep,
+            errors: errors.iter().map(|e| e.to_string()).collect(),
+        };
+        let fields = |r: CoursesResponse| {
+            let ids = r.courses.map(|c| c.into_iter().map(|c| c.id).collect::<Vec<String>>());
+            (r.success, ids, r.error)
+        };
+        let ids = |list: &[&str]| Some(list.iter().map(|s| s.to_string()).collect::<Vec<String>>());
+
+        assert_eq!(fields(courses_response(false, &sources(None, None, &[]))), (false, None, Some("Non autenticato".into())));
+        assert_eq!(fields(courses_response(true, &sources(bocconi(), polimi(), &[]))), (true, ids(&["_1_1", "webeep:2"]), None));
+        assert_eq!(fields(courses_response(false, &sources(None, polimi(), &[]))), (true, ids(&["webeep:2"]), None));
+        assert_eq!(
+            fields(courses_response(true, &sources(bocconi(), None, &["PoliMi: giù"]))),
+            (true, ids(&["_1_1"]), Some("PoliMi: giù".into()))
+        );
+        assert_eq!(
+            fields(courses_response(false, &sources(None, None, &["PoliMi: giù"]))),
+            (false, ids(&[]), Some("PoliMi: giù".into()))
+        );
+        assert_eq!(
+            fields(courses_response(true, &sources(None, None, &["Bocconi: a", "PoliMi: b"]))),
+            (false, ids(&[]), Some("Bocconi: a · PoliMi: b".into()))
+        );
+    }
 }

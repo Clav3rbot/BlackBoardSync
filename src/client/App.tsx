@@ -4,21 +4,18 @@ import LoginView from './components/LoginView';
 import SyncView from './components/SyncView';
 import Toasts from './components/Toasts';
 import Tooltip from './components/Tooltip';
-import { getT } from './i18n';
+import { getT, type Lang } from './i18n';
 import { applyTheme } from './theme';
-import type { UserInfo } from '../types';
+import type { Provider, UserInfo } from '../types';
 
-export interface Accounts {
-    bocconi: UserInfo | null;
-    webeep: UserInfo | null;
-}
+export type Accounts = Record<Provider, UserInfo | null>;
 
 const App: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [accounts, setAccounts] = useState<Accounts>({ bocconi: null, webeep: null });
     const [offline, setOffline] = useState(false);
     const restoring = useRef(false);
-    const [lang, setLang] = useState<'it' | 'en'>(
+    const [lang, setLang] = useState<Lang>(
         navigator.language.startsWith('it') ? 'it' : 'en'
     );
 
@@ -34,7 +31,7 @@ const App: React.FC = () => {
             .then((cfg) => {
                 applyTheme(cfg?.theme);
                 if (cfg && cfg.language) {
-                    setLang(cfg.language as 'it' | 'en');
+                    setLang(cfg.language as Lang);
                 }
             })
             .catch((err) => {
@@ -77,11 +74,11 @@ const App: React.FC = () => {
             });
     };
 
-    const handleLogin = (provider: 'bocconi' | 'webeep', u: UserInfo) => {
+    const handleLogin = (provider: Provider, u: UserInfo) => {
         setAccounts((prev) => ({ ...prev, [provider]: u }));
     };
 
-    const handleLogout = async (provider: 'bocconi' | 'webeep' | 'all' = 'all') => {
+    const handleLogout = async (provider: Provider | 'all' = 'all') => {
         try {
             await window.api.logout(provider);
         } catch (err) {
@@ -99,7 +96,7 @@ const App: React.FC = () => {
         <div className="app">
             <div className="titlebar">
                 <div className="titlebar-drag" data-tauri-drag-region>
-                    <span className="titlebar-title">BlackBoard Sync</span>
+                    <span className="titlebar-title">{t('appName')}</span>
                 </div>
                 <div className="titlebar-controls">
                     <button

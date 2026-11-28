@@ -3,7 +3,8 @@ import HeatmapBackground from './HeatmapBackground';
 import Icon from './Icon';
 import { EyeMorph } from './MorphIcon';
 import Marquee from './Marquee';
-import { getT } from '../i18n';
+import SourceBadge from './SourceBadge';
+import { getT, type Lang } from '../i18n';
 import { useEscape } from '../useEscape';
 import type { Course } from '../../types';
 
@@ -12,10 +13,33 @@ const ACTIONS_MENU_ROOM = 120;
 
 // Course ids carry the university prefix (webeep::ID_PREFIX in Rust).
 const isWebeep = (courseId: string) => courseId.startsWith('webeep:');
-const sourceLabel = (courseId: string) => (isWebeep(courseId) ? 'PoliMi' : 'Bocconi');
+
+// Cached and WeBeep teachers show at once; looked-up ones fade in after a skeleton.
+const Instructor: React.FC<{ name?: string; loading: boolean; fresh: boolean; marquee: boolean }> = ({
+    name,
+    loading,
+    fresh,
+    marquee,
+}) =>
+    name ? (
+        <span className={`course-instructor${fresh ? ' fade-in' : ''}`}>
+            {marquee ? <Marquee text={name} /> : name}
+        </span>
+    ) : loading && fresh ? (
+        <div className="course-instructor-skeleton">
+            <span className="skeleton-dot" />
+            <span className="skeleton-bar" />
+        </div>
+    ) : null;
+
+const toggled = (set: Set<string>, id: string) => {
+    const next = new Set(set);
+    if (!next.delete(id)) next.add(id);
+    return next;
+};
 
 interface CourseListProps {
-    lang: 'it' | 'en';
+    lang: Lang;
     courses: Course[];
     syncAll: boolean;
     enabledCourses: string[];
@@ -98,14 +122,9 @@ const CourseList: React.FC<CourseListProps> = ({
             }
         }
 
-        const semesterGroups = Object.values(groups).filter((g) => {
-            const lower = g.termName.toLowerCase();
-            return lower.includes('semester') || lower.includes('semestre');
-        });
-        const otherGroups = Object.values(groups).filter((g) => {
-            const lower = g.termName.toLowerCase();
-            return !lower.includes('semester') && !lower.includes('semestre');
-        });
+        const isSemester = (g: TermGroup) => /semester|semestre/i.test(g.termName);
+        const semesterGroups = Object.values(groups).filter(isSemester);
+        const otherGroups = Object.values(groups).filter((g) => !isSemester(g));
 
         semesterGroups.sort((a, b) => {
             const aName = a.termName.toUpperCase();
@@ -174,12 +193,7 @@ const CourseList: React.FC<CourseListProps> = ({
 
     const toggleTermCollapse = (termId: string) => {
         setCollapsedTerms((prev) => {
-            const next = new Set(prev);
-            if (next.has(termId)) {
-                next.delete(termId);
-            } else {
-                next.add(termId);
-            }
+            const next = toggled(prev, termId);
             onCollapsedTermsChange(Array.from(next));
             return next;
         });
@@ -194,15 +208,7 @@ const CourseList: React.FC<CourseListProps> = ({
 
     const toggleRevealedTerm = (termId: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        setRevealedTerms((prev) => {
-            const next = new Set(prev);
-            if (next.has(termId)) {
-                next.delete(termId);
-            } else {
-                next.add(termId);
-            }
-            return next;
-        });
+        setRevealedTerms((prev) => toggled(prev, termId));
     };
 
 
@@ -480,23 +486,17 @@ const CourseList: React.FC<CourseListProps> = ({
                                                         ) : (
                                                             <span className="course-name">
                                                                 <Marquee text={displayName} />
-                                                                {mixedSources && (
-                                                                    <span className="course-source">
-                                                                        {sourceLabel(course.id)}
-                                                                    </span>
-                                                                )}
+                                                                {mixedSources && <SourceBadge webeep={isWebeep(course.id)} />}
                                                             </span>
                                                         )}
-                                                        {course.instructor && !isEditing ? (
-                                                            <span className={`course-instructor${cacheMisses?.has(course.id) ? ' fade-in' : ''}`}>
-                                                                <Marquee text={course.instructor} />
-                                                            </span>
-                                                        ) : (loadingInstructors && !isEditing && cacheMisses?.has(course.id)) ? (
-                                                            <div className="course-instructor-skeleton">
-                                                                <span className="skeleton-dot" />
-                                                                <span className="skeleton-bar" />
-                                                            </div>
-                                                        ) : null}
+                                                        {!isEditing && (
+                                                            <Instructor
+                                                                name={course.instructor}
+                                                                loading={!!loadingInstructors}
+                                                                fresh={!!cacheMisses?.has(course.id)}
+                                                                marquee
+                                                            />
+                                                        )}
                                                     </div>
                                                     {!isEditing && (
                                                         <div
@@ -557,20 +557,14 @@ const CourseList: React.FC<CourseListProps> = ({
                                                     <div className="course-info">
                                                         <span className="course-name">
                                                             {displayName}
-                                                            {mixedSources && (
-                                                                <span className="course-source">
-                                                                    {sourceLabel(course.id)}
-                                                                </span>
-                                                            )}
+                                                            {mixedSources && <SourceBadge webeep={isWebeep(course.id)} />}
                                                         </span>
-                                                        {course.instructor ? (
-                                                            <span className={`course-instructor${cacheMisses?.has(course.id) ? ' fade-in' : ''}`}>{course.instructor}</span>
-                                                        ) : (loadingInstructors && cacheMisses?.has(course.id)) ? (
-                                                            <div className="course-instructor-skeleton">
-                                                                <span className="skeleton-dot" />
-                                                                <span className="skeleton-bar" />
-                                                            </div>
-                                                        ) : null}
+                                                        <Instructor
+                                                            name={course.instructor}
+                                                            loading={!!loadingInstructors}
+                                                            fresh={!!cacheMisses?.has(course.id)}
+                                                            marquee={false}
+                                                        />
                                                     </div>
                                                     <button
                                                         className="btn-unhide"

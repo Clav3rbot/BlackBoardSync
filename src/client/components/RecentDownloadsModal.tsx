@@ -1,20 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Dialog from './Dialog';
 import Icon from './Icon';
 import Marquee from './Marquee';
-import { getT } from '../i18n';
-import { useEscape } from '../useEscape';
-import { useFocusTrap } from '../useFocusTrap';
+import { getT, locale as localeOf, type Lang } from '../i18n';
 import type { RecentDownload } from '../../types';
 
 interface RecentDownloadsModalProps {
-    lang: 'it' | 'en';
+    lang: Lang;
     onClose: () => void;
 }
 
 const RecentDownloadsModal: React.FC<RecentDownloadsModalProps> = ({ lang, onClose }) => {
-    useEscape(onClose);
-    const ref = useRef<HTMLDivElement>(null);
-    useFocusTrap(ref);
     const t = getT(lang);
     const [files, setFiles] = useState<RecentDownload[] | null>(null);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -44,7 +40,7 @@ const RecentDownloadsModal: React.FC<RecentDownloadsModalProps> = ({ lang, onClo
     const open = (path: string, reveal: boolean) =>
         window.api.openRecentDownload(path, reveal).catch((err) => console.error('Failed to open file:', err));
 
-    const locale = lang === 'en' ? 'en-US' : 'it-IT';
+    const locale = localeOf(lang);
     const formatTime = (iso: string): string =>
         new Date(iso).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
@@ -67,81 +63,71 @@ const RecentDownloadsModal: React.FC<RecentDownloadsModalProps> = ({ lang, onClo
     }
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div
-                ref={ref}
-                className="modal-container"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="recent-downloads-title"
-                tabIndex={-1}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="modal-header">
-                    <div className="modal-status-icon">
-                        <Icon name="history" size={26} />
-                    </div>
-                    <h2 id="recent-downloads-title" className="modal-title">{t('recentDownloads')}</h2>
-                    <p className="modal-subtitle">
-                        {files === null ? t('loading') : files.length > 0 ? t('recentDownloadsHint') : t('recentDownloadsEmpty')}
-                    </p>
+        <Dialog overlayClassName="modal-overlay" className="modal-container" labelledBy="recent-downloads-title" onClose={onClose}>
+            <div className="modal-header">
+                <div className="modal-status-icon">
+                    <Icon name="history" size={26} />
                 </div>
-
-                {groups.size > 0 && (
-                    <div className="modal-body">
-                        {[...groups].map(([course, courseFiles]) => (
-                            <div key={course} className="modal-course">
-                                <button
-                                    className="modal-course-header recent-course-toggle"
-                                    onClick={() => toggleCourse(course)}
-                                    aria-expanded={expanded.has(course)}
-                                >
-                                    <span className={`term-chevron ${expanded.has(course) ? 'expanded' : ''}`}>
-                                        <Icon name="caretRight" size={11} />
-                                    </span>
-                                    <Icon name="folder" size={14} className="modal-course-icon" />
-                                    <Marquee className="modal-course-name" text={course || t('recentDownloadsNoCourse')} />
-                                    <span className="modal-course-count">{courseFiles.length}</span>
-                                </button>
-                                {expanded.has(course) && <ul className="modal-file-list">
-                                    {courseFiles.map((file) => (
-                                        <li key={file.path} className="modal-file-item recent-file">
-                                            <button
-                                                className="recent-file-open"
-                                                onClick={() => open(file.path, false)}
-                                                data-tip={file.path}
-                                            >
-                                                <Icon name="file" size={12} className="modal-file-icon" />
-                                                <span className="recent-file-text">
-                                                    <Marquee className="modal-file-name" text={file.name} />
-                                                    <span className="recent-file-course">
-                                                        {formatDay(file.at)} · {formatTime(file.at)}
-                                                    </span>
-                                                </span>
-                                            </button>
-                                            <button
-                                                className="recent-file-reveal"
-                                                onClick={() => open(file.path, true)}
-                                                data-tip={t('showInFolder')}
-                                                aria-label={t('showInFolder')}
-                                            >
-                                                <Icon name="folderOpen" size={13} />
-                                            </button>
-                                        </li>
-                                    ))}
-                                </ul>}
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                <div className="modal-footer">
-                    <button className="modal-close-btn" onClick={onClose}>
-                        {t('close')}
-                    </button>
-                </div>
+                <h2 id="recent-downloads-title" className="modal-title">{t('recentDownloads')}</h2>
+                <p className="modal-subtitle">
+                    {files === null ? t('loading') : files.length > 0 ? t('recentDownloadsHint') : t('recentDownloadsEmpty')}
+                </p>
             </div>
-        </div>
+
+            {groups.size > 0 && (
+                <div className="modal-body">
+                    {[...groups].map(([course, courseFiles]) => (
+                        <div key={course} className="modal-course">
+                            <button
+                                className="modal-course-header recent-course-toggle"
+                                onClick={() => toggleCourse(course)}
+                                aria-expanded={expanded.has(course)}
+                            >
+                                <span className={`term-chevron ${expanded.has(course) ? 'expanded' : ''}`}>
+                                    <Icon name="caretRight" size={11} />
+                                </span>
+                                <Icon name="folder" size={14} className="modal-course-icon" />
+                                <Marquee className="modal-course-name" text={course || t('recentDownloadsNoCourse')} />
+                                <span className="modal-course-count">{courseFiles.length}</span>
+                            </button>
+                            {expanded.has(course) && <ul className="modal-file-list">
+                                {courseFiles.map((file) => (
+                                    <li key={file.path} className="modal-file-item recent-file">
+                                        <button
+                                            className="recent-file-open"
+                                            onClick={() => open(file.path, false)}
+                                            data-tip={file.path}
+                                        >
+                                            <Icon name="file" size={12} className="modal-file-icon" />
+                                            <span className="recent-file-text">
+                                                <Marquee className="modal-file-name" text={file.name} />
+                                                <span className="recent-file-course">
+                                                    {formatDay(file.at)} · {formatTime(file.at)}
+                                                </span>
+                                            </span>
+                                        </button>
+                                        <button
+                                            className="recent-file-reveal"
+                                            onClick={() => open(file.path, true)}
+                                            data-tip={t('showInFolder')}
+                                            aria-label={t('showInFolder')}
+                                        >
+                                            <Icon name="folderOpen" size={13} />
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <div className="modal-footer">
+                <button className="modal-close-btn" onClick={onClose}>
+                    {t('close')}
+                </button>
+            </div>
+        </Dialog>
     );
 };
 

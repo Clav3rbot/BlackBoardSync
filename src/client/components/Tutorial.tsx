@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import Icon, { IconName } from './Icon';
-import { getT, TranslationKeys } from '../i18n';
+import { getT, TranslationKeys, type Lang } from '../i18n';
+import { useFocusTrap } from '../useFocusTrap';
 
 interface Step {
     // Selector to spotlight; none centres the card.
@@ -72,7 +73,7 @@ const Body: React.FC<{ text: string }> = ({ text }) => {
 };
 
 interface TutorialProps {
-    lang: 'it' | 'en';
+    lang: Lang;
     onDone: () => void;
     onSettings: (open: boolean) => void;
 }
@@ -85,6 +86,9 @@ const Tutorial: React.FC<TutorialProps> = ({ lang, onDone, onSettings }) => {
         STEPS.filter((s) => !s.target || s.settings || document.querySelector(s.target))
     );
     const [index, setIndex] = useState(0);
+    // The tour is the topmost dialog, so Settings' trap stands down: without its own, Tab walks behind it.
+    const ref = useRef<HTMLDivElement>(null);
+    useFocusTrap(ref);
     // `card` holds the card back while the Settings panel slides in, so it lands once the row settles.
     const [measured, setMeasured] = useState<{ index: number; rect: DOMRect | null; card: boolean }>({
         index: -1,
@@ -180,7 +184,7 @@ const Tutorial: React.FC<TutorialProps> = ({ lang, onDone, onSettings }) => {
     }
 
     return (
-        <div className="tutorial" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
+        <div ref={ref} className="tutorial" role="dialog" aria-modal="true" aria-labelledby="tutorial-title">
             <div className={`tutorial-spot ${rect && !settling ? '' : 'empty'}`} style={spot} />
             {measured.index === index && measured.card && (
                 <div key={index} className={`tutorial-card ${rect ? '' : 'centered'}`} style={cardPlace}>

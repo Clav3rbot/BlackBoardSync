@@ -68,6 +68,9 @@ export interface RecentDownload {
 
 export type Provider = 'bocconi' | 'webeep';
 
+// LoginResponse in commands.rs: a user on success, an error otherwise.
+export type LoginResult = { success: true; user: UserInfo } | { success: false; error?: string };
+
 export interface AccountsResult {
     bocconi?: UserInfo | null;
     webeep?: UserInfo | null;
@@ -75,20 +78,18 @@ export interface AccountsResult {
     webeepError?: string;
 }
 
-export interface ApiResult<T = any> {
+export interface ApiResult {
     success: boolean;
     error?: string;
-    user?: UserInfo;
     courses?: Course[];
-    data?: T;
 }
 
 declare global {
     interface Window {
         api: {
-            login: (username: string, password: string) => Promise<ApiResult>;
+            login: (username: string, password: string) => Promise<LoginResult>;
             autoLogin: () => Promise<AccountsResult>;
-            webeepLogin: () => Promise<ApiResult>;
+            webeepLogin: () => Promise<LoginResult>;
             logout: (provider?: Provider | 'all') => Promise<ApiResult>;
             getCourses: () => Promise<ApiResult>;
             getInstructors: (courseIds: string[]) => Promise<Record<string, string>>;

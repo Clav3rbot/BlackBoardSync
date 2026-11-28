@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import appIcon from '../../../static/icons/png/128x128.png';
 import { EyeMorph } from './MorphIcon';
-import { getT } from '../i18n';
+import { connect } from '../connect';
+import { getT, type Lang } from '../i18n';
+import type { Provider, UserInfo } from '../../types';
 
 // The form is Bocconi; PoliMi-only students get a link, everyone else connects it from Settings.
 interface LoginViewProps {
-    lang: 'it' | 'en';
-    onLogin: (provider: 'bocconi' | 'webeep', user: any) => void;
+    lang: Lang;
+    onLogin: (provider: Provider, user: UserInfo) => void;
 }
 
 const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
@@ -22,18 +24,8 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
     const handleWebeep = async () => {
         setWebeepBusy(true);
         setError('');
-        try {
-            const result = await window.api.webeepLogin();
-            if (result.success) {
-                onLogin('webeep', result.user);
-            } else {
-                setError(result.error || t('loginError'));
-            }
-        } catch {
-            setError(t('loginError'));
-        } finally {
-            setWebeepBusy(false);
-        }
+        setError(await connect('webeep', () => window.api.webeepLogin(), onLogin, t('loginError')));
+        setWebeepBusy(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -45,28 +37,17 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
 
         setLoading(true);
         setError('');
-
-        try {
-            const result = await window.api.login(username, password);
-            if (result.success) {
-                onLogin('bocconi', result.user);
-            } else {
-                setError(result.error || t('loginError'));
-            }
-        } catch {
-            setError(t('loginError'));
-        } finally {
-            setLoading(false);
-        }
+        setError(await connect('bocconi', () => window.api.login(username, password), onLogin, t('loginError')));
+        setLoading(false);
     };
 
     return (
         <div className="login-view">
             <div className="login-header">
                 <div className="login-logo">
-                    <img src={appIcon} alt="BlackBoard Sync" width="64" height="64" />
+                    <img src={appIcon} alt={t('appName')} width="64" height="64" />
                 </div>
-                <h1>BlackBoard Sync</h1>
+                <h1>{t('appName')}</h1>
                 <p className="login-subtitle">{t('loginSubtitle')}</p>
             </div>
 
@@ -76,7 +57,13 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
                         <label htmlFor="username">{t('usernameLabel')}</label>
                         <input
                             id="username"
+                            name="username"
                             type="text"
+                            autoComplete="username"
+                            // An identifier, not prose: no spellcheck or macOS autocorrect rewriting it
+                            spellCheck={false}
+                            autoCorrect="off"
+                            autoCapitalize="none"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
                             placeholder={t('usernamePlaceholder')}
@@ -90,7 +77,9 @@ const LoginView: React.FC<LoginViewProps> = ({ lang, onLogin }) => {
                         <div className="password-field">
                             <input
                                 id="password"
+                                name="password"
                                 type={showPassword ? 'text' : 'password'}
+                                autoComplete="current-password"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 placeholder={t('passwordPlaceholder')}

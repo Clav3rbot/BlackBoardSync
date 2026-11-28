@@ -1,18 +1,63 @@
+use crate::blackboard::{BlackboardAPI, HOST, SITE};
+use crate::model::UserInfo;
+use crate::state::{AppState, Session};
 use reqwest::{Client, Method, StatusCode};
 use scraper::{Html, Selector};
-use serde::Serialize;
 use std::collections::HashMap;
 use url::Url;
 
-const BASE_URL: &str = "https://blackboard.unibocconi.it";
-const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BlackBoardSync/1.0";
 const MAX_HOPS: u32 = 25;
 
-#[derive(Debug, Serialize)]
-pub struct LoginResult {
-    pub success: bool,
-    pub cookies: Vec<String>,
-    pub error: Option<String>,
+pub enum SignInError {
+    /// The SAML login failed; the text is ready for the user.
+    Rejected(String),
+    /// Cookies came back but `/users/me` refused them.
+    NoProfile(String),
+}
+
+/// SAML login, then `/users/me` to prove the cookies; the session goes to memory and the keyring.
+pub async fn sign_in(
+    state: &AppState,
+    username: &str,
+    password: &str,
+) -> Result<(BlackboardAPI, UserInfo), SignInError> {
+    let cookies = LoginManager::new()
+        .login(username, password)
+        .await
+        .map_err(SignInError::Rejected)?;
+    let api = BlackboardAPI::new(&cookies);
+    let user = api.get_current_user().await.map_err(SignInError::NoProfile)?;
+    *state.session.lock().unwrap() = Some(Session { cookies: cookies.clone() });
+    state.store.lock().unwrap().save_session(&cookies);
+    Ok((api, user))
+}
+
+/// `sign_in` with the credentials in the keyring; `None` when there are none.
+pub async fn sign_in_again(
+    state: &AppState,
+) -> Option<Result<(BlackboardAPI, UserInfo), SignInError>> {
+    let (username, password) = state.store.lock().unwrap().load_credentials()?;
+    Some(sign_in(state, &username, &password).await)
+}
+
+/// An expired cookie gets an HTML login page (a JSON decode error), so a failed `/users/me`
+/// probe triggers a SAML re-auth with the stored credentials and saves the new session.
+pub async fn ensure_valid_session(
+    state: &AppState,
+    session: &Session,
+) -> Result<(BlackboardAPI, UserInfo), String> {
+    let probe = BlackboardAPI::new(&session.cookies);
+    if let Ok(user) = probe.get_current_user().await {
+        return Ok((probe, user));
+    }
+
+    match sign_in_again(state).await {
+        Some(Ok(signed_in)) => Ok(signed_in),
+        Some(Err(SignInError::Rejected(e))) => Err(e),
+        None | Some(Err(SignInError::NoProfile(_))) => {
+            Err("Sessione scaduta. Rieffettua il login.".to_string())
+        }
+    }
 }
 
 struct CookieJar {
@@ -31,7 +76,7 @@ impl CookieJar {
         };
         if hostname.is_empty() { return; }
 
-        let jar = self.cookies.entry(hostname).or_insert_with(HashMap::new);
+        let jar = self.cookies.entry(hostname).or_default();
         for value in headers.get_all("set-cookie").iter() {
             if let Ok(cookie_str) = value.to_str() {
                 let cookie_part = cookie_str.split(';').next().unwrap_or("");
@@ -74,25 +119,22 @@ pub struct LoginManager {
 
 impl LoginManager {
     pub fn new() -> Self {
-        let client = Client::builder()
+        let client = crate::http::client()
             .redirect(reqwest::redirect::Policy::none())
-            .timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("Failed to build HTTP client");
         Self { jar: CookieJar::new(), client }
     }
 
+    /// Redirects are followed by hand so every hop's cookies reach the jar. A body is a POSTed form.
     async fn request(
         &mut self,
-        method: Method,
         url: &str,
-        body: Option<String>,
-        content_type: Option<&str>,
-        follow_redirects: bool,
+        form: Option<String>,
     ) -> Result<(reqwest::Response, String), String> {
         let mut current_url = url.to_string();
-        let mut current_method = method;
-        let mut current_body = body;
+        let mut current_method = if form.is_some() { Method::POST } else { Method::GET };
+        let mut current_body = form;
         let mut hops = MAX_HOPS;
 
         loop {
@@ -103,21 +145,22 @@ impl LoginManager {
 
             let cookie_str = self.jar.get_cookie_header(&current_url);
             let mut builder = self.client
-                .request(current_method.clone(), &current_url)
-                .header("User-Agent", USER_AGENT);
+                .request(current_method.clone(), &current_url);
 
             if !cookie_str.is_empty() {
                 builder = builder.header("Cookie", &cookie_str);
             }
-            if let (Some(ref body), Some(ct)) = (&current_body, content_type) {
-                builder = builder.header("Content-Type", ct).body(body.clone());
+            if let Some(body) = &current_body {
+                builder = builder
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .body(body.clone());
             }
 
             let response = builder.send().await.map_err(|e| e.to_string())?;
             let status = response.status();
             self.jar.process_response(&current_url, response.headers());
 
-            if follow_redirects && is_redirect(status) {
+            if is_redirect(status) {
                 let location = response
                     .headers()
                     .get("location")
@@ -144,169 +187,101 @@ impl LoginManager {
         }
     }
 
-    pub async fn login(&mut self, username: &str, password: &str) -> LoginResult {
-        match self.do_login(username, password).await {
-            Ok(cookies) => LoginResult { success: true, cookies, error: None },
-            Err(e) => LoginResult { success: false, cookies: vec![], error: Some(e) },
-        }
+    /// The page at the end of the redirects, and its URL.
+    async fn page(&mut self, url: &str, form: Option<String>) -> Result<(String, String), String> {
+        let (response, final_url) = self.request(url, form).await?;
+        Ok((response.text().await.map_err(|e| e.to_string())?, final_url))
     }
 
-    async fn do_login(&mut self, username: &str, password: &str) -> Result<Vec<String>, String> {
+    pub async fn login(&mut self, username: &str, password: &str) -> Result<Vec<String>, String> {
         self.jar = CookieJar::new();
 
         // Step 1: GET /ultra/course → get SAML form
-        let (step1_resp, step1_url) = self
-            .request(Method::GET, &format!("{}/ultra/course", BASE_URL), None, None, true)
-            .await?;
-
-        let body1 = step1_resp.text().await.map_err(|e| e.to_string())?;
-        
+        let (page, url) = self.page(&format!("{}/ultra/course", SITE), None).await?;
         let (saml_url, saml_body) = {
-            let doc1 = Html::parse_document(&body1);
-            let form_sel = Selector::parse("form").unwrap();
-            let saml_req_sel = Selector::parse(r#"input[name="SAMLRequest"]"#).unwrap();
-            let relay_sel = Selector::parse(r#"input[name="RelayState"]"#).unwrap();
-
-            let form = doc1.select(&form_sel).next();
-            let saml_action = form
-                .and_then(|f| f.value().attr("action"))
-                .ok_or_else(|| "Impossibile trovare il form SAML. Il flusso SSO potrebbe essere cambiato.".to_string())?;
-            let saml_request = doc1.select(&saml_req_sel)
-                .next()
-                .and_then(|e| e.value().attr("value"))
-                .ok_or_else(|| "SAMLRequest non trovato".to_string())?;
-            let relay_state = doc1.select(&relay_sel)
-                .next()
-                .and_then(|e| e.value().attr("value"))
-                .unwrap_or("");
-
-            let saml_url = if saml_action.starts_with("http") {
-                saml_action.to_string()
-            } else {
-                Url::parse(&step1_url)
-                    .and_then(|base| base.join(saml_action))
-                    .map(|u| u.to_string())
-                    .map_err(|e| e.to_string())?
-            };
-
-            let saml_body = url::form_urlencoded::Serializer::new(String::new())
-                .append_pair("SAMLRequest", saml_request)
-                .append_pair("RelayState", relay_state)
-                .finish();
-
-            (saml_url, saml_body)
+            let doc = Html::parse_document(&page);
+            let action = form_action(&doc)
+                .ok_or("Impossibile trovare il form SAML. Il flusso SSO potrebbe essere cambiato.")?;
+            let saml_request = input_value(&doc, "SAMLRequest").ok_or("SAMLRequest non trovato")?;
+            let relay_state = input_value(&doc, "RelayState").unwrap_or("");
+            (
+                resolve(action, &url)?,
+                form_body(&[("SAMLRequest", saml_request), ("RelayState", relay_state)]),
+            )
         };
 
         // Step 2: POST SAMLRequest to IdP
-        let (step2_resp, step2_url) = self
-            .request(
-                Method::POST,
-                &saml_url,
-                Some(saml_body),
-                Some("application/x-www-form-urlencoded"),
-                true,
-            )
-            .await?;
-
-        let body2 = step2_resp.text().await.map_err(|e| e.to_string())?;
-        
+        let (page, url) = self.page(&saml_url, Some(saml_body)).await?;
         let login_url = {
-            let doc2 = Html::parse_document(&body2);
-            let form_sel = Selector::parse("form").unwrap();
-            let login_action = doc2.select(&form_sel)
-                .next()
-                .and_then(|f| f.value().attr("action"))
-                .ok_or_else(|| "Impossibile trovare il form di login nell'IDP.".to_string())?;
-
-            if login_action.starts_with("http") {
-                login_action.to_string()
-            } else {
-                Url::parse(&step2_url)
-                    .and_then(|base| base.join(login_action))
-                    .map(|u| u.to_string())
-                    .map_err(|e| e.to_string())?
-            }
+            let doc = Html::parse_document(&page);
+            let action = form_action(&doc).ok_or("Impossibile trovare il form di login nell'IDP.")?;
+            resolve(action, &url)?
         };
-
-        let cred_body = url::form_urlencoded::Serializer::new(String::new())
-            .append_pair("j_username", username)
-            .append_pair("j_password", password)
-            .append_pair("_eventId_proceed", "")
-            .finish();
+        let credentials = form_body(&[
+            ("j_username", username),
+            ("j_password", password),
+            ("_eventId_proceed", ""),
+        ]);
 
         // Step 3: POST credentials
-        let (step3_resp, step3_url) = self
-            .request(
-                Method::POST,
-                &login_url,
-                Some(cred_body),
-                Some("application/x-www-form-urlencoded"),
-                true,
-            )
-            .await?;
-
-        let body3 = step3_resp.text().await.map_err(|e| e.to_string())?;
-        
+        let (page, url) = self.page(&login_url, Some(credentials)).await?;
         let (return_url, return_body) = {
-            let doc3 = Html::parse_document(&body3);
-            
-            let error_sel = Selector::parse(".error").unwrap();
-            if let Some(error_el) = doc3.select(&error_sel).next() {
-                let error_text: String = error_el.text().collect::<Vec<_>>().join("").trim().to_string();
-                return Err(if error_text.is_empty() { "Credenziali non valide".to_string() } else { error_text });
+            let doc = Html::parse_document(&page);
+            if let Some(error) = doc.select(&selector(".error")).next() {
+                let text = error.text().collect::<String>().trim().to_string();
+                return Err(if text.is_empty() { "Credenziali non valide".to_string() } else { text });
             }
 
             // Step 4: POST SAMLResponse back to SP
-            let form_sel = Selector::parse("form").unwrap();
-            let saml_resp_sel = Selector::parse(r#"input[name="SAMLResponse"]"#).unwrap();
-            let relay_ret_sel = Selector::parse(r#"input[name="RelayState"]"#).unwrap();
-
-            let saml_response = doc3.select(&saml_resp_sel)
-                .next()
-                .and_then(|e| e.value().attr("value"))
-                .ok_or_else(|| "Autenticazione fallita. Nessuna risposta SAML ricevuta.".to_string())?;
-            let return_relay = doc3.select(&relay_ret_sel)
-                .next()
-                .and_then(|e| e.value().attr("value"))
-                .unwrap_or("");
-            let return_action = doc3.select(&form_sel)
-                .next()
-                .and_then(|f| f.value().attr("action"))
-                .ok_or_else(|| "Form SAMLResponse non trovato".to_string())?;
-
-            let return_url = if return_action.starts_with("http") {
-                return_action.to_string()
-            } else {
-                Url::parse(&step3_url)
-                    .and_then(|base| base.join(return_action))
-                    .map(|u| u.to_string())
-                    .map_err(|e| e.to_string())?
-            };
-
-            let return_body = url::form_urlencoded::Serializer::new(String::new())
-                .append_pair("SAMLResponse", saml_response)
-                .append_pair("RelayState", return_relay)
-                .finish();
-
-            (return_url, return_body)
+            let saml_response = input_value(&doc, "SAMLResponse")
+                .ok_or("Autenticazione fallita. Nessuna risposta SAML ricevuta.")?;
+            let relay_state = input_value(&doc, "RelayState").unwrap_or("");
+            let action = form_action(&doc).ok_or("Form SAMLResponse non trovato")?;
+            (
+                resolve(action, &url)?,
+                form_body(&[("SAMLResponse", saml_response), ("RelayState", relay_state)]),
+            )
         };
+        self.request(&return_url, Some(return_body)).await?;
 
-        self.request(
-            Method::POST,
-            &return_url,
-            Some(return_body),
-            Some("application/x-www-form-urlencoded"),
-            true,
-        )
-        .await?;
-
-        let session_cookies = self.jar.get_session_cookies("blackboard.unibocconi.it");
+        let session_cookies = self.jar.get_session_cookies(HOST);
         if session_cookies.is_empty() {
             return Err("Login riuscito ma nessun cookie di sessione ricevuto.".to_string());
         }
 
         Ok(session_cookies)
     }
+}
+
+fn selector(css: &str) -> Selector {
+    Selector::parse(css).expect("fixed selector")
+}
+
+/// `action` of the page's first form.
+fn form_action(doc: &Html) -> Option<&str> {
+    doc.select(&selector("form")).next()?.value().attr("action")
+}
+
+fn input_value<'a>(doc: &'a Html, name: &str) -> Option<&'a str> {
+    doc.select(&selector(&format!(r#"input[name="{}"]"#, name)))
+        .next()?
+        .value()
+        .attr("value")
+}
+
+/// An absolute `action` is taken as is, a relative one against the page it came from.
+fn resolve(action: &str, page_url: &str) -> Result<String, String> {
+    if action.starts_with("http") {
+        return Ok(action.to_string());
+    }
+    Url::parse(page_url)
+        .and_then(|base| base.join(action))
+        .map(|u| u.to_string())
+        .map_err(|e| e.to_string())
+}
+
+fn form_body(pairs: &[(&str, &str)]) -> String {
+    url::form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs).finish()
 }
 
 fn is_redirect(status: StatusCode) -> bool {
@@ -318,4 +293,27 @@ fn is_redirect(status: StatusCode) -> bool {
             | StatusCode::TEMPORARY_REDIRECT
             | StatusCode::PERMANENT_REDIRECT
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAML_PAGE: &str = r#"<html><body><form method="post" action="/idp/profile/SAML2/POST/SSO"><input type="hidden" name="SAMLRequest" value="PHNhbWw+"/><input type="hidden" name="RelayState" value="cookie&amp;1"/></form></body></html>"#;
+
+    #[test]
+    fn reads_the_saml_form() {
+        let doc = Html::parse_document(SAML_PAGE);
+        assert_eq!(form_action(&doc), Some("/idp/profile/SAML2/POST/SSO"));
+        assert_eq!(input_value(&doc, "SAMLRequest"), Some("PHNhbWw+"));
+        assert_eq!(input_value(&doc, "RelayState"), Some("cookie&1"));
+        assert_eq!(input_value(&doc, "SAMLResponse"), None);
+    }
+
+    #[test]
+    fn form_actions_resolve_against_their_page() {
+        assert_eq!(resolve("/idp/sso", "https://idp.example/start?x=1").unwrap(), "https://idp.example/idp/sso");
+        assert_eq!(resolve("https://bb.example/acs", "https://idp.example/x").unwrap(), "https://bb.example/acs");
+        assert_eq!(form_body(&[("SAMLResponse", "a+b="), ("RelayState", "")]), "SAMLResponse=a%2Bb%3D&RelayState=");
+    }
 }

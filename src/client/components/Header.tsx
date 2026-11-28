@@ -1,10 +1,10 @@
 import React from 'react';
 import Icon from './Icon';
 import { SyncMorph } from './MorphIcon';
-import { getT } from '../i18n';
+import { getT, type Lang } from '../i18n';
 
 interface HeaderProps {
-    lang: 'it' | 'en';
+    lang: Lang;
     userName: string;
     matricola?: string;
     lastSync: string;

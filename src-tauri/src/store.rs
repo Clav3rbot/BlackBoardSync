@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use zeroize::Zeroizing;
@@ -94,6 +94,34 @@ fn write_atomic(path: &std::path::Path, bytes: &[u8]) {
     }
 }
 
+/// A keyring entry of the `blackboard-sync` service. Renaming one signs every user out.
+struct Secret(&'static str);
+
+const KEYRING_SERVICE: &str = "blackboard-sync";
+const CREDENTIALS: Secret = Secret("credentials");
+const SESSION: Secret = Secret("session");
+// Own entry, so each university connects and disconnects independently.
+const WEBEEP_TOKEN: Secret = Secret("webeep");
+
+impl Secret {
+    fn entry(&self) -> Option<keyring::Entry> {
+        keyring::Entry::new(KEYRING_SERVICE, self.0).ok()
+    }
+    fn get(&self) -> Option<String> {
+        self.entry()?.get_password().ok()
+    }
+    fn set(&self, value: &str) {
+        if let Some(entry) = self.entry() {
+            let _ = entry.set_password(value);
+        }
+    }
+    fn clear(&self) {
+        if let Some(entry) = self.entry() {
+            let _ = entry.delete_credential();
+        }
+    }
+}
+
 pub struct AppStore {
     config_path: PathBuf,
     config: AppConfig,
@@ -168,26 +196,32 @@ impl AppStore {
         }
     }
 
-    pub fn load_file_stamps(&self) -> HashMap<String, FileStamp> {
-        std::fs::read_to_string(self.data_dir.join("file_stamps.json"))
+    /// Missing or unreadable reads as empty.
+    fn read_json<T: DeserializeOwned + Default>(&self, name: &str) -> T {
+        std::fs::read_to_string(self.data_dir.join(name))
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or_default()
     }
 
-    pub fn save_file_stamps(&self, stamps: &HashMap<String, FileStamp>) {
+    fn write_json<T: Serialize>(&self, name: &str, value: &T) {
         let _ = std::fs::create_dir_all(&self.data_dir);
-        if let Ok(json) = serde_json::to_string(stamps) {
-            write_atomic(&self.data_dir.join("file_stamps.json"), json.as_bytes());
+        if let Ok(json) = serde_json::to_string(value) {
+            write_atomic(&self.data_dir.join(name), json.as_bytes());
         }
+    }
+
+    pub fn load_file_stamps(&self) -> HashMap<String, FileStamp> {
+        self.read_json("file_stamps.json")
+    }
+
+    pub fn save_file_stamps(&self, stamps: &HashMap<String, FileStamp>) {
+        self.write_json("file_stamps.json", stamps);
     }
 
     /// Newest first.
     pub fn load_recent_downloads(&self) -> Vec<RecentDownload> {
-        std::fs::read_to_string(self.data_dir.join("recent_downloads.json"))
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+        self.read_json("recent_downloads.json")
     }
 
     pub fn add_recent_downloads(&self, new: Vec<RecentDownload>) {
@@ -200,22 +234,24 @@ impl AppStore {
         let mut seen = std::collections::HashSet::new();
         list.retain(|r| seen.insert(r.path.clone()));
         list.truncate(RECENT_DOWNLOADS_MAX);
-        let _ = std::fs::create_dir_all(&self.data_dir);
-        if let Ok(json) = serde_json::to_string(&list) {
-            write_atomic(&self.data_dir.join("recent_downloads.json"), json.as_bytes());
-        }
+        self.write_json("recent_downloads.json", &list);
+    }
+
+    pub fn load_instructors_cache(&self) -> HashMap<String, String> {
+        self.read_json("instructors_cache.json")
+    }
+
+    pub fn save_instructors_cache(&self, map: &HashMap<String, String>) {
+        self.write_json("instructors_cache.json", map);
     }
 
     pub fn save_credentials(&self, username: &str, password: &str) {
         let payload = serde_json::json!({ "username": username, "password": password });
-        if let Ok(entry) = keyring::Entry::new("blackboard-sync", "credentials") {
-            let _ = entry.set_password(&payload.to_string());
-        }
+        CREDENTIALS.set(&payload.to_string());
     }
 
     pub fn load_credentials(&self) -> Option<(String, Zeroizing<String>)> {
-        let entry = keyring::Entry::new("blackboard-sync", "credentials").ok()?;
-        let json = entry.get_password().ok()?;
+        let json = Zeroizing::new(CREDENTIALS.get()?);
         let val: serde_json::Value = serde_json::from_str(&json).ok()?;
         let username = val["username"].as_str()?.to_string();
         let password = Zeroizing::new(val["password"].as_str()?.to_string());
@@ -223,63 +259,33 @@ impl AppStore {
     }
 
     pub fn clear_credentials(&self) {
-        if let Ok(entry) = keyring::Entry::new("blackboard-sync", "credentials") {
-            let _ = entry.delete_credential();
-        }
+        CREDENTIALS.clear();
     }
 
     pub fn save_session(&self, cookies: &[String]) {
         if let Ok(json) = serde_json::to_string(cookies) {
-            if let Ok(entry) = keyring::Entry::new("blackboard-sync", "session") {
-                let _ = entry.set_password(&json);
-            }
+            SESSION.set(&json);
         }
     }
 
     pub fn load_session(&self) -> Option<Vec<String>> {
-        let entry = keyring::Entry::new("blackboard-sync", "session").ok()?;
-        let json = entry.get_password().ok()?;
-        serde_json::from_str::<Vec<String>>(&json).ok()
+        serde_json::from_str(&SESSION.get()?).ok()
     }
 
     pub fn clear_session(&self) {
-        if let Ok(entry) = keyring::Entry::new("blackboard-sync", "session") {
-            let _ = entry.delete_credential();
-        }
+        SESSION.clear();
     }
 
-    // Own keyring entry, so each university connects and disconnects independently.
     pub fn save_webeep_token(&self, token: &str) {
-        if let Ok(entry) = keyring::Entry::new("blackboard-sync", "webeep") {
-            let _ = entry.set_password(token);
-        }
+        WEBEEP_TOKEN.set(token);
     }
 
     pub fn load_webeep_token(&self) -> Option<String> {
-        let entry = keyring::Entry::new("blackboard-sync", "webeep").ok()?;
-        entry.get_password().ok()
+        WEBEEP_TOKEN.get()
     }
 
     pub fn clear_webeep_token(&self) {
-        if let Ok(entry) = keyring::Entry::new("blackboard-sync", "webeep") {
-            let _ = entry.delete_credential();
-        }
-    }
-
-    pub fn save_instructors_cache(&self, map: &HashMap<String, String>) {
-        let path = self.data_dir.join("instructors_cache.json");
-        let _ = std::fs::create_dir_all(&self.data_dir);
-        if let Ok(json) = serde_json::to_string(map) {
-            let _ = std::fs::write(path, json);
-        }
-    }
-
-    pub fn load_instructors_cache(&self) -> HashMap<String, String> {
-        let path = self.data_dir.join("instructors_cache.json");
-        std::fs::read_to_string(path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+        WEBEEP_TOKEN.clear();
     }
 }
 
@@ -305,5 +311,91 @@ mod tests {
         assert_eq!(store.load_recent_downloads().len(), RECENT_DOWNLOADS_MAX);
 
         let _ = std::fs::remove_dir_all(data_dir);
+    }
+
+
+    fn temp_store(name: &str) -> (AppStore, PathBuf) {
+        let data_dir = std::env::temp_dir().join(format!("bbsync-{}-{}", name, std::process::id()));
+        let _ = std::fs::remove_dir_all(&data_dir);
+        std::fs::create_dir_all(&data_dir).unwrap();
+        let config_path = data_dir.join("config.json");
+        (AppStore { config_path, config: AppConfig::default(), data_dir: data_dir.clone() }, data_dir)
+    }
+
+    #[test]
+    fn keyring_entries_keep_their_names() {
+        assert_eq!(
+            (KEYRING_SERVICE, CREDENTIALS.0, SESSION.0, WEBEEP_TOKEN.0),
+            ("blackboard-sync", "credentials", "session", "webeep")
+        );
+    }
+
+    #[test]
+    fn stamps_and_instructors_keep_their_files_and_format() {
+        let (store, dir) = temp_store("files");
+        store.save_file_stamps(&HashMap::from([("C/a.pdf".to_string(), FileStamp { stamp: "s".into(), version: 2 })]));
+        store.save_instructors_cache(&HashMap::from([("_1_1".to_string(), "Ada Lovelace".to_string())]));
+        assert_eq!(std::fs::read_to_string(dir.join("file_stamps.json")).unwrap(), r#"{"C/a.pdf":{"stamp":"s","version":2}}"#);
+        assert_eq!(std::fs::read_to_string(dir.join("instructors_cache.json")).unwrap(), r#"{"_1_1":"Ada Lovelace"}"#);
+        assert_eq!(store.load_file_stamps()["C/a.pdf"].version, 2);
+        assert_eq!(store.load_instructors_cache()["_1_1"], "Ada Lovelace");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn saved_config_fills_missing_fields_with_defaults() {
+        let (store, dir) = temp_store("partial");
+        std::fs::write(&store.config_path, r#"{"syncDir":"D:/Uni","theme":"light","syncAllCourses":false}"#).unwrap();
+        let config = AppStore::load_config_from(&store.config_path);
+        let default = AppConfig::default();
+        assert_eq!(config.sync_dir, "D:/Uni");
+        assert_eq!(config.theme, "light");
+        assert!(!config.sync_all_courses);
+        assert_eq!(config.auto_sync_interval, default.auto_sync_interval);
+        assert_eq!(config.minimize_to_tray, default.minimize_to_tray);
+        assert_eq!(config.language, default.language);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn configs_older_than_sync_all_courses_keep_their_meaning() {
+        let (store, dir) = temp_store("legacy");
+        std::fs::write(&store.config_path, r#"{"enabledCourses":[]}"#).unwrap();
+        assert!(AppStore::load_config_from(&store.config_path).sync_all_courses);
+        std::fs::write(&store.config_path, r#"{"enabledCourses":["_123_1"]}"#).unwrap();
+        let config = AppStore::load_config_from(&store.config_path);
+        assert!(!config.sync_all_courses);
+        assert_eq!(config.enabled_courses, ["_123_1"]);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn unreadable_or_mistyped_config_falls_back_to_defaults() {
+        let (store, dir) = temp_store("broken");
+        let default = AppConfig::default();
+        std::fs::write(&store.config_path, "non è json").unwrap();
+        assert_eq!(AppStore::load_config_from(&store.config_path).sync_dir, default.sync_dir);
+        std::fs::write(&store.config_path, r#"{"autoSync":"sì","syncDir":"D:/Uni"}"#).unwrap();
+        assert_eq!(AppStore::load_config_from(&store.config_path).sync_dir, default.sync_dir);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn update_config_merges_saves_and_rejects_wrong_types() {
+        let (mut store, dir) = temp_store("update");
+        let updated = store.update_config(serde_json::json!({ "autoSync": true, "autoSyncInterval": 60 }));
+        assert!(updated.auto_sync);
+        assert_eq!(updated.auto_sync_interval, 60);
+        let saved = AppStore::load_config_from(&store.config_path);
+        assert!(saved.auto_sync);
+        assert_eq!(saved.auto_sync_interval, 60);
+
+        let unchanged = store.update_config(serde_json::json!({ "autoSyncInterval": "spesso", "theme": "light" }));
+        assert_eq!(unchanged.auto_sync_interval, 60);
+        assert_eq!(unchanged.theme, "dark");
+
+        let ignored = store.update_config(serde_json::json!({ "campoSconosciuto": 1 }));
+        assert_eq!(ignored.auto_sync_interval, 60);
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

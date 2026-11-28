@@ -1,8 +1,10 @@
 //! WeBeep (PoliMi) Moodle client. The token comes from Moodle's mobile launch flow
 //! in an SSO webview, so the Polimi password never passes through this process.
 
-use crate::download::FileToDownload;
+use crate::model::FileToDownload;
+use crate::paths::sanitize_path;
 use crate::state::AppState;
+use crate::store::AppStore;
 use base64::Engine;
 use reqwest::Client;
 use serde::Deserialize;
@@ -11,10 +13,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
-const SITE: &str = "https://webeep.polimi.it";
+pub const SITE: &str = "https://webeep.polimi.it";
 const HOST: &str = "webeep.polimi.it";
 const SERVICE: &str = "moodle_mobile_app";
-const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) BlackBoardSync/1.0";
 
 /// Keeps Moodle's small integer ids apart from Blackboard ids in the shared config lists.
 pub const ID_PREFIX: &str = "webeep:";
@@ -81,12 +82,7 @@ pub struct WeBeepAPI {
 
 impl WeBeepAPI {
     pub fn new(token: &str) -> Self {
-        let client = Client::builder()
-            .user_agent(USER_AGENT)
-            // Download URLs carry the token: keep it out of Referer on redirects.
-            .referer(false)
-            .timeout(std::time::Duration::from_secs(30))
-            .read_timeout(std::time::Duration::from_secs(30))
+        let client = crate::http::client()
             .build()
             .expect("Failed to build webeep client");
         Self { client, token: token.to_string() }
@@ -161,14 +157,11 @@ impl WeBeepAPI {
         let resp = self
             .client
             .get(signed)
-            .timeout(crate::download::DOWNLOAD_TIMEOUT)
+            .timeout(crate::http::DOWNLOAD_TIMEOUT)
             .send()
             .await
             .map_err(|e| e.without_url().to_string())?;
-        if !resp.status().is_success() {
-            return Err(format!("HTTP {}", resp.status()));
-        }
-        Ok(resp)
+        crate::http::success(resp)
     }
 }
 
@@ -181,8 +174,8 @@ fn numeric_id(course_id: &str) -> Option<i64> {
 }
 
 /// The label names the university: a bare "2026/27" reads as a Bocconi term in the shared list.
-fn academic_term(start_year: i32) -> crate::blackboard::Term {
-    crate::blackboard::Term {
+fn academic_term(start_year: i32) -> crate::model::Term {
+    crate::model::Term {
         id: format!("{}term:{}", ID_PREFIX, start_year),
         name: format!("{}/{:02} (PoliMi)", start_year, (start_year + 1) % 100),
     }
@@ -190,7 +183,7 @@ fn academic_term(start_year: i32) -> crate::blackboard::Term {
 
 /// Term from the "[2026-27]" suffix of the course name. `startdate` is often a year
 /// early (it is when the Moodle space was created), so it is only the fallback.
-fn term_from_name(fullname: &str) -> Option<crate::blackboard::Term> {
+fn term_from_name(fullname: &str) -> Option<crate::model::Term> {
     let open = fullname.rfind('[')?;
     let close = fullname[open..].find(']')? + open;
     let (first, second) = fullname[open + 1..close].trim().split_once('-')?;
@@ -206,7 +199,7 @@ fn term_from_name(fullname: &str) -> Option<crate::blackboard::Term> {
 }
 
 /// Fallback when the name has no year: the start date, with a September rollover.
-fn term_from_startdate(startdate: Option<i64>) -> Option<crate::blackboard::Term> {
+fn term_from_startdate(startdate: Option<i64>) -> Option<crate::model::Term> {
     use chrono::Datelike;
     let ts = startdate.filter(|t| *t > 0)?;
     let date = chrono::DateTime::from_timestamp(ts, 0)?;
@@ -214,11 +207,11 @@ fn term_from_startdate(startdate: Option<i64>) -> Option<crate::blackboard::Term
     Some(academic_term(if month >= 9 { year } else { year - 1 }))
 }
 
-pub fn user_info(info: &SiteInfo) -> crate::blackboard::UserInfo {
-    crate::blackboard::UserInfo {
+pub fn user_info(info: &SiteInfo) -> crate::model::UserInfo {
+    crate::model::UserInfo {
         id: format!("{}{}", ID_PREFIX, info.userid),
         user_name: info.username.clone(),
-        name: crate::blackboard::UserName {
+        name: crate::model::UserName {
             given: info.firstname.clone(),
             family: info.lastname.clone(),
         },
@@ -298,13 +291,13 @@ fn split_course_title(fullname: &str) -> (String, Option<String>) {
 pub async fn get_courses(
     api: &WeBeepAPI,
     userid: i64,
-) -> Result<Vec<crate::blackboard::Course>, String> {
+) -> Result<Vec<crate::model::Course>, String> {
     let courses = api.courses(userid).await?;
     Ok(courses
         .into_iter()
         .map(|c| {
             let (name, instructor) = split_course_title(&c.fullname);
-            crate::blackboard::Course {
+            crate::model::Course {
                 id: format!("{}{}", ID_PREFIX, c.id),
                 course_id: c.shortname,
                 term: term_from_name(&c.fullname).or_else(|| term_from_startdate(c.startdate)),
@@ -317,7 +310,7 @@ pub async fn get_courses(
 
 pub async fn scan_course(
     api: &WeBeepAPI,
-    course: &crate::blackboard::Course,
+    course: &crate::model::Course,
     base_path: &str,
 ) -> Result<Vec<FileToDownload>, String> {
     let Some(id) = numeric_id(&course.id) else {
@@ -330,7 +323,7 @@ pub async fn scan_course(
 /// `filepath` subfolders kept. A name clash puts the file back under its module and section.
 fn files_from_sections(
     sections: Vec<Section>,
-    course: &crate::blackboard::Course,
+    course: &crate::model::Course,
     base_path: &str,
 ) -> Vec<FileToDownload> {
     struct Candidate {
@@ -363,7 +356,7 @@ fn files_from_sections(
                 let mut sub = PathBuf::new();
                 for part in item.filepath.as_deref().unwrap_or("/").split('/') {
                     if !part.is_empty() {
-                        sub = sub.join(crate::download::sanitize_path(part));
+                        sub = sub.join(sanitize_path(part));
                     }
                 }
 
@@ -383,7 +376,7 @@ fn files_from_sections(
     let mut claims: HashMap<PathBuf, HashSet<String>> = HashMap::new();
     for c in &candidates {
         claims
-            .entry(c.sub.join(crate::download::sanitize_path(&c.name)))
+            .entry(c.sub.join(sanitize_path(&c.name)))
             .or_default()
             .insert(c.url.clone());
     }
@@ -392,14 +385,14 @@ fn files_from_sections(
     candidates
         .into_iter()
         .map(|c| {
-            let flat = c.sub.join(crate::download::sanitize_path(&c.name));
+            let flat = c.sub.join(sanitize_path(&c.name));
             let contested = claims.get(&flat).map(|u| u.len() > 1).unwrap_or(false);
 
             let mut dir = base.clone();
             if contested {
                 for label in [&c.module, &c.section] {
                     if !label.is_empty() {
-                        dir = dir.join(crate::download::sanitize_path(label));
+                        dir = dir.join(sanitize_path(label));
                     }
                 }
             }
@@ -545,15 +538,25 @@ pub async fn acquire_token(app: &AppHandle) -> Result<String, String> {
 /// `Ok(None)`: not connected or paused. `Err`: the stored token is rejected, shown as a
 /// warning so the Blackboard side still syncs.
 pub async fn active_api(app: &AppHandle) -> Result<Option<(WeBeepAPI, SiteInfo)>, String> {
-    if !app.state::<AppState>().store.lock().unwrap().get_config().webeep_enabled {
-        return Ok(None);
+    let token = active_token(&app.state::<AppState>().store.lock().unwrap());
+    api_for(token).await
+}
+
+/// The stored token, unless PoliMi is paused in Settings.
+pub fn active_token(store: &AppStore) -> Option<String> {
+    if !store.get_config().webeep_enabled {
+        return None;
     }
-    connected_api(app).await
+    store.load_webeep_token()
 }
 
 /// The connected account even when paused, for showing who is signed in.
 pub async fn connected_api(app: &AppHandle) -> Result<Option<(WeBeepAPI, SiteInfo)>, String> {
     let token = app.state::<AppState>().store.lock().unwrap().load_webeep_token();
+    api_for(token).await
+}
+
+async fn api_for(token: Option<String>) -> Result<Option<(WeBeepAPI, SiteInfo)>, String> {
     let Some(token) = token else {
         return Ok(None);
     };
@@ -665,8 +668,8 @@ mod tests {
     }
 
 
-    fn course(id: &str) -> crate::blackboard::Course {
-        crate::blackboard::Course {
+    fn course(id: &str) -> crate::model::Course {
+        crate::model::Course {
             id: format!("{}{}", ID_PREFIX, id),
             course_id: "SC".into(),
             name: "CORSO".into(),

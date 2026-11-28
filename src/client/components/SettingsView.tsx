@@ -1,19 +1,45 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Icon from './Icon';
 import { formatStudentName } from './Header';
-import { getT } from '../i18n';
+import { connect } from '../connect';
+import { getT, type Lang, type TranslationKeys } from '../i18n';
+import { isMac } from '../platform';
 import { applyTheme } from '../theme';
 import { useEscape } from '../useEscape';
 import { useFocusTrap } from '../useFocusTrap';
 import type { Accounts } from '../App';
-import type { AppConfig } from '../../types';
+import type { Provider, UserInfo, AppConfig } from '../../types';
 
-// The row takes the click; the switch is what the keyboard and screen readers reach.
-const Switch: React.FC<{ on: boolean; label: string }> = ({ on, label }) => (
-    <button className={`toggle ${on ? 'active' : ''}`} role="switch" aria-checked={on} aria-label={label}>
+// In a row, the row takes the click; the switch is what the keyboard and screen readers reach.
+const Switch: React.FC<{ on: boolean; label: string; tip?: string; onClick?: () => void }> = ({
+    on,
+    label,
+    tip,
+    onClick,
+}) => (
+    <button
+        className={`toggle ${on ? 'active' : ''}`}
+        role="switch"
+        aria-checked={on}
+        aria-label={label}
+        data-tip={tip}
+        onClick={onClick}
+    >
         <span className="toggle-thumb" />
     </button>
 );
+
+type ToggleKey = 'minimizeToTray' | 'startAtLogin' | 'syncOnStartup' | 'notifications' | 'heatmap';
+
+const TOGGLES: { key: ToggleKey; label: keyof TranslationKeys; desc: keyof TranslationKeys }[] = [
+    { key: 'minimizeToTray', label: 'minimizeToTrayLabel', desc: 'minimizeToTrayDesc' },
+    { key: 'startAtLogin', label: isMac ? 'startAtLoginLabelMac' : 'startAtLoginLabelWin', desc: 'startAtLoginDesc' },
+    { key: 'syncOnStartup', label: 'syncOnStartupLabel', desc: 'syncOnStartupDesc' },
+    { key: 'notifications', label: 'notificationsLabel', desc: 'notificationsDesc' },
+    { key: 'heatmap', label: 'heatmapLabel', desc: 'heatmapDesc' },
+];
+
+export const formatInterval = (mins: number) => (mins < 60 ? `${mins}m` : `${mins / 60}h`);
 
 interface SettingsViewProps {
     config: AppConfig;
@@ -21,10 +47,10 @@ interface SettingsViewProps {
     onClose: () => void;
     // Set from outside (the tour) to slide the panel out as a click would.
     dismiss?: boolean;
-    lang: 'it' | 'en';
+    lang: Lang;
     accounts: Accounts;
-    onLogin: (provider: 'bocconi' | 'webeep', user: any) => void;
-    onLogout: (provider?: 'bocconi' | 'webeep' | 'all') => void;
+    onLogin: (provider: Provider, user: UserInfo) => void;
+    onLogout: (provider?: Provider | 'all') => void;
 }
 
 const SettingsView: React.FC<SettingsViewProps> = ({
@@ -42,18 +68,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({
     const connectWebeep = async () => {
         setWebeepBusy(true);
         setWebeepError('');
-        try {
-            const result = await window.api.webeepLogin();
-            if (result.success) {
-                onLogin('webeep', result.user);
-            } else {
-                setWebeepError(result.error || '');
-            }
-        } catch {
-            setWebeepError('');
-        } finally {
-            setWebeepBusy(false);
-        }
+        setWebeepError(await connect('webeep', () => window.api.webeepLogin(), onLogin, ''));
+        setWebeepBusy(false);
     };
 
     const t = getT(config.language);
@@ -105,6 +121,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({
         onConfigChange(newConfig);
     };
 
+    const toggle = (key: ToggleKey) => {
+        const partial: Partial<AppConfig> = {};
+        partial[key] = !config[key];
+        updateSetting(partial);
+    };
+
     const theme = config.theme === 'light' ? 'light' : 'dark';
     const webeepEnabled = config.webeepEnabled !== false;
 
@@ -116,10 +138,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
 
     const handleSelectFolder = async () => {
         const folder = await window.api.selectFolder();
-        if (folder) {
-            const newConfig = await window.api.updateConfig({ syncDir: folder });
-            onConfigChange(newConfig);
-        }
+        if (folder) await updateSetting({ syncDir: folder });
     };
 
     const handleOpenFolder = () => {
@@ -203,7 +222,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                             className={`interval-btn ${config.autoSyncInterval === mins ? 'active' : ''}`}
                                             onClick={() => updateSetting({ autoSyncInterval: mins })}
                                         >
-                                            {mins < 60 ? `${mins}m` : `${mins / 60}h`}
+                                            {formatInterval(mins)}
                                         </button>
                                     ))}
                                     <button
@@ -237,60 +256,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     <div className="settings-group">
                         <span className="settings-group-label">{t('generalGroup')}</span>
 
-                        <div className="toggle-row" onClick={() => updateSetting({ minimizeToTray: !config.minimizeToTray })}>
-                            <div className="setting-info">
-                                <span className="toggle-label">{t('minimizeToTrayLabel')}</span>
-                                <span className="setting-desc">{t('minimizeToTrayDesc')}</span>
-                            </div>
-                            <Switch on={config.minimizeToTray} label={t('minimizeToTrayLabel')} />
-                        </div>
-
-                        <div className="setting-divider" />
-
-                        <div className="toggle-row" onClick={() => updateSetting({ startAtLogin: !config.startAtLogin })}>
-                            <div className="setting-info">
-                                <span className="toggle-label">
-                                    {navigator.userAgent.includes('Mac') ? t('startAtLoginLabelMac') : t('startAtLoginLabelWin')}
-                                </span>
-                                <span className="setting-desc">{t('startAtLoginDesc')}</span>
-                            </div>
-                            <Switch
-                                on={config.startAtLogin}
-                                label={navigator.userAgent.includes('Mac') ? t('startAtLoginLabelMac') : t('startAtLoginLabelWin')}
-                            />
-                        </div>
-
-                        <div className="setting-divider" />
-
-                        <div className="toggle-row" onClick={() => updateSetting({ syncOnStartup: !config.syncOnStartup })}>
-                            <div className="setting-info">
-                                <span className="toggle-label">{t('syncOnStartupLabel')}</span>
-                                <span className="setting-desc">{t('syncOnStartupDesc')}</span>
-                            </div>
-                            <Switch on={config.syncOnStartup} label={t('syncOnStartupLabel')} />
-                        </div>
-
-                        <div className="setting-divider" />
-
-                        <div className="toggle-row" onClick={() => updateSetting({ notifications: !config.notifications })}>
-                            <div className="setting-info">
-                                <span className="toggle-label">{t('notificationsLabel')}</span>
-                                <span className="setting-desc">{t('notificationsDesc')}</span>
-                            </div>
-                            <Switch on={config.notifications} label={t('notificationsLabel')} />
-                        </div>
-
-                        <div className="setting-divider" />
-
-                        <div className="toggle-row" onClick={() => updateSetting({ heatmap: !config.heatmap })}>
-                            <div className="setting-info">
-                                <span className="toggle-label">{t('heatmapLabel')}</span>
-                                <span className="setting-desc">{t('heatmapDesc')}</span>
-                            </div>
-                            <Switch on={!!config.heatmap} label={t('heatmapLabel')} />
-                        </div>
-
-                        <div className="setting-divider" />
+                        {TOGGLES.map(({ key, label, desc }) => (
+                            <React.Fragment key={key}>
+                                <div className="toggle-row" onClick={() => toggle(key)}>
+                                    <div className="setting-info">
+                                        <span className="toggle-label">{t(label)}</span>
+                                        <span className="setting-desc">{t(desc)}</span>
+                                    </div>
+                                    <Switch on={!!config[key]} label={t(label)} />
+                                </div>
+                                <div className="setting-divider" />
+                            </React.Fragment>
+                        ))}
 
                         <div className="settings-action-row">
                             <div className="setting-info">
@@ -408,16 +385,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                 </span>
                             </div>
                             {accounts.webeep ? (
-                                <button
-                                    className={`toggle ${webeepEnabled ? 'active' : ''}`}
-                                    role="switch"
-                                    aria-checked={webeepEnabled}
-                                    aria-label={t('webeepToggle')}
-                                    data-tip={t('webeepToggle')}
+                                <Switch
+                                    on={webeepEnabled}
+                                    label={t('webeepToggle')}
+                                    tip={t('webeepToggle')}
                                     onClick={() => updateSetting({ webeepEnabled: !webeepEnabled })}
-                                >
-                                    <span className="toggle-thumb" />
-                                </button>
+                                />
                             ) : (
                                 <button
                                     className="btn-account-connect"
@@ -436,7 +409,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="update-row">
                             <div className="setting-info">
                                 <span className="toggle-label">
-                                    {appVersion ? (config.language === 'en' ? `Version ${appVersion}` : `Versione ${appVersion}`) : 'BlackBoard Sync'}
+                                    {appVersion ? `${t('version')} ${appVersion}` : t('appName')}
                                 </span>
                                 <span className="setting-desc">
                                     {t('updatesDesc')}

@@ -1,0 +1,201 @@
+{
+  "principale": [
+    "BlackBoard Sync",
+    "MR",
+    "Mario Rossi mario.rossi",
+    "Ultima sincronizzazione: 3 ore fa",
+    "Sincronizza ora",
+    "C:\\Utenti\\Studente\\Documenti\\Blackboard",
+    "CORSI (6)",
+    "Tutti",
+    "2025/2026 SECOND SEMESTER",
+    "2025/2026 FIRST SEMESTER",
+    "ONLINE EXAMS",
+    "1",
+    "2025/2026 SECOND SEMESTER",
+    "2",
+    "1",
+    "Microeconomics",
+    "Prof. Neri",
+    "Statistics",
+    "Prof. Gialli",
+    "2025/2026 FIRST SEMESTER",
+    "3",
+    "Macroeconomics",
+    "Prof. Rossi",
+    "Financial Accounting",
+    "Prof. Bianchi",
+    "Corporate Finance (Rinominato)",
+    "Prof. Verdi",
+    "ONLINE EXAMS",
+    "1",
+    "Online Exam Resources"
+  ],
+  "tutorial": [
+    [
+      "1",
+      "Online Exam Resources",
+      "1 / 7",
+      "Benvenuto in BlackBoard Sync",
+      "L'app scarica sul tuo computer i materiali dei corsi Bocconi e PoliMi.",
+      "Ecco come funziona, in pochi passi.",
+      "Salta",
+      "Avanti"
+    ],
+    [
+      "Online Exam Resources",
+      "2 / 7",
+      "Sincronizza",
+      "Scarica i file nuovi di tutti i corsi selezionati.",
+      "Quelli già scaricati vengono saltati, e puoi interrompere in qualsiasi momento.",
+      "Salta",
+      "Indietro",
+      "Avanti"
+    ],
+    [
+      "Cartella dei file",
+      "Ogni corso ha la sua cartella qui dentro.",
+      "Clicca il percorso per aprirla",
+      "Premi",
+      "per sceglierne un'altra",
+      "Salta",
+      "Indietro",
+      "Avanti"
+    ],
+    [
+      "Dal menu",
+      "puoi:",
+      "rinominare un corso",
+      "aprirne la cartella",
+      "nasconderlo dalla lista",
+      "Salta",
+      "Indietro",
+      "Avanti"
+    ],
+    [
+      "5 / 7",
+      "Filtri per semestre",
+      "Mostra un solo semestre alla volta.",
+      "Passa sopra un filtro e premi",
+      "per nasconderlo.",
+      "Salta",
+      "Indietro",
+      "Avanti"
+    ],
+    [
+      "Qui trovi:",
+      "sincronizzazione automatica",
+      "tema chiaro o scuro",
+      "lingua",
+      "account Bocconi e PoliMi",
+      "Salta",
+      "Indietro",
+      "Avanti"
+    ],
+    [
+      "Verifica automatica aggiornamenti",
+      "Cerca aggiornamenti",
+      "7 / 7",
+      "Politecnico di Milano",
+      "Studi anche al PoliMi? Collega qui WeBeep.",
+      "Con l'interruttore lo metti in pausa senza scollegarti.",
+      "Indietro",
+      "Inizia"
+    ]
+  ],
+  "impostazioni": [
+    "Impostazioni",
+    "CARTELLA DI SINCRONIZZAZIONE",
+    "C:\\Utenti\\Studente\\Documenti\\Blackboard",
+    "Sincronizzazione automatica",
+    "Frequenza",
+    "30m",
+    "1h",
+    "2h",
+    "Giornaliero",
+    "GENERALI",
+    "Minimizza nel tray",
+    "Resta attiva chiudendo la finestra",
+    "Avvia con Windows",
+    "Avvia l'app all'accesso del sistema",
+    "Sincronizza all'avvio",
+    "Sincronizza all'apertura dell'app",
+    "Notifiche",
+    "Notifica al completamento del sync",
+    "Effetto termico",
+    "Scia a mappa di calore dietro l'elenco dei corsi",
+    "Lingua",
+    "Seleziona la lingua dell'app",
+    "IT",
+    "EN",
+    "Tema",
+    "Aspetto scuro o chiaro dell'app",
+    "Dimensioni finestra",
+    "Ripristina le dimensioni di default",
+    "Ripristina",
+    "ACCOUNT",
+    "Università Bocconi",
+    "Mario Rossi",
+    "·",
+    "Scollega",
+    "Politecnico di Milano",
+    "Mario Rossi",
+    "·",
+    "Scollega",
+    "AGGIORNAMENTI",
+    "Versione 1.0.4",
+    "Verifica automatica aggiornamenti",
+    "Cerca aggiornamenti"
+  ],
+  "impostazioni-salvate": [
+    [
+      {
+        "autoSyncInterval": 120
+      }
+    ],
+    [
+      {
+        "notifications": false
+      }
+    ],
+    [
+      {
+        "startAtLogin": true
+      }
+    ],
+    [
+      {
+        "theme": "light"
+      }
+    ],
+    [
+      {
+        "language": "en"
+      }
+    ]
+  ],
+  "ultimi-download": [
+    "Ultimi download",
+    "Clicca un file per aprirlo",
+    "Macroeconomics",
+    "1",
+    "Analisi 2",
+    "1",
+    "Corporate Finance",
+    "1",
+    "Chiudi"
+  ],
+  "login": [
+    "BlackBoard Sync",
+    "BlackBoard Sync",
+    "Accedi con le credenziali dell'Università Bocconi",
+    "Email / Matricola",
+    "Password",
+    "Accedi",
+    "Solo PoliMi? Accedi con WeBeep",
+    "Le credenziali vengono salvate in modo sicuro sul tuo dispositivo.",
+    "Questa app non è affiliata, associata o approvata dall'Università Bocconi.",
+    "È uno strumento indipendente per velocizzare il download dei documenti.",
+    "Il creatore non è in alcun modo responsabile dell'uso delle credenziali inserite."
+  ]
+}

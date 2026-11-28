@@ -1,7 +1,9 @@
-use crate::blackboard::{BlackboardAPI, ContentItem, Course, UserInfo};
-use crate::login::LoginManager;
+use crate::blackboard::{BlackboardAPI, ContentItem};
+use crate::model::{Course, FileToDownload};
+use crate::paths::{sanitize_path, SyncRoot};
+use crate::login::ensure_valid_session;
 use crate::state::{AppState, Session};
-use crate::store::{FileStamp, RecentDownload};
+use crate::store::{AppConfig, FileStamp, RecentDownload};
 use crate::webeep;
 use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -11,21 +13,6 @@ use std::sync::Arc;
 use futures_util::StreamExt;
 use tauri::{AppHandle, Manager, Emitter};
 
-#[derive(Clone)]
-pub struct FileToDownload {
-    pub course_id: String,
-    pub course_name: String,
-    pub content_id: String,
-    pub attachment_id: String,
-    pub file_name: String,
-    pub relative_path: String,
-    // Ultra body links (signed bbcswebdav) and every WeBeep file; None means a REST attachment.
-    pub url: Option<String>,
-    pub webeep: bool,
-    // Server-side last change, to spot a file re-uploaded under the same name.
-    pub stamp: Option<String>,
-}
-
 /// One download: `version` 1 is the plain path, higher ones "name (vN).ext".
 /// `known` is the version on record before this sync, 0 if none.
 struct Job {
@@ -34,10 +21,19 @@ struct Job {
     known: u32,
 }
 
+#[derive(Debug, Serialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum Phase {
+    Scanning,
+    Downloading,
+    Complete,
+    Error,
+}
+
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncProgressPayload {
-    pub phase: String,
+    pub phase: Phase,
     pub current: u64,
     pub total: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,25 +60,39 @@ pub struct SyncResult {
     pub warnings: Vec<String>,
 }
 
+const NO_ACCOUNT: &str = "Nessun account collegato. Effettua l'accesso.";
+
+fn emit_progress(app: &AppHandle, phase: Phase, current: u64, total: u64, current_file: Option<String>) {
+    app.emit("sync-progress", SyncProgressPayload { phase, current, total, current_file, error: None }).ok();
+}
+
+fn emit_error(app: &AppHandle, error: String) {
+    app.emit("sync-progress", SyncProgressPayload {
+        phase: Phase::Error,
+        current: 0,
+        total: 0,
+        current_file: None,
+        error: Some(error),
+    }).ok();
+}
+
+/// Picked in the list (or every course is), and neither the course nor its term hidden.
+fn is_selected(config: &AppConfig, course: &Course) -> bool {
+    (config.sync_all_courses || config.enabled_courses.contains(&course.id))
+        && !config.hidden_courses.contains(&course.id)
+        && !course.term.as_ref().is_some_and(|t| config.hidden_terms.contains(&t.id))
+}
+
 pub async fn trigger_sync(app: &AppHandle) {
     let state = app.state::<AppState>();
 
     let session = {
         state.session.lock().unwrap().clone()
     };
-    let has_webeep = {
-        let store = state.store.lock().unwrap();
-        store.load_webeep_token().is_some() && store.get_config().webeep_enabled
-    };
+    let has_webeep = webeep::active_token(&state.store.lock().unwrap()).is_some();
 
     if session.is_none() && !has_webeep {
-        app.emit("sync-progress", SyncProgressPayload {
-            phase: "error".to_string(),
-            current: 0,
-            total: 0,
-            current_file: None,
-            error: Some("Nessun account collegato. Effettua l'accesso.".to_string()),
-        }).ok();
+        emit_error(app, NO_ACCOUNT.to_string());
         return;
     }
 
@@ -114,7 +124,7 @@ pub async fn trigger_sync(app: &AppHandle) {
 
             if config.notifications {
                 let is_visible = app
-                    .get_webview_window("main")
+                    .get_webview_window(crate::window::MAIN)
                     .and_then(|w| w.is_visible().ok())
                     .unwrap_or(false);
 
@@ -137,28 +147,58 @@ pub async fn trigger_sync(app: &AppHandle) {
                 }
             }
         }
-        Err(e) => {
-            app.emit("sync-progress", SyncProgressPayload {
-                phase: "error".to_string(),
-                current: 0,
-                total: 0,
-                current_file: None,
-                error: Some(e),
-            }).ok();
-        }
+        Err(e) => emit_error(app, e),
     }
 
     state.syncing.store(false, Ordering::SeqCst);
 }
 
-/// Separate from `run_sync` so a Blackboard failure becomes a warning, not a failed sync.
-async fn open_blackboard(
-    app: &AppHandle,
-    session: &Session,
-) -> Result<(BlackboardAPI, Vec<Course>), String> {
-    let (api, user) = ensure_valid_session(app, session).await?;
-    let courses = api.get_courses_for_sync(&user.id).await?;
-    Ok((api, courses))
+/// Both universities opened side by side. A failure becomes a "Bocconi: …" or "PoliMi: …"
+/// line in `errors`, so the other one still works.
+pub struct Sources {
+    pub blackboard: Option<(BlackboardAPI, Vec<Course>)>,
+    pub webeep: Option<(webeep::WeBeepAPI, Vec<Course>)>,
+    pub errors: Vec<String>,
+}
+
+impl Sources {
+    /// An expired Bocconi session is renewed. `term_names` costs one request per term.
+    pub async fn open(app: &AppHandle, session: Option<&Session>, term_names: bool) -> Self {
+        let state = app.state::<AppState>();
+        let (bb, wb) = tokio::join!(
+            async {
+                let Some(session) = session else { return Ok(None) };
+                let (api, user) = ensure_valid_session(&state, session).await?;
+                let courses = if term_names {
+                    api.get_courses(&user.id).await?
+                } else {
+                    api.get_courses_for_sync(&user.id).await?
+                };
+                Ok::<_, String>(Some((api, courses)))
+            },
+            async {
+                let Some((api, info)) = webeep::active_api(app).await? else { return Ok(None) };
+                let courses = webeep::get_courses(&api, info.userid).await?;
+                Ok::<_, String>(Some((api, courses)))
+            }
+        );
+        let mut errors = Vec::new();
+        let blackboard = bb.unwrap_or_else(|e| {
+            errors.push(format!("Bocconi: {}", e));
+            None
+        });
+        let webeep = wb.unwrap_or_else(|e| {
+            errors.push(format!("PoliMi: {}", e));
+            None
+        });
+        Self { blackboard, webeep, errors }
+    }
+
+    pub fn courses(&self) -> Vec<Course> {
+        let bb = self.blackboard.iter().flat_map(|(_, c)| c);
+        let wb = self.webeep.iter().flat_map(|(_, c)| c);
+        bb.chain(wb).cloned().collect()
+    }
 }
 
 async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResult, String> {
@@ -167,68 +207,23 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
     let abort_flag = Arc::clone(&state.abort_flag);
     let start = std::time::Instant::now();
 
-    let mut warnings: Vec<String> = Vec::new();
-
-    // Opened side by side; one failing becomes a warning so the other still syncs.
-    let (bb_opened, wb_opened) = tokio::join!(
-        async {
-            match session {
-                None => Ok(None),
-                Some(s) => open_blackboard(app, s).await.map(Some),
-            }
-        },
-        async {
-            match webeep::active_api(app).await? {
-                None => Ok(None),
-                Some((api, info)) => {
-                    let courses = webeep::get_courses(&api, info.userid).await?;
-                    Ok::<_, String>(Some((api, courses)))
-                }
-            }
-        }
-    );
-
-    let bb_source = bb_opened.unwrap_or_else(|e| {
-        warnings.push(format!("Bocconi: {}", e));
-        None
-    });
-    let wb_source = wb_opened.unwrap_or_else(|e| {
-        warnings.push(format!("PoliMi: {}", e));
-        None
-    });
+    // A university that fails to open becomes a warning, so the other still syncs.
+    let sources = Sources::open(app, session, false).await;
+    let all_courses = sources.courses();
+    let Sources { blackboard: bb_source, webeep: wb_source, errors: mut warnings } = sources;
 
     if bb_source.is_none() && wb_source.is_none() {
         return Err(if warnings.is_empty() {
-            "Nessun account collegato. Effettua l'accesso.".to_string()
+            NO_ACCOUNT.to_string()
         } else {
             warnings.join(" · ")
         });
     }
 
-    let mut all_courses: Vec<Course> = Vec::new();
-    if let Some((_, courses)) = &bb_source {
-        all_courses.extend(courses.iter().cloned());
-    }
-    if let Some((_, courses)) = &wb_source {
-        all_courses.extend(courses.iter().cloned());
-    }
     let dirs = course_dirs(&all_courses, &config.course_aliases);
 
-    let mut courses: Vec<Course> = if config.sync_all_courses {
-        all_courses
-    } else {
-        all_courses.into_iter()
-            .filter(|c| config.enabled_courses.contains(&c.id))
-            .collect()
-    };
-    if !config.hidden_courses.is_empty() {
-        courses.retain(|c| !config.hidden_courses.contains(&c.id));
-    }
-    if !config.hidden_terms.is_empty() {
-        courses.retain(|c| {
-            c.term.as_ref().map(|t| !config.hidden_terms.contains(&t.id)).unwrap_or(true)
-        });
-    }
+    let mut courses = all_courses;
+    courses.retain(|c| is_selected(&config, c));
 
     let total_courses = courses.len() as u64;
     let scanned_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -255,13 +250,7 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
                 }
             };
             let done = counter.fetch_add(1, Ordering::SeqCst) + 1;
-            app_h.emit("sync-progress", SyncProgressPayload {
-                phase: "scanning".to_string(),
-                current: done,
-                total: total_courses,
-                current_file: Some(course.name.clone()),
-                error: None,
-            }).ok();
+            emit_progress(&app_h, Phase::Scanning, done, total_courses, Some(course.name.clone()));
             files
         })
     }).collect();
@@ -287,47 +276,16 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
     all_files.retain(|f| seen_paths.insert(f.relative_path.clone()));
 
     let sync_dir = PathBuf::from(&config.sync_dir);
-    let canon_base = sync_dir.canonicalize().ok();
-    let lex_base = normalize_path(&sync_dir);
+    let root = SyncRoot::new(&sync_dir);
 
-    // Missing files are downloaded; existing ones only when the server's stamp
-    // moved, and then as a new version beside the old one.
     let mut stamps = state.store.lock().unwrap().load_file_stamps();
-    let mut to_download: Vec<Job> = Vec::new();
-    for f in &all_files {
-        let full = sync_dir.join(&f.relative_path);
-        if !is_inside_resolved(&full, canon_base.as_deref(), &lex_base) {
-            continue;
-        }
-        let known = stamps.get(&f.relative_path).map_or(0, |s| s.version);
-        if !full.exists() {
-            to_download.push(Job { file: f.clone(), version: 1, known });
-            continue;
-        }
-        let Some(stamp) = &f.stamp else { continue };
-        match stamps.get(&f.relative_path) {
-            // On disk from before versioning: the current server state is the baseline.
-            None => {
-                stamps.insert(f.relative_path.clone(), FileStamp { stamp: stamp.clone(), version: 1 });
-            }
-            Some(s) if &s.stamp != stamp => {
-                to_download.push(Job { file: f.clone(), version: known + 1, known });
-            }
-            _ => {}
-        }
-    }
+    let to_download = plan_downloads(&all_files, &mut stamps, &sync_dir, &root);
     state.store.lock().unwrap().save_file_stamps(&stamps);
 
     let total_scanned = all_files.len() as u64;
 
     if to_download.is_empty() {
-        app.emit("sync-progress", SyncProgressPayload {
-            phase: "complete".to_string(),
-            current: 0,
-            total: 0,
-            current_file: None,
-            error: None,
-        }).ok();
+        emit_progress(app, Phase::Complete, 0, 0, None);
         return Ok(SyncResult {
             total_downloaded: 0,
             total_scanned,
@@ -359,8 +317,7 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         let abort = Arc::clone(&abort_flag);
         let app_h = app.clone();
         let sync_dir = sync_dir.clone();
-        let canon_base = canon_base.clone();
-        let lex_base = lex_base.clone();
+        let root = root.clone();
         let dl_count = Arc::clone(&downloaded_count);
         let done_count = Arc::clone(&processed_count);
         let failed = Arc::clone(&failed_files);
@@ -411,7 +368,7 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
                             version += 1;
                             full_path = sync_dir.join(versioned_path(&file.relative_path, version));
                         }
-                        if !is_inside_resolved(&full_path, canon_base.as_deref(), &lex_base) { continue; }
+                        if !root.contains(&full_path) { continue; }
 
                         if let Some(dir) = full_path.parent() {
                             let _ = tokio::fs::create_dir_all(dir).await;
@@ -438,13 +395,7 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
                                     dl_files.lock().await.push(file.clone());
                                 }
                                 let done = done_count.fetch_add(1, Ordering::SeqCst) + 1;
-                                app_h.emit("sync-progress", SyncProgressPayload {
-                                    phase: "downloading".to_string(),
-                                    current: done,
-                                    total: total_dl,
-                                    current_file: Some(file.file_name.clone()),
-                                    error: None,
-                                }).ok();
+                                emit_progress(&app_h, Phase::Downloading, done, total_dl, Some(file.file_name.clone()));
                             }
                         }
                     }
@@ -498,13 +449,7 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
         entry.files.push(f.file_name.clone());
     }
 
-    app.emit("sync-progress", SyncProgressPayload {
-        phase: "complete".to_string(),
-        current: downloaded,
-        total: total_dl,
-        current_file: None,
-        error: None,
-    }).ok();
+    emit_progress(app, Phase::Complete, downloaded, total_dl, None);
 
     Ok(SyncResult {
         total_downloaded: downloaded,
@@ -515,49 +460,39 @@ async fn run_sync(app: &AppHandle, session: Option<&Session>) -> Result<SyncResu
     })
 }
 
-/// An expired cookie gets an HTML login page (a JSON decode error), so a failed `/users/me`
-/// probe triggers a SAML re-auth with the stored credentials and saves the new session.
-async fn ensure_valid_session(
-    app: &AppHandle,
-    session: &Session,
-) -> Result<(BlackboardAPI, UserInfo), String> {
-    let probe = BlackboardAPI::new(&session.cookies);
-    if let Ok(user) = probe.get_current_user().await {
-        return Ok((probe, user));
+/// Missing files are downloaded; existing ones only when the server's stamp moved, and then as
+/// a new version beside the old one. Paths outside the sync folder are dropped.
+fn plan_downloads(
+    files: &[FileToDownload],
+    stamps: &mut HashMap<String, FileStamp>,
+    sync_dir: &Path,
+    root: &SyncRoot,
+) -> Vec<Job> {
+    let mut jobs = Vec::new();
+    for f in files {
+        let full = sync_dir.join(&f.relative_path);
+        if !root.contains(&full) {
+            continue;
+        }
+        let known = stamps.get(&f.relative_path).map_or(0, |s| s.version);
+        if !full.exists() {
+            jobs.push(Job { file: f.clone(), version: 1, known });
+            continue;
+        }
+        let Some(stamp) = &f.stamp else { continue };
+        match stamps.get(&f.relative_path) {
+            // On disk from before versioning: the current server state is the baseline.
+            None => {
+                stamps.insert(f.relative_path.clone(), FileStamp { stamp: stamp.clone(), version: 1 });
+            }
+            Some(s) if &s.stamp != stamp => {
+                jobs.push(Job { file: f.clone(), version: known + 1, known });
+            }
+            _ => {}
+        }
     }
-
-    let state = app.state::<AppState>();
-    let creds = state.store.lock().unwrap().load_credentials();
-    let Some((username, password)) = creds else {
-        return Err("Sessione scaduta. Rieffettua il login.".to_string());
-    };
-
-    let mut manager = LoginManager::new();
-    let result = manager.login(&username, &password).await;
-    if !result.success {
-        return Err(result
-            .error
-            .unwrap_or_else(|| "Sessione scaduta. Rieffettua il login.".to_string()));
-    }
-
-    let cookies = result.cookies;
-    let refreshed = BlackboardAPI::new(&cookies);
-    let user = refreshed
-        .get_current_user()
-        .await
-        .map_err(|_| "Sessione scaduta. Rieffettua il login.".to_string())?;
-
-    {
-        let mut s = state.session.lock().unwrap();
-        *s = Some(Session { cookies: cookies.clone() });
-    }
-    state.store.lock().unwrap().save_session(&cookies);
-
-    Ok((refreshed, user))
+    jobs
 }
-
-/// Overrides the clients' 30 s total timeout, which would cut off large videos.
-pub const DOWNLOAD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60 * 60);
 
 /// Writes `<path>.part`, renamed when complete: sync skips existing files, so a truncated one
 /// would never be refetched. A download identical to `same_as` is dropped with `Ok(false)`.
@@ -658,7 +593,7 @@ pub fn recent_files_on_disk(sync_dir: &Path, synced: &HashSet<String>, max: usiz
             found.push((at, rel, entry.file_name().to_string_lossy().into_owned()));
         }
     }
-    found.sort_by(|a, b| b.0.cmp(&a.0));
+    found.sort_by_key(|f| std::cmp::Reverse(f.0));
     found.truncate(max);
     found
         .into_iter()
@@ -963,33 +898,6 @@ fn extract_ultra_files(body: &str) -> Vec<(String, String)> {
     files
 }
 
-pub fn sanitize_path(name: &str) -> String {
-    let sanitized: String = name
-        .chars()
-        .map(|c| if "<>:\"/\\|?*".contains(c) || (c.is_control() && !c.is_whitespace()) { '_' } else { c })
-        .collect();
-    let sanitized = sanitized.split_whitespace().collect::<Vec<_>>().join(" ");
-    // Windows drops trailing dots and spaces, so "x.docm." would be saved as "x.docm" while its
-    // Mark-of-the-Web stream lands on a separate "x.docm." entry. Also rules out "." and "..".
-    let sanitized = sanitized.trim_end_matches(['.', ' ']);
-
-    if sanitized.is_empty() {
-        return "_".to_string();
-    }
-
-    // Windows refuses device names as a stem, whatever the extension.
-    let stem = sanitized.split('.').next().unwrap_or("").trim_end().to_ascii_uppercase();
-    let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || (stem.len() == 4
-            && (stem.starts_with("COM") || stem.starts_with("LPT"))
-            && stem.as_bytes()[3].is_ascii_digit());
-    if reserved {
-        format!("_{}", sanitized)
-    } else {
-        sanitized.to_string()
-    }
-}
-
 /// Built from the full list so names don't shift when a course is switched off. On a clash
 /// the older course (Bocconi, then lower id) keeps the name; the newer gets "(PoliMi)" or its code.
 pub fn course_dirs(courses: &[Course], aliases: &HashMap<String, String>) -> HashMap<String, String> {
@@ -1020,37 +928,6 @@ pub fn course_dirs(courses: &[Course], aliases: &HashMap<String, String>) -> Has
         dirs.insert(course.id.clone(), dir);
     }
     dirs
-}
-
-/// Resolves `.` and `..` lexically, so it works on paths that don't exist yet.
-pub fn normalize_path(path: &Path) -> PathBuf {
-    use std::path::Component;
-    let mut components: Vec<Component> = Vec::new();
-    for component in path.components() {
-        match component {
-            Component::ParentDir => {
-                match components.last() {
-                    Some(Component::Normal(_)) => { components.pop(); }
-                    _ => {} // Ignore `..` that would escape
-                }
-            }
-            Component::CurDir => {} // Skip `.`
-            other => components.push(other),
-        }
-    }
-    components.iter().collect()
-}
-
-/// Compares canonical with canonical, or lexical with lexical when `path` can't be
-/// canonicalized (not created yet), so a `\\?\` prefix never causes a mismatch.
-pub fn is_inside_resolved(path: &Path, canon_base: Option<&Path>, lex_base: &Path) -> bool {
-    match (path.canonicalize(), canon_base) {
-        (Ok(resolved), Some(base)) => resolved.as_path() == base || resolved.starts_with(base),
-        _ => {
-            let resolved = normalize_path(path);
-            resolved.as_path() == lex_base || resolved.starts_with(lex_base)
-        }
-    }
 }
 
 pub fn setup_auto_sync(app: &AppHandle) {
@@ -1120,7 +997,7 @@ fn next_scheduled_time(time_str: &str) -> chrono::DateTime<chrono::Local> {
         .unwrap_or_else(|| now + chrono::Duration::hours(24));
 
     if target <= now {
-        target = target + chrono::Duration::days(1);
+        target += chrono::Duration::days(1);
     }
     target
 }
@@ -1180,20 +1057,6 @@ mod tests {
         assert_eq!(files[0].0, "An Incredible History.pdf");
     }
 
-    #[test]
-    fn sanitize_handles_windows_invalid_names() {
-        assert_eq!(sanitize_path("con.pdf"), "_con.pdf");
-        assert_eq!(sanitize_path("LPT1"), "_LPT1");
-        assert_eq!(sanitize_path("Console.pdf"), "Console.pdf");
-        assert_eq!(sanitize_path("a\u{7}b\nc"), "a_b c");
-        assert_eq!(sanitize_path("Slides..pdf"), "Slides..pdf");
-        assert_eq!(sanitize_path(" .. "), "_");
-        assert_eq!(sanitize_path("../x"), ".._x");
-        assert_eq!(sanitize_path("Syllabus.docm."), "Syllabus.docm");
-        assert_eq!(sanitize_path("Finance. ."), "Finance");
-        assert_eq!(sanitize_path("CON."), "_CON");
-    }
-
     #[tokio::test]
     async fn save_response_is_all_or_nothing() {
         let dir = std::env::temp_dir().join(format!("bbsync-test-{}", std::process::id()));
@@ -1244,8 +1107,8 @@ mod tests {
                 Ok(u) => u,
                 Err(_) => {
                     let (u, p) = store.load_credentials().expect("credenziali");
-                    let r = LoginManager::new().login(&u, &p).await;
-                    api = BlackboardAPI::new(&r.cookies);
+                    let cookies = crate::login::LoginManager::new().login(&u, &p).await.expect("login");
+                    api = BlackboardAPI::new(&cookies);
                     api.get_current_user().await.expect("login")
                 }
             };
@@ -1253,15 +1116,13 @@ mod tests {
             bb = Some(api);
         }
         let mut wb = None;
-        if let Some(token) = store.load_webeep_token() {
+        if let Some(token) = webeep::active_token(&store) {
             let api = webeep::WeBeepAPI::new(&token);
             let info = api.site_info().await.unwrap();
             courses.extend(webeep::get_courses(&api, info.userid).await.unwrap());
             wb = Some(api);
         }
-        courses.retain(|c| config.sync_all_courses || config.enabled_courses.contains(&c.id));
-        courses.retain(|c| !config.hidden_courses.contains(&c.id));
-        courses.retain(|c| c.term.as_ref().map(|t| !config.hidden_terms.contains(&t.id)).unwrap_or(true));
+        courses.retain(|c| is_selected(&config, c));
         println!("login + corsi: {:?} ({} corsi)", t.elapsed(), courses.len());
 
         let abort = Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1396,6 +1257,77 @@ mod tests {
             ("Course".to_string(), "Course/Week 1/a (v2).pdf".to_string()),
             ("Course".to_string(), "Course/Week 1/a.pdf".to_string()),
         ]);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn selection_follows_picks_and_hidden_courses_and_terms() {
+        let term = |id: &str| Some(crate::model::Term { id: id.into(), name: String::new() });
+        let courses = [
+            Course { term: term("t1"), ..course("a", "A", "A") },
+            Course { term: term("t2"), ..course("b", "B", "B") },
+            course("c", "C", "C"),
+        ];
+        let picked = |config: &AppConfig| courses.iter().filter(|c| is_selected(config, c)).map(|c| c.id.as_str()).collect::<Vec<_>>();
+        let mut config = AppConfig::default();
+        assert_eq!(picked(&config), ["a", "b", "c"]);
+        config.hidden_terms = vec!["t2".into()];
+        config.hidden_courses = vec!["c".into()];
+        assert_eq!(picked(&config), ["a"]);
+        config.sync_all_courses = false;
+        config.enabled_courses = vec!["b".into(), "c".into()];
+        config.hidden_terms.clear();
+        assert_eq!(picked(&config), ["b"]);
+    }
+
+    #[test]
+    fn progress_phases_keep_their_names() {
+        let names: Vec<String> = [Phase::Scanning, Phase::Downloading, Phase::Complete, Phase::Error]
+            .iter()
+            .map(|p| serde_json::to_string(p).unwrap())
+            .collect();
+        assert_eq!(names, [r#""scanning""#, r#""downloading""#, r#""complete""#, r#""error""#]);
+    }
+
+    #[test]
+    fn plans_missing_files_and_new_versions_only() {
+        let dir = std::env::temp_dir().join(format!("bbsync-plan-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("C")).unwrap();
+        for f in ["C/changed.pdf", "C/old.pdf", "C/same.pdf", "C/unstamped.pdf"] {
+            std::fs::write(dir.join(f), "x").unwrap();
+        }
+        let file = |rel: &str, stamp: Option<&str>| FileToDownload {
+            course_id: "c".into(),
+            course_name: "C".into(),
+            content_id: String::new(),
+            attachment_id: String::new(),
+            file_name: rel.into(),
+            relative_path: rel.into(),
+            url: None,
+            webeep: false,
+            stamp: stamp.map(str::to_string),
+        };
+        let files = [
+            file("C/changed.pdf", Some("s2")),
+            file("C/old.pdf", Some("s1")),
+            file("C/same.pdf", Some("s1")),
+            file("C/unstamped.pdf", None),
+            file("C/missing.pdf", Some("s1")),
+            file("../outside.pdf", Some("s1")),
+        ];
+        let mut stamps = HashMap::from([
+            ("C/changed.pdf".to_string(), FileStamp { stamp: "s1".into(), version: 2 }),
+            ("C/same.pdf".to_string(), FileStamp { stamp: "s1".into(), version: 1 }),
+            ("C/missing.pdf".to_string(), FileStamp { stamp: "s0".into(), version: 3 }),
+        ]);
+
+        let jobs = plan_downloads(&files, &mut stamps, &dir, &SyncRoot::new(&dir));
+        let planned: Vec<_> = jobs.iter().map(|j| (j.file.relative_path.as_str(), j.version, j.known)).collect();
+        assert_eq!(planned, [("C/changed.pdf", 3, 2), ("C/missing.pdf", 1, 3)]);
+        // A file synced before versioning takes the current server stamp as its first version.
+        assert_eq!((stamps["C/old.pdf"].stamp.as_str(), stamps["C/old.pdf"].version), ("s1", 1));
+        assert!(!stamps.contains_key("C/unstamped.pdf"));
 
         let _ = std::fs::remove_dir_all(dir);
     }

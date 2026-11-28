@@ -1,7 +1,6 @@
-import React, { useRef } from 'react';
+import React from 'react';
+import Dialog from './Dialog';
 import Icon, { IconName } from './Icon';
-import { useEscape } from '../useEscape';
-import { useFocusTrap } from '../useFocusTrap';
 
 interface ConfirmDialogProps {
     icon: IconName;
@@ -24,33 +23,20 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     onCancel,
     onConfirm,
 }) => {
-    const ref = useRef<HTMLDivElement>(null);
-    useFocusTrap(ref);
-    useEscape(onCancel);
 
     return (
-        <div className="update-dialog-overlay" onClick={onCancel}>
-            <div
-                ref={ref}
-                className="update-dialog"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="confirm-dialog-title"
-                tabIndex={-1}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="update-dialog-icon">
-                    <Icon name={icon} size={30} />
-                </div>
-                <h3 id="confirm-dialog-title" className="update-dialog-title">{title}</h3>
-                <p className="update-dialog-text">{text}</p>
-                <p className="update-dialog-subtext">{subtext}</p>
-                <div className="update-dialog-actions">
-                    <button className="btn-update-later" onClick={onCancel}>{cancelLabel}</button>
-                    <button className="btn-update-restart" onClick={onConfirm}>{confirmLabel}</button>
-                </div>
+        <Dialog overlayClassName="update-dialog-overlay" className="update-dialog" labelledBy="confirm-dialog-title" onClose={onCancel}>
+            <div className="update-dialog-icon">
+                <Icon name={icon} size={30} />
             </div>
-        </div>
+            <h3 id="confirm-dialog-title" className="update-dialog-title">{title}</h3>
+            <p className="update-dialog-text">{text}</p>
+            <p className="update-dialog-subtext">{subtext}</p>
+            <div className="update-dialog-actions">
+                <button className="btn-update-later" onClick={onCancel}>{cancelLabel}</button>
+                <button className="btn-update-restart" onClick={onConfirm}>{confirmLabel}</button>
+            </div>
+        </Dialog>
     );
 };
 

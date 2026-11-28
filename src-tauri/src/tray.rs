@@ -6,6 +6,16 @@ use tauri::{
     AppHandle, Manager,
 };
 
+const ID: &str = "main";
+
+pub fn exists(app: &AppHandle) -> bool {
+    app.tray_by_id(ID).is_some()
+}
+
+pub fn remove(app: &AppHandle) {
+    let _ = app.remove_tray_by_id(ID);
+}
+
 pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "Apri BlackBoard Sync", true, None::<&str>)?;
     let sync_now = MenuItem::with_id(app, "sync", "Sincronizza ora", true, None::<&str>)?;
@@ -18,12 +28,12 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let icon = tauri::image::Image::from_bytes(icon_bytes)
         .expect("Failed to load tray icon");
 
-    let builder = TrayIconBuilder::with_id("main")
+    let builder = TrayIconBuilder::with_id(ID)
         .icon(icon)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "show" => show_or_create_window(app),
+            "show" => crate::window::show(app),
             "sync" => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
@@ -44,7 +54,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
                 ..
             } = event
             {
-                show_or_create_window(tray.app_handle());
+                crate::window::show(tray.app_handle());
             }
         });
 
@@ -53,11 +63,4 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 
     builder.build(app)?;
     Ok(())
-}
-
-pub fn show_or_create_window(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
 }

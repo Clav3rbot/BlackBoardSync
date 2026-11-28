@@ -66,11 +66,7 @@ async fn do_check(app: &AppHandle) -> Result<(), String> {
             move |chunk_length, content_length| {
                 let total = content_length.unwrap_or(0);
                 received += chunk_length as u64;
-                let percent = if total > 0 {
-                    (received * 100 / total) as u32
-                } else {
-                    0
-                };
+                let percent = (received * 100).checked_div(total).unwrap_or(0) as u32;
                 app_clone
                     .emit(
                         "update-download-progress",

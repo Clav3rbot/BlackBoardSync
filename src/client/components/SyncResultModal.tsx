@@ -1,22 +1,19 @@
-import React, { useRef } from 'react';
+import React from 'react';
+import Dialog from './Dialog';
 import Icon from './Icon';
 import { DownloadDoneMorph } from './MorphIcon';
 import Marquee from './Marquee';
-import { getT } from '../i18n';
-import { useEscape } from '../useEscape';
-import { useFocusTrap } from '../useFocusTrap';
+import SourceBadge from './SourceBadge';
+import { getT, type Lang } from '../i18n';
 import type { SyncResult } from '../../types';
 
 interface SyncResultModalProps {
-    lang: 'it' | 'en';
+    lang: Lang;
     result: SyncResult;
     onClose: () => void;
 }
 
 const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose }) => {
-    useEscape(onClose);
-    const ref = useRef<HTMLDivElement>(null);
-    useFocusTrap(ref);
     const hasNewFiles = result.totalDownloaded > 0;
     const t = getT(lang);
 
@@ -27,93 +24,72 @@ const SyncResultModal: React.FC<SyncResultModalProps> = ({ lang, result, onClose
         return `${m}m ${s}s`;
     };
 
-    const getSubtitleText = (): string => {
-        if (lang === 'en') {
-            return hasNewFiles
-                ? `${result.totalDownloaded} new file${result.totalDownloaded === 1 ? '' : 's'} downloaded in ${formatDuration(result.duration)}`
-                : `No new files found · ${result.totalScanned} file${result.totalScanned === 1 ? '' : 's'} verified`;
-        } else {
-            return hasNewFiles
-                ? `${result.totalDownloaded} nuov${result.totalDownloaded === 1 ? 'o file' : 'i file'} scaricati in ${formatDuration(result.duration)}`
-                : `Nessun nuovo file trovato · ${result.totalScanned} file verificati`;
-        }
-    };
+    const getSubtitleText = (): string =>
+        hasNewFiles
+            ? `${result.totalDownloaded} ${t(result.totalDownloaded === 1 ? 'resultNewFileOne' : 'resultNewFiles')} ${formatDuration(result.duration)}`
+            : `${t('resultNothingNew')} · ${result.totalScanned} ${t(result.totalScanned === 1 ? 'fileVerifiedOne' : 'filesVerified')}`;
 
     return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div
-                ref={ref}
-                className="modal-container"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="sync-result-title"
-                tabIndex={-1}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="modal-header">
-                    <div className="modal-status-icon">
-                        {hasNewFiles ? (
-                            <DownloadDoneMorph size={26} />
-                        ) : (
-                            <Icon name="checkCircle" size={26} />
-                        )}
-                    </div>
-                    <h2 id="sync-result-title" className="modal-title">
-                        {hasNewFiles 
-                            ? (lang === 'en' ? 'Synchronization completed' : 'Sincronizzazione completata')
-                            : (lang === 'en' ? 'Everything up to date' : 'Tutto aggiornato')}
-                    </h2>
-                    <p className="modal-subtitle">
-                        {getSubtitleText()}
-                    </p>
+        <Dialog overlayClassName="modal-overlay" className="modal-container" labelledBy="sync-result-title" onClose={onClose}>
+            <div className="modal-header">
+                <div className="modal-status-icon">
+                    {hasNewFiles ? (
+                        <DownloadDoneMorph size={26} />
+                    ) : (
+                        <Icon name="checkCircle" size={26} />
+                    )}
                 </div>
-
-                {result.warnings?.length > 0 && (
-                    <div className="modal-warnings">
-                        {result.warnings.map((w, idx) => (
-                            <div key={idx} className="modal-warning">
-                                <Icon name="warning" size={13} />
-                                <span>{w}</span>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {hasNewFiles && (
-                    <div className="modal-body">
-                        {result.courses.map((course, idx) => (
-                            <div key={idx} className="modal-course">
-                                <div className="modal-course-header">
-                                    <Icon name="folder" size={14} className="modal-course-icon" />
-                                    <Marquee className="modal-course-name" text={course.courseName} />
-                                    <span className="course-source">
-                                        {course.webeep ? 'PoliMi' : 'Bocconi'}
-                                    </span>
-                                    <span className="modal-course-count">
-                                        {course.files.length}
-                                    </span>
-                                </div>
-                                <ul className="modal-file-list">
-                                    {course.files.map((file, fIdx) => (
-                                        <li key={fIdx} className="modal-file-item">
-                                            <Icon name="file" size={12} className="modal-file-icon" />
-                                            <Marquee className="modal-file-name" text={file} />
-                                            <span className="modal-file-badge">{lang === 'en' ? 'NEW' : 'NUOVO'}</span>
-                                        </li>
-                                    ))}
-                                </ul>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                <div className="modal-footer">
-                    <button className="modal-close-btn" onClick={onClose}>
-                        {t('close')}
-                    </button>
-                </div>
+                <h2 id="sync-result-title" className="modal-title">
+                    {hasNewFiles ? t('syncingPhaseComplete') : t('upToDate')}
+                </h2>
+                <p className="modal-subtitle">
+                    {getSubtitleText()}
+                </p>
             </div>
-        </div>
+
+            {result.warnings?.length > 0 && (
+                <div className="modal-warnings">
+                    {result.warnings.map((w, idx) => (
+                        <div key={idx} className="modal-warning">
+                            <Icon name="warning" size={13} />
+                            <span>{w}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {hasNewFiles && (
+                <div className="modal-body">
+                    {result.courses.map((course, idx) => (
+                        <div key={idx} className="modal-course">
+                            <div className="modal-course-header">
+                                <Icon name="folder" size={14} className="modal-course-icon" />
+                                <Marquee className="modal-course-name" text={course.courseName} />
+                                <SourceBadge webeep={course.webeep} />
+                                <span className="modal-course-count">
+                                    {course.files.length}
+                                </span>
+                            </div>
+                            <ul className="modal-file-list">
+                                {course.files.map((file, fIdx) => (
+                                    <li key={fIdx} className="modal-file-item">
+                                        <Icon name="file" size={12} className="modal-file-icon" />
+                                        <Marquee className="modal-file-name" text={file} />
+                                        <span className="modal-file-badge">{t('newBadge')}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <div className="modal-footer">
+                <button className="modal-close-btn" onClick={onClose}>
+                    {t('close')}
+                </button>
+            </div>
+        </Dialog>
     );
 };
 
